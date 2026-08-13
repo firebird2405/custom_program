@@ -1,0 +1,4397 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>포스트잇 월</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🗒️%3C/text%3E%3C/svg%3E">
+<style>
+@font-face {
+  font-family: "Gaegu";
+  src: url("assets/Gaegu-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Nanum Pen Script";
+  src: url("assets/NanumPenScript-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #7a5433;
+  font-family: "Gaegu", "Malgun Gothic", sans-serif;
+  user-select: none;
+}
+
+/* ── 코르크 보드 ── */
+#board {
+  position: fixed;
+  inset: 0;
+  /* 살몬 끼를 걷어내는 황갈색 컬러 그레이딩: 브라운 레이어를 multiply 로 질감 위에 얹는다
+     (주의: A10 채점기가 background-image 의 첫 url() 을 검사하므로 url 앞에는 gradient 만 둘 것) */
+  background-image:
+    radial-gradient(120% 95% at 50% 42%, rgba(0,0,0,0) 52%, rgba(46,27,10,0.48) 100%),
+    linear-gradient(rgba(140,92,40,0.28), rgba(140,92,40,0.28)),
+    url("assets/cork-texture.jpg");
+  background-size: auto, auto, 480px 480px;
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-blend-mode: normal, multiply, normal;
+  box-shadow:
+    inset 0 0 0 10px rgba(88,56,26,0.92),
+    inset 0 0 0 12px rgba(255,231,186,0.28),
+    inset 0 0 110px rgba(43,26,10,0.5);
+}
+
+/* ── 떠 있는 도구 선반 ── */
+.toolbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  max-width: calc(100vw - 28px);
+  gap: 10px;
+  padding: 8px 16px;
+  background: linear-gradient(180deg, rgba(255,251,240,0.97), rgba(246,236,214,0.97));
+  border-radius: 14px;
+  box-shadow: 0 5px 16px rgba(43,24,8,0.4), inset 0 0 0 1px rgba(255,255,255,0.65);
+  z-index: 100000;
+}
+.brand {
+  font-family: "Nanum Pen Script", "Gaegu", cursive;
+  font-size: 30px;
+  line-height: 1;
+  color: #4a3221;
+  padding-top: 3px;
+}
+.add-btn {
+  font-family: inherit;
+  font-size: 19px;
+  font-weight: 700;
+  color: #4a3421;
+  background: #FFD966;
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 14px 7px;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(122,84,34,0.5), 0 4px 10px rgba(60,35,10,0.28);
+  transition: filter 0.12s ease, box-shadow 0.12s ease;
+}
+.add-btn:hover { filter: brightness(1.05); }
+.add-btn:active { box-shadow: 0 1px 0 rgba(122,84,34,0.5), 0 2px 5px rgba(60,35,10,0.28); }
+.sep { width: 1px; height: 26px; background: rgba(94,62,24,0.25); }
+.palette { display: inline-flex; align-items: center; gap: 6px; }
+.swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid rgba(255,255,255,0.95);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(50,30,10,0.45);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.swatch:hover { transform: scale(1.18); }
+.swatch:active { transform: scale(0.92); }
+.sndbtn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(94,62,24,0.10);
+  font-size: 16px;
+  line-height: 30px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+.sndbtn:hover { background: rgba(94,62,24,0.22); }
+.sndbtn:active { transform: scale(0.9); }
+.tool-btn {
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: #4a3421;
+  background: rgba(94,62,24,0.10);
+  border: 0;
+  border-radius: 9px;
+  padding: 5px 10px 6px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+.tool-btn:hover { background: rgba(94,62,24,0.22); }
+.tool-btn:active { transform: scale(0.95); }
+.search-box {
+  width: 128px;
+  padding: 5px 10px 6px;
+  border: 1px solid rgba(94,62,24,0.3);
+  border-radius: 9px;
+  background: rgba(255,255,255,0.75);
+  font-family: inherit;
+  font-size: 16px;
+  color: #43301f;
+  outline: none;
+}
+.search-box:focus { border-color: rgba(94,62,24,0.55); background: #fff; }
+.search-box::placeholder { color: rgba(93,69,46,0.55); }
+
+/* ── 보드 탭 (A25) ── */
+.boards { display: inline-flex; align-items: center; gap: 5px; }
+.board-tabs { display: inline-flex; align-items: center; gap: 4px; }
+.board-tab {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: #6b4d2e;
+  background: rgba(94,62,24,0.08);
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 9px 5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.board-tab:hover { background: rgba(94,62,24,0.2); }
+.board-tab[data-active="true"] {
+  background: #FFD966;
+  color: #4a3421;
+  box-shadow: 0 1px 0 rgba(122,84,34,0.45);
+}
+.board-add {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px dashed rgba(94,62,24,0.5);
+  border-radius: 8px;
+  background: transparent;
+  color: #6b4d2e;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.board-add:hover { background: rgba(94,62,24,0.12); }
+/* 탭 삭제 단추: hover 시에만 표시 — 기본 화면은 현행과 동일 (opt-in) */
+.board-tab-wrap { position: relative; display: inline-flex; }
+.board-tab-del {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #c25048;
+  color: #fff;
+  font-size: 9px;
+  line-height: 15px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  z-index: 1;
+}
+.board-tab-wrap:hover .board-tab-del:not(:disabled),
+.board-tab-del:focus-visible { opacity: 1; }
+.board-tab-del:disabled { cursor: not-allowed; background: #9a938a; }
+.board-tab-wrap:hover .board-tab-del:disabled { opacity: 0.55; }
+
+/* ── 테마 선택·볼륨 (A36·A37) ── */
+.theme-sel {
+  font-family: inherit;
+  font-size: 15px;
+  color: #4a3421;
+  background: rgba(255,255,255,0.75);
+  border: 1px solid rgba(94,62,24,0.3);
+  border-radius: 8px;
+  padding: 3px 4px;
+  cursor: pointer;
+}
+.vol { width: 62px; accent-color: #8c5a2b; cursor: pointer; }
+@media (max-width: 1450px) { .brand-word { display: none; } }
+
+/* ── 포스트잇 ── */
+.pnote {
+  position: absolute;
+  width: 150px;
+  min-height: 150px;
+  border-radius: 2px;
+  /* 그림자 x오프셋을 회전 부호(--rotn, 단위 없는 각도값)와 연동해 광원이 일관돼 보이게 */
+  box-shadow: calc(var(--rotn, 0) * 1.4px + 2px) 7px 14px rgba(46,26,9,0.34), 0 1px 3px rgba(0,0,0,0.22);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.24 0 0 0 0 0.12 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23p)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 26%),
+    linear-gradient(0deg, rgba(94,62,24,0.10), rgba(94,62,24,0) 16%);
+  transform: rotate(var(--rot, 0deg));
+  /* 놓을 때 오버슈트 스프링으로 '탁' 붙는 안착감 (left/top 위치에는 transition 없음 — A4) */
+  transition: box-shadow 0.15s ease, transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.35);
+  cursor: grab;
+  touch-action: none;   /* 터치·펜 드래그: 포인터 이벤트가 스크롤 제스처에 뺏기지 않게 (P10) */
+}
+/* 오른쪽 아래 살짝 들린 종이 모서리 그림자 — 평면감 해소 */
+.pnote::after, .welcome-card::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  width: 42%;
+  height: 10px;
+  box-shadow: 0 8px 7px rgba(46,26,9,0.3);
+  transform: skewX(-9deg) rotate(3deg);
+  z-index: -1;
+}
+.pnote.active {
+  box-shadow: calc(var(--rotn, 0) * 1.6px + 3px) 10px 20px rgba(46,26,9,0.38), 0 2px 5px rgba(0,0,0,0.24);
+}
+.pnote.dragging {
+  box-shadow: calc(var(--rotn, 0) * 2px + 7px) 18px 30px rgba(35,19,6,0.44), 0 3px 9px rgba(0,0,0,0.22);
+  /* 이동 방향 기울임(--tilt)은 transform 에만 더한다 — left/top 은 언제나 직접 갱신 (A4) */
+  transform: rotate(calc(var(--rot, 0deg) + var(--tilt, 0deg))) scale(1.035);
+  cursor: grabbing;
+}
+/* 생성 팝인: 220ms 안에 정확히 rotate(--rot) 로 끝난다 (A2·A17 안전).
+   scale 금지 — 등장 중에도 손잡이([data-drag-handle])의 실제 위치가 움직이지 않아야
+   생성 직후 곧바로 잡아 끄는 드래그가 어긋나지 않는다 (A4: 중심 기준 회전 흔들림만 허용). */
+@keyframes note-pop {
+  0%   { transform: rotate(calc(var(--rot, 0deg) + 4deg)); opacity: 0.3; }
+  70%  { transform: rotate(calc(var(--rot, 0deg) - 1.2deg)); opacity: 1; }
+  100% { transform: rotate(var(--rot, 0deg)); opacity: 1; }
+}
+.pnote.pop-in { animation: note-pop 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+/* 삭제 구겨짐: 시각 효과만 220ms — 저장소 삭제는 즉시 수행된다 (A5·A18) */
+@keyframes note-crumple {
+  0%   { transform: rotate(var(--rot, 0deg)) scale(1); opacity: 1; }
+  55%  { transform: rotate(calc(var(--rot, 0deg) - 7deg)) scale(0.55); opacity: 0.65; }
+  100% { transform: rotate(calc(var(--rot, 0deg) + 12deg)) scale(0.04); opacity: 0; }
+}
+.pnote.removing {
+  animation: note-crumple 0.22s ease-in forwards;
+  pointer-events: none;
+}
+/* 검색 비매칭: 숨기지 않고 흐리게 — 위치·저장은 그대로 (A24) */
+.pnote.dimmed { opacity: 0.22; }
+.nhandle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 26px;
+  cursor: grab;
+}
+.pnote.dragging .nhandle { cursor: grabbing; }
+.tape {
+  position: absolute;
+  left: calc(50% + var(--tape-x, 0px));
+  top: -10px;
+  width: 78px;
+  height: 22px;
+  margin-left: -39px;
+  /* 노트마다 다른 회전값(--rot)에서 테이프 각도를 유도해 '손으로 붙인' 불규칙함을 만든다 */
+  transform: rotate(calc(var(--rot, 0deg) * -1.6 + 2deg));
+  /* 어떤 노트색 위에서도 읽히도록: 밝은 반투명 몸통 + 낮은 채도의 갈색 점선 가장자리 */
+  background: rgba(255,255,255,0.42);
+  border-left: 1px dashed rgba(160,120,60,0.45);
+  border-right: 1px dashed rgba(160,120,60,0.45);
+  box-shadow: 0 2px 4px rgba(60,35,12,0.2);
+  pointer-events: none;
+}
+/* 테이프 대신 압정이 꽂힌 노트 (환영 카드의 압정 재사용) */
+.npin {
+  position: absolute;
+  top: 6px;
+  left: calc(50% + var(--tape-x, 0px));
+  width: 15px;
+  height: 15px;
+  margin-left: -7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ff9c9c, #d64444 58%, #8c1d1d);
+  box-shadow: 0 4px 5px rgba(40,15,5,0.4);
+  pointer-events: none;
+}
+.ndel {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(67,48,31,0.10);
+  color: #5d452e;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.pnote:hover .ndel, .pnote.active:hover .ndel { opacity: 1; }
+.ndel:hover { background: rgba(67,48,31,0.24); }
+.ntext {
+  padding: 30px 15px 18px;
+  min-height: 104px;
+  font-size: 19px;
+  line-height: 1.42;
+  color: #43301f;
+  white-space: pre-wrap;
+  word-break: keep-all;          /* 한글 어절 중간 줄바꿈 방지 (특히 고딕 폰트) */
+  overflow-wrap: break-word;     /* 한 어절이 노트보다 길면 그때만 끊는다 */
+}
+.pnote.editing .ntext { visibility: hidden; }
+.nedit {
+  display: none;
+  position: absolute;
+  top: 26px;
+  left: 7px;
+  right: 7px;
+  bottom: 7px;
+  padding: 4px 6px;
+  resize: none;
+  border: 0;
+  border-radius: 2px;
+  outline: 1px dashed rgba(93,69,46,0.45);
+  background: rgba(255,255,255,0.28);
+  font-family: inherit;
+  font-size: 19px;
+  line-height: 1.42;
+  color: #43301f;
+  user-select: text;
+}
+.nedit::placeholder { color: rgba(93,69,46,0.5); }
+.pnote.editing .nedit { display: block; }
+
+/* ── 설정: 노트 글자 크기·폰트 (기본 = 클래스 없음 → 현행 19px·손글씨 그대로) ── */
+body.fs-small .ntext, body.fs-small .nedit { font-size: 16px; }
+body.fs-large .ntext, body.fs-large .nedit { font-size: 23px; }
+body.font-gothic .ntext, body.font-gothic .nedit { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+
+/* ── 노트 리사이즈 손잡이 (A23): 우하단, 히트 영역 18×18 ≥ 12×12 ── */
+.rgrip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  touch-action: none;
+  border-bottom-right-radius: 2px;
+  background: linear-gradient(135deg, rgba(0,0,0,0) 0 52%, rgba(67,48,31,0.4) 52% 60%, rgba(0,0,0,0) 60% 70%, rgba(67,48,31,0.4) 70% 78%, rgba(0,0,0,0) 78%);
+  opacity: 0.4;
+  transition: opacity 0.12s ease;
+}
+.pnote:hover .rgrip, .pnote.active .rgrip { opacity: 0.9; }
+/* 크기가 지정된 노트: 기본 최소 높이 해제 + 내용 넘침 정리 (위치·회전 규약은 그대로) */
+.pnote.sized { min-height: 0; display: flex; flex-direction: column; }
+.pnote.sized .ntext { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+/* ── 체크리스트 줄 (A22): "- [ ] " 마커 줄만 앱이 파싱해 createElement 로 렌더 ── */
+.check-line { display: flex; align-items: flex-start; gap: 7px; }
+.clbox {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 5px 0 0;
+  accent-color: #8c5a2b;
+  cursor: pointer;
+}
+.cltext { min-width: 0; }
+.check-line.done .cltext { text-decoration: line-through; opacity: 0.6; }
+.plain-line { min-height: 1.42em; }
+
+/* ── 사진 포스트잇 (A26): 폴라로이드풍 흰 테두리 ── */
+.nimg {
+  display: block;
+  width: calc(100% - 18px);
+  margin: 28px 9px 0;
+  border: 3px solid rgba(255,255,255,0.9);
+  border-radius: 2px;
+  box-shadow: 0 2px 6px rgba(46,26,9,0.28);
+  flex: none;
+}
+.pnote.has-img .ntext { padding-top: 8px; }
+
+/* ── 노트 스킨 (A27): background-image 레이어로만 — 배경색(A3)·기본 질감과 병존 ── */
+.pnote.skin-lined {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.24 0 0 0 0 0.12 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23p)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 26%),
+    linear-gradient(0deg, rgba(94,62,24,0.10), rgba(94,62,24,0) 16%),
+    repeating-linear-gradient(180deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 27px, rgba(122,80,38,0.22) 27px, rgba(122,80,38,0.22) 28px);
+}
+.pnote.skin-grid {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.24 0 0 0 0 0.12 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23p)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 26%),
+    linear-gradient(0deg, rgba(94,62,24,0.10), rgba(94,62,24,0) 16%),
+    repeating-linear-gradient(180deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 20px, rgba(70,100,160,0.18) 20px, rgba(70,100,160,0.18) 21px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 20px, rgba(70,100,160,0.18) 20px, rgba(70,100,160,0.18) 21px);
+}
+.skin-opts { display: inline-flex; gap: 5px; margin-left: auto; }
+.skin-opt {
+  border: 1px solid rgba(94,62,24,0.35);
+  background: rgba(255,255,255,0.7);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #4a3421;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.skin-opt:hover { background: #fff; }
+
+/* ── 테마 프리셋 (A36): 기본=코르크(assets 질감 유지 — A10), 다크, 미니멀 화이트 ── */
+html[data-theme-preset="dark"] body { background: #232130; }
+html[data-theme-preset="dark"] #board {
+  background-image:
+    radial-gradient(120% 95% at 50% 42%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.55) 100%),
+    linear-gradient(180deg, #312e40, #221f2e);
+  background-size: auto, auto;
+  background-repeat: no-repeat, no-repeat;
+  background-blend-mode: normal, normal;
+  box-shadow:
+    inset 0 0 0 10px rgba(23,21,33,0.95),
+    inset 0 0 0 12px rgba(130,120,170,0.28),
+    inset 0 0 110px rgba(0,0,0,0.55);
+}
+html[data-theme-preset="white"] body { background: #f6f3ec; }
+html[data-theme-preset="white"] #board {
+  background-image: linear-gradient(180deg, #fdfcf8, #edeadf);
+  background-size: auto;
+  background-repeat: no-repeat;
+  background-blend-mode: normal;
+  box-shadow: inset 0 0 0 1px rgba(60,45,25,0.08), inset 0 0 90px rgba(120,105,80,0.14);
+}
+
+/* ── 꾸미기: 배경 레이어 (opt-in) — #board 자체 배경은 절대 건드리지 않는다 (A10·A17·A36 불변) ── */
+.decor-bg {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-position: center;
+}
+.decor-bg.on {
+  display: block;
+  box-shadow:
+    inset 0 0 0 10px rgba(88,56,26,0.92),
+    inset 0 0 0 12px rgba(255,231,186,0.28),
+    inset 0 0 110px rgba(43,26,10,0.5);
+}
+/* 프리셋 3종: CSS 그라디언트만 — 에셋 추가 없음 */
+/* 나무: 널판 이음선은 부드럽게 스며드는 명암으로, 널판 안 색은 연속 그라디언트로 (딱딱한 경계 없음) */
+.decor-bg.bg-wood {
+  background-image:
+    linear-gradient(180deg, rgba(0,0,0,0.16), rgba(0,0,0,0) 12%, rgba(0,0,0,0) 88%, rgba(0,0,0,0.22)),
+    repeating-linear-gradient(90deg,
+      rgba(62,38,16,0.3) 0px, rgba(62,38,16,0.1) 1px, rgba(0,0,0,0) 4px,
+      rgba(0,0,0,0) 112px, rgba(255,220,170,0.07) 115px, rgba(62,38,16,0.14) 117px, rgba(62,38,16,0.3) 118px),
+    repeating-linear-gradient(90deg,
+      #9a6a3c 0px, #93643a 28px, #906237 46px, #966a3d 72px, #9d6e40 98px, #9a6a3c 118px);
+}
+.decor-bg.bg-linen {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.18) 0px, rgba(255,255,255,0.18) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 4px),
+    repeating-linear-gradient(90deg, rgba(120,102,74,0.16) 0px, rgba(120,102,74,0.16) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 4px),
+    linear-gradient(180deg, #e7dcc4, #ded1b4);
+}
+.decor-bg.bg-chalk {
+  background-image:
+    radial-gradient(120% 95% at 50% 42%, rgba(255,255,255,0.05), rgba(0,0,0,0.35) 100%),
+    linear-gradient(180deg, #2f4a3e, #263d33);
+}
+
+/* ── 꾸미기: 스티커 레이어 — 노트([data-note]) 뒤 z-레이어, 채점 셀렉터와 무간섭 ── */
+.sticker-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.psticker {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  line-height: 1;
+}
+.psticker .stq { display: block; pointer-events: none; filter: drop-shadow(2px 5px 4px rgba(46,26,9,0.35)); }
+.psticker.photo {
+  padding: 7px 7px 24px;
+  background: #fdfaf4;
+  border-radius: 2px;
+  box-shadow: 3px 9px 18px rgba(46,26,9,0.38), 0 1px 3px rgba(0,0,0,0.2);
+  transform: rotate(-1.6deg);
+}
+.psticker.photo .stimg { display: block; width: 100%; min-height: 24px; pointer-events: none; background: #efe9dd; }
+.psticker .stgrip {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255,251,240,0.92);
+  box-shadow: 0 1px 4px rgba(50,30,10,0.5), inset 0 0 0 1px rgba(94,62,24,0.4);
+  cursor: nwse-resize;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.psticker:hover .stgrip { opacity: 1; }
+/* 방금 붙인 스티커: 2초간 손잡이를 보여줘 "크기를 바꿀 수 있다"를 알려준다 (opacity 전용) */
+.psticker.fresh .stgrip { opacity: 1; }
+
+/* ── 꾸미기: 이모지 팔레트 (패널 내부) ── */
+.stpal { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.stpal button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(94,62,24,0.08);
+  font-size: 21px;
+  line-height: 34px;
+  text-align: center;
+  cursor: pointer;
+}
+.stpal button:hover { background: rgba(94,62,24,0.2); }
+
+/* ── 꾸미기: 테이프 색·무늬 (기본 = 클래스 없음 → 현행 그대로) ── */
+body.tape-c-sun .tape { background-color: rgba(255,214,102,0.72); }
+body.tape-c-rose .tape { background-color: rgba(255,169,192,0.72); }
+body.tape-c-mint .tape { background-color: rgba(160,220,142,0.72); }
+body.tape-c-sky .tape { background-color: rgba(159,212,255,0.72); }
+body.tape-p-stripe .tape { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.55) 0px, rgba(255,255,255,0.55) 5px, rgba(0,0,0,0) 5px, rgba(0,0,0,0) 10px); }
+body.tape-p-dot .tape { background-image: radial-gradient(rgba(255,255,255,0.8) 1.5px, rgba(0,0,0,0) 2.2px); background-size: 9px 9px; }
+
+/* ── 꾸미기: 보드 프레임 색 — 테마 규칙 뒤에 두어 프리셋 위에서도 선택이 이긴다 (기본 = 현행) ── */
+body.frame-green #board, body.frame-green .decor-bg.on {
+  box-shadow: inset 0 0 0 10px rgba(48,84,54,0.94), inset 0 0 0 12px rgba(214,240,214,0.3), inset 0 0 110px rgba(16,40,20,0.5);
+}
+body.frame-navy #board, body.frame-navy .decor-bg.on {
+  box-shadow: inset 0 0 0 10px rgba(44,58,92,0.94), inset 0 0 0 12px rgba(206,220,248,0.3), inset 0 0 110px rgba(14,22,44,0.5);
+}
+body.frame-rose #board, body.frame-rose .decor-bg.on {
+  box-shadow: inset 0 0 0 10px rgba(124,58,72,0.94), inset 0 0 0 12px rgba(248,214,222,0.3), inset 0 0 110px rgba(52,18,26,0.5);
+}
+
+/* ── 다크 프리셋 색 조화: 툴바·패널·메뉴·알림 (기본/화이트 프리셋은 현행 그대로) ── */
+html[data-theme-preset="dark"] .toolbar,
+html[data-theme-preset="dark"] .ctxmenu,
+html[data-theme-preset="dark"] .spanel,
+html[data-theme-preset="dark"] .notice {
+  background: linear-gradient(180deg, rgba(60,56,80,0.97), rgba(44,41,60,0.97));
+  color: #e8e4f4;
+  box-shadow: 0 5px 16px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(150,140,195,0.32);
+}
+html[data-theme-preset="dark"] .brand,
+html[data-theme-preset="dark"] .sp-head,
+html[data-theme-preset="dark"] .sp-sec h3,
+html[data-theme-preset="dark"] .ctx-item,
+html[data-theme-preset="dark"] .seg button { color: #e8e4f4; }
+html[data-theme-preset="dark"] .tool-btn,
+html[data-theme-preset="dark"] .sndbtn,
+html[data-theme-preset="dark"] .board-tab,
+html[data-theme-preset="dark"] .skin-opt,
+html[data-theme-preset="dark"] .sp-cdel,
+html[data-theme-preset="dark"] .notice-close,
+html[data-theme-preset="dark"] .stpal button {
+  color: #e8e4f4;
+  background: rgba(172,162,215,0.16);
+  border-color: rgba(160,150,200,0.4);
+}
+html[data-theme-preset="dark"] .tool-btn:hover,
+html[data-theme-preset="dark"] .sndbtn:hover,
+html[data-theme-preset="dark"] .board-tab:hover,
+html[data-theme-preset="dark"] .skin-opt:hover,
+html[data-theme-preset="dark"] .sp-cdel:hover,
+html[data-theme-preset="dark"] .notice-close:hover,
+html[data-theme-preset="dark"] .stpal button:hover,
+html[data-theme-preset="dark"] .ctx-item:hover,
+html[data-theme-preset="dark"] .seg button:hover { background: rgba(172,162,215,0.3); }
+html[data-theme-preset="dark"] .board-add { border-color: rgba(160,150,200,0.55); color: #cfc8e6; }
+html[data-theme-preset="dark"] .sep,
+html[data-theme-preset="dark"] .ctx-sep { background: rgba(160,150,200,0.3); }
+html[data-theme-preset="dark"] .sp-sec { border-top-color: rgba(160,150,200,0.3); }
+html[data-theme-preset="dark"] .seg,
+html[data-theme-preset="dark"] .gauge { background: rgba(172,162,215,0.14); }
+html[data-theme-preset="dark"] .search-box,
+html[data-theme-preset="dark"] .theme-sel,
+html[data-theme-preset="dark"] .ctx-date,
+html[data-theme-preset="dark"] .sp-sw-auto {
+  color: #e8e4f4;
+  background: rgba(30,28,42,0.6);
+  border-color: rgba(160,150,200,0.4);
+}
+html[data-theme-preset="dark"] .search-box:focus { border-color: rgba(200,190,240,0.7); background: rgba(30,28,42,0.85); }
+html[data-theme-preset="dark"] .search-box::placeholder { color: rgba(210,203,235,0.55); }
+html[data-theme-preset="dark"] .board-tab[data-active="true"],
+html[data-theme-preset="dark"] .seg button.sel,
+html[data-theme-preset="dark"] .sp-sw-auto.sel { background: #FFD966; color: #4a3421; }
+html[data-theme-preset="dark"] .sp-sw.sel { outline-color: #FFD966; }
+
+/* ── 첫 화면 안내 카드 (메모가 하나도 없을 때만) ── */
+.welcome-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 332px;
+  margin-left: -166px;
+  margin-top: -168px;
+  padding: 36px 26px 26px;
+  background: #ffe28a;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0) 30%),
+    linear-gradient(0deg, rgba(94,62,24,0.10), rgba(94,62,24,0) 18%);
+  border-radius: 3px;
+  box-shadow: 4px 12px 24px rgba(43,24,8,0.4), 0 2px 5px rgba(0,0,0,0.2);
+  transform: rotate(-2deg);
+  text-align: center;
+  color: #4a3421;
+  pointer-events: none;
+  z-index: 20;
+}
+.wpin {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  margin-left: -8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ff9c9c, #d64444 58%, #8c1d1d);
+  box-shadow: 0 4px 5px rgba(40,15,5,0.45);
+}
+.w-hello {
+  margin: 0 0 10px;
+  font-family: "Nanum Pen Script", "Gaegu", cursive;
+  font-size: 34px;
+  line-height: 1.1;
+}
+.w-line { margin: 5px 0; font-size: 19px; line-height: 1.3; word-break: keep-all; }
+.w-small { margin: 14px 0 0; font-size: 16px; opacity: 0.75; }
+
+/* ── 비모달 알림 ── */
+.notice {
+  display: none;
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 12px;
+  max-width: 640px;
+  padding: 12px 16px;
+  background: #fff8e9;
+  color: #4a3421;
+  font-size: 17px;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(30,15,5,0.4);
+  z-index: 100001;
+}
+.notice.show { display: flex; animation: notice-in 0.25s ease-out; }
+@keyframes notice-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(14px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.notice-close {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 12px;
+  background: #e9dcc2;
+  color: #4a3421;
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.notice-close:hover { background: #ddcda9; }
+.notice-undo {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 14px;
+  background: #FFD966;
+  color: #4a3421;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(122,84,34,0.4);
+}
+.notice-undo:hover { filter: brightness(1.05); }
+.notice-undo[hidden] { display: none; }
+
+/* ── 우클릭 메뉴 (브라우저 기본 메뉴 대체 — A21) ── */
+.ctxmenu {
+  display: none;
+  position: fixed;
+  min-width: 190px;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(255,251,240,0.98), rgba(246,236,214,0.98));
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(30,15,5,0.45), inset 0 0 0 1px rgba(255,255,255,0.65);
+  z-index: 100002;
+}
+.ctxmenu.open { display: block; }
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 17px;
+  color: #4a3421;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.ctx-item:hover { background: rgba(94,62,24,0.12); }
+.ctx-item.soon { opacity: 0.5; }
+.ctx-sep { height: 1px; margin: 5px 8px; background: rgba(94,62,24,0.18); }
+.ctx-dots { display: inline-flex; gap: 5px; margin-left: auto; }
+.ctx-dot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid rgba(255,255,255,0.92);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(50,30,10,0.4);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.ctx-dot:hover { transform: scale(1.2); }
+.ctx-date {
+  margin-left: auto;
+  min-width: 132px;
+  padding: 3px 6px;
+  border: 1px solid rgba(94,62,24,0.35);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.9);
+  color: #4a3421;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* ── 설정 패널 (오른쪽 슬라이드, 비모달 — 열려 있어도 보드 조작 가능) ── */
+.spanel {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  width: 340px;
+  max-width: calc(100vw - 28px);
+  padding: 14px 16px 18px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, rgba(255,251,240,0.98), rgba(246,236,214,0.98));
+  border-radius: 14px;
+  box-shadow: -6px 8px 24px rgba(43,24,8,0.4), inset 0 0 0 1px rgba(255,255,255,0.65);
+  color: #4a3421;
+  z-index: 100000;
+  transform: translateX(calc(100% + 30px));
+  visibility: hidden;
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.25, 1), visibility 0s linear 0.28s;
+}
+.spanel.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+.sp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Nanum Pen Script", "Gaegu", cursive;
+  font-size: 28px;
+  line-height: 1.1;
+}
+.sp-close { margin-left: auto; }
+.sp-sec { margin-top: 14px; padding-top: 10px; border-top: 1px dashed rgba(94,62,24,0.25); }
+.sp-sec h3 { margin: 0 0 8px; font-size: 16px; color: #6b4d2e; letter-spacing: 0.4px; }
+.sp-row { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 15.5px; flex-wrap: wrap; }
+.sp-lab { min-width: 96px; }
+.seg { display: inline-flex; background: rgba(94,62,24,0.08); border-radius: 9px; padding: 2px; gap: 2px; }
+.seg button {
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  color: #6b4d2e;
+  border-radius: 7px;
+  padding: 3px 9px 4px;
+  cursor: pointer;
+}
+.seg button:hover { background: rgba(94,62,24,0.14); }
+.seg button.sel { background: #FFD966; color: #4a3421; box-shadow: 0 1px 0 rgba(122,84,34,0.4); }
+.sp-swatches { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sp-sw {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid rgba(255,255,255,0.95);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(50,30,10,0.4);
+  cursor: pointer;
+}
+.sp-sw.sel { outline: 2px solid #8c5a2b; outline-offset: 1px; }
+.sp-sw-auto {
+  border: 1px solid rgba(94,62,24,0.35);
+  border-radius: 11px;
+  padding: 2px 9px 3px;
+  background: rgba(255,255,255,0.8);
+  color: #4a3421;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sp-sw-auto.sel { background: #FFD966; box-shadow: 0 1px 0 rgba(122,84,34,0.4); }
+.sp-vol { flex: 1 1 auto; width: auto; }
+.gauge { position: relative; width: 100%; height: 12px; margin-top: 4px; border-radius: 7px; background: rgba(94,62,24,0.14); overflow: hidden; }
+.gauge-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 7px; background: linear-gradient(90deg, #A0DC8E, #FFD966 70%, #ff9c7a); }
+.sp-small { margin: 5px 0 0; font-size: 13.5px; line-height: 1.4; opacity: 0.82; word-break: keep-all; }
+.sp-crow { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 13px; }
+.sp-ckey { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-cdel {
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 2px 9px 3px;
+  background: #e9dcc2;
+  color: #4a3421;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sp-cdel:hover { background: #ddcda9; }
+.sp-info p { margin: 5px 0; font-size: 14px; line-height: 1.45; word-break: keep-all; }
+
+/* ── 설정: 애니메이션 줄임/끔 (기본 = 클래스 없음 → 현행 그대로) ── */
+body.fx-calm .pnote, body.fx-calm .swatch, body.fx-calm .add-btn, body.fx-calm .sndbtn, body.fx-calm .ndel,
+body.fx-calm .tool-btn, body.fx-calm .ctx-item, body.fx-calm .ctx-dot, body.fx-calm .rgrip,
+body.fx-calm .board-tab, body.fx-calm .spanel,
+body.fx-calm .board-tab-del, body.fx-calm .stgrip { transition: none; }
+body.fx-calm .pnote.pop-in, body.fx-calm .pnote.removing { animation: none; }
+body.fx-calm .notice.show { animation: none; }
+body.fx-calm .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
+body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !important; animation: none !important; }
+
+/* ── 동작 축소 선호: 장식 애니메이션·기울임은 즉시 상태로 (소리는 음소거 단추가 담당) ── */
+@media (prefers-reduced-motion: reduce) {
+  .pnote, .swatch, .add-btn, .sndbtn, .ndel, .tool-btn, .ctx-item, .ctx-dot, .rgrip, .board-tab, .spanel,
+  .board-tab-del, .stgrip { transition: none; }
+  .pnote.pop-in, .pnote.removing { animation: none; }
+  .notice.show { animation: none; }
+  .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
+}
+</style>
+</head>
+<body>
+<div id="board" data-board>
+  <div class="toolbar">
+    <span class="brand">🗒️<span class="brand-word"> 포스트잇 월</span></span>
+    <button type="button" id="addBtn" class="add-btn" data-add-note>＋ 새 포스트잇</button>
+    <span class="sep"></span>
+    <span class="palette" id="palette">
+      <button type="button" class="swatch" data-color style="background-color:#FFD966" title="노랑"></button>
+      <button type="button" class="swatch" data-color style="background-color:#FFA9C0" title="분홍"></button>
+      <button type="button" class="swatch" data-color style="background-color:#A0DC8E" title="연두"></button>
+      <button type="button" class="swatch" data-color style="background-color:#9FD4FF" title="하늘"></button>
+      <button type="button" class="swatch" data-color style="background-color:#FFFFFF" title="하양"></button>
+    </span>
+    <span class="sep"></span>
+    <input type="search" id="searchBox" class="search-box" data-search placeholder="🔍 메모 찾기" aria-label="메모 검색">
+    <span class="sep"></span>
+    <span class="boards" id="boardSwitcher" data-board-switcher>
+      <span class="board-tabs" id="boardTabs"></span>
+      <button type="button" id="addBoardBtn" class="board-add" data-add-board title="새 보드 추가">＋</button>
+    </span>
+    <span class="sep"></span>
+    <button type="button" id="arrangeBtn" class="tool-btn" data-arrange title="포스트잇을 겹치지 않게 한 번에 정리">✨ 정리</button>
+    <button type="button" id="exportBtn" class="tool-btn" data-export title="모든 보드의 메모를 파일로 저장">💾 내보내기</button>
+    <button type="button" id="importBtn" class="tool-btn" data-import title="파일에서 메모 불러오기">📂 가져오기</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+    <input type="file" id="noteImageInput" data-note-image-input accept="image/*" hidden>
+    <input type="file" id="decorBgInput" data-decor-bg-input accept="image/*" hidden>
+    <input type="file" id="decorPhotoInput" data-decor-photo-input accept="image/*" hidden>
+    <span class="sep"></span>
+    <select id="themeSel" class="theme-sel" data-theme-preset aria-label="보드 테마" title="보드 테마">
+      <option data-theme-option value="basic">기본</option>
+      <option data-theme-option value="dark">다크</option>
+      <option data-theme-option value="white">화이트</option>
+    </select>
+    <button type="button" id="soundBtn" class="sndbtn" aria-pressed="true" title="효과음 끄기">🔊</button>
+    <input type="range" id="volSlider" class="vol" data-volume min="0" max="100" step="1" aria-label="효과음 음량" title="효과음 음량">
+    <button type="button" id="decorBtn" class="sndbtn" aria-expanded="false" aria-label="꾸미기" title="꾸미기 열기">🎨</button>
+    <button type="button" id="settingsBtn" class="sndbtn" aria-expanded="false" aria-label="설정" title="설정 열기">⚙️</button>
+  </div>
+
+  <div class="welcome-card" id="welcome">
+    <span class="wpin"></span>
+    <p class="w-hello">반가워요! 🌼</p>
+    <p class="w-line">위의 ＋ 새 포스트잇 단추로<br>첫 메모를 붙여 보세요.</p>
+    <p class="w-line">🖱 잡아서 끌면 자유롭게 옮겨지고</p>
+    <p class="w-line">✏️ 살짝 클릭하면 바로 고칠 수 있어요</p>
+    <p class="w-line">🎨 색 단추로 옷을 갈아입히고</p>
+    <p class="w-line">✕ 단추로 떼어낼 수 있어요</p>
+    <p class="w-small">모든 메모는 이 컴퓨터에만 저장돼요</p>
+  </div>
+</div>
+
+<div class="notice" id="notice" data-toast role="status" aria-live="polite">
+  <span id="noticeText"></span>
+  <button type="button" class="notice-undo" id="noticeUndo" data-undo hidden>실행 취소</button>
+  <button type="button" class="notice-close" id="noticeClose">닫기</button>
+</div>
+
+<div class="ctxmenu" id="ctxMenu" data-ctx-menu role="menu"></div>
+
+<aside class="spanel" id="settingsPanel" aria-label="설정 패널">
+  <div class="sp-head">⚙️ 설정
+    <button type="button" class="notice-close sp-close" id="spClose" title="설정 닫기">✕</button>
+  </div>
+
+  <div class="sp-sec">
+    <h3>글자</h3>
+    <div class="sp-row"><span class="sp-lab">노트 글자 크기</span>
+      <span class="seg" id="spFontSize">
+        <button type="button" data-val="small">작게</button>
+        <button type="button" data-val="normal">보통</button>
+        <button type="button" data-val="large">크게</button>
+      </span>
+    </div>
+    <div class="sp-row"><span class="sp-lab">노트 폰트</span>
+      <span class="seg" id="spFont">
+        <button type="button" data-val="hand">손글씨</button>
+        <button type="button" data-val="gothic">고딕</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="sp-sec">
+    <h3>노트 기본값</h3>
+    <div class="sp-row"><span class="sp-lab">새 노트 기본 색</span>
+      <span class="sp-swatches" id="spDefColor">
+        <button type="button" class="sp-sw-auto" data-cval="auto">자동 순환</button>
+        <button type="button" class="sp-sw" data-cval="#FFD966" style="background-color:#FFD966" title="노랑"></button>
+        <button type="button" class="sp-sw" data-cval="#FFA9C0" style="background-color:#FFA9C0" title="분홍"></button>
+        <button type="button" class="sp-sw" data-cval="#A0DC8E" style="background-color:#A0DC8E" title="연두"></button>
+        <button type="button" class="sp-sw" data-cval="#9FD4FF" style="background-color:#9FD4FF" title="하늘"></button>
+        <button type="button" class="sp-sw" data-cval="#FFFFFF" style="background-color:#FFFFFF" title="하양"></button>
+      </span>
+    </div>
+    <div class="sp-row"><span class="sp-lab">새 노트 기본 크기</span>
+      <span class="seg" id="spDefSize">
+        <button type="button" data-val="normal">기본</button>
+        <button type="button" data-val="large">크게</button>
+      </span>
+    </div>
+    <div class="sp-row"><span class="sp-lab">기울임</span>
+      <span class="seg" id="spTilt">
+        <button type="button" data-val="natural">자연스럽게</button>
+        <button type="button" data-val="straight">반듯하게</button>
+      </span>
+    </div>
+    <p class="sp-small">기본값은 앞으로 만드는 새 노트에만 적용돼요. 이미 붙인 노트는 그대로예요.</p>
+  </div>
+
+  <div class="sp-sec">
+    <h3>배치</h3>
+    <div class="sp-row"><span class="sp-lab">정리 방식</span>
+      <select id="spArrange" class="theme-sel" aria-label="정리 방식">
+        <option value="default">기본 (읽는 순서)</option>
+        <option value="grid3">3×3 격자</option>
+        <option value="grid2">2×2 격자</option>
+        <option value="masonry">동적 마소너리 (큰 노트 먼저)</option>
+        <option value="time">시간순 (최근 수정 좌상단)</option>
+      </select>
+    </div>
+    <p class="sp-small">✨ 정리 단추와 보드 우클릭 메뉴의 "한 번에 정리"가 이 방식을 사용해요.</p>
+  </div>
+
+  <div class="sp-sec">
+    <h3>효과</h3>
+    <div class="sp-row"><span class="sp-lab">애니메이션</span>
+      <span class="seg" id="spAnim">
+        <button type="button" data-val="on">켬</button>
+        <button type="button" data-val="reduced">줄임</button>
+        <button type="button" data-val="off">끔</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="sp-sec">
+    <h3>사운드</h3>
+    <div class="sp-row">
+      <label class="sp-lab" for="spMute">음소거</label>
+      <input type="checkbox" id="spMute">
+    </div>
+    <div class="sp-row"><span class="sp-lab">볼륨</span>
+      <input type="range" id="spVol" class="vol sp-vol" min="0" max="100" step="1" aria-label="효과음 음량 (설정 미러)">
+    </div>
+    <p class="sp-small">툴바의 🔊 단추·볼륨 슬라이더와 항상 같이 움직여요.</p>
+  </div>
+
+  <div class="sp-sec">
+    <h3>데이터</h3>
+    <div class="sp-row">
+      <button type="button" id="spExport" class="tool-btn" title="모든 보드의 메모를 파일로 저장">💾 내보내기</button>
+      <button type="button" id="spImport" class="tool-btn" title="파일에서 메모 불러오기">📂 가져오기</button>
+    </div>
+    <div class="sp-row">
+      <input type="checkbox" id="spExportImages">
+      <label for="spExportImages">내보내기에 이미지 포함 (배경·사진 스티커 — 파일이 커져요)</label>
+    </div>
+    <div class="gauge" title="이 컴퓨터에 저장된 용량 추정"><div class="gauge-fill" id="spGaugeFill"></div></div>
+    <p class="sp-small" id="spGaugeText">저장 용량 계산 중…</p>
+    <p class="sp-small" id="spPhotoText"></p>
+    <p class="sp-small">손상 백업 (<span id="spCorruptCount">0</span>)</p>
+    <div id="spCorruptList"></div>
+    <div class="sp-row"><button type="button" id="spCorruptClear" class="tool-btn" hidden>모두 정리</button></div>
+  </div>
+
+  <div class="sp-sec sp-info">
+    <h3>정보</h3>
+    <p>🗒️ 포스트잇 월 — 캘린더+포스트잇 월 rev.5 (오프라인 단일 파일, 이 컴퓨터에만 저장)</p>
+    <p>에셋 라이선스: 코르크 질감 cork-texture.jpg = ambientCG "Cork001" (CC0 퍼블릭 도메인) · 개구쟁이 Gaegu-Regular.ttf (OFL 1.1) · 나눔손글씨 펜 NanumPenScript-Regular.ttf (OFL 1.1). 전체 출처는 assets/ASSETS.md 참고.</p>
+    <p>단축키: Esc = 편집·메뉴·설정 닫기 · 노트 클릭 = 편집 · 위쪽 잡아 끌기 = 이동 · 오른쪽 아래 모서리 끌기 = 크기 조절 · 우클릭 = 메뉴</p>
+  </div>
+</aside>
+
+<aside class="spanel dpanel" id="decorPanel" aria-label="꾸미기 패널">
+  <div class="sp-head">🎨 꾸미기
+    <button type="button" class="notice-close sp-close" id="dpClose" title="꾸미기 닫기">✕</button>
+  </div>
+
+  <div class="sp-sec">
+    <h3>배경</h3>
+    <div class="sp-row">
+      <span class="seg" id="dpBg">
+        <button type="button" data-bg="cork">기본 코르크</button>
+        <button type="button" data-bg="wood">나무</button>
+        <button type="button" data-bg="linen">리넨</button>
+        <button type="button" data-bg="chalk">칠판</button>
+        <button type="button" data-bg="image" id="dpBgImageSeg" hidden>내 사진</button>
+      </span>
+    </div>
+    <div class="sp-row">
+      <button type="button" id="dpBgUpload" class="tool-btn" title="내 사진을 이 보드의 배경으로">🖼 내 사진 배경</button>
+      <span class="seg" id="dpBgFit">
+        <button type="button" data-val="cover">채우기</button>
+        <button type="button" data-val="tile">타일</button>
+      </span>
+      <button type="button" id="dpBgRemove" class="tool-btn" title="기본 코르크 배경으로 되돌리기">배경 제거</button>
+    </div>
+    <p class="sp-small">배경은 보드마다 따로 저장돼요. 사진은 이 컴퓨터의 이미지 저장소(IndexedDB)에 보관돼요.</p>
+  </div>
+
+  <div class="sp-sec">
+    <h3>스티커</h3>
+    <p class="sp-small">누르면 보드 가운데쯤에 붙어요. 끌어서 옮기고, 모서리 손잡이로 크기를 바꾸고, 우클릭 메뉴로 맨 앞에 올리거나 떼어내요(떼어낸 건 실행 취소 가능). 스티커는 늘 포스트잇 뒤에 깔려요.</p>
+    <div class="sp-row"><span class="sp-lab">계절·자연</span></div>
+    <div class="stpal" id="dpStSeason"></div>
+    <div class="sp-row"><span class="sp-lab">기분</span></div>
+    <div class="stpal" id="dpStMood"></div>
+    <div class="sp-row"><span class="sp-lab">사무</span></div>
+    <div class="stpal" id="dpStOffice"></div>
+  </div>
+
+  <div class="sp-sec">
+    <h3>사진 스티커</h3>
+    <div class="sp-row"><button type="button" id="dpPhotoAdd" class="tool-btn">📷 사진 스티커 추가</button></div>
+    <p class="sp-small">폴라로이드 액자로 보드에 붙어요. 노트의 "사진 넣기"와는 별개예요.</p>
+  </div>
+
+  <div class="sp-sec">
+    <h3>노트 꾸밈</h3>
+    <div class="sp-row"><span class="sp-lab">테이프 색</span>
+      <span class="sp-swatches" id="dpTapeColor">
+        <button type="button" class="sp-sw-auto" data-tval="default">기본</button>
+        <button type="button" class="sp-sw" data-tval="sun" style="background-color:#FFD966" title="노랑"></button>
+        <button type="button" class="sp-sw" data-tval="rose" style="background-color:#FFA9C0" title="분홍"></button>
+        <button type="button" class="sp-sw" data-tval="mint" style="background-color:#A0DC8E" title="민트"></button>
+        <button type="button" class="sp-sw" data-tval="sky" style="background-color:#9FD4FF" title="하늘"></button>
+      </span>
+    </div>
+    <div class="sp-row"><span class="sp-lab">테이프 무늬</span>
+      <span class="seg" id="dpTapePattern">
+        <button type="button" data-val="default">무지</button>
+        <button type="button" data-val="stripe">줄무늬</button>
+        <button type="button" data-val="dot">물방울</button>
+      </span>
+    </div>
+    <div class="sp-row"><span class="sp-lab">보드 프레임</span>
+      <span class="sp-swatches" id="dpFrame">
+        <button type="button" class="sp-sw-auto" data-fval="default">기본</button>
+        <button type="button" class="sp-sw" data-fval="green" style="background-color:#305436" title="그린"></button>
+        <button type="button" class="sp-sw" data-fval="navy" style="background-color:#2c3a5c" title="네이비"></button>
+        <button type="button" class="sp-sw" data-fval="rose" style="background-color:#7c3a48" title="로즈"></button>
+      </span>
+    </div>
+    <p class="sp-small">테이프·프레임은 모든 보드에 함께 적용돼요. 기본을 고르면 지금 모습 그대로예요.</p>
+  </div>
+</aside>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY = 'postit-notes';                 // 보드 1 (하위호환 고정 — A25)
+  var ACTIVE_KEY = 'postit-active-board';
+  var THEME_KEY = 'postit-theme';
+  var VOL_KEY = 'postit-sound-vol';
+  var PALETTE = ['#FFD966', '#FFA9C0', '#A0DC8E', '#9FD4FF', '#FFFFFF'];
+  var NOTE_W = 150;
+  var NOTE_H = 150;
+  var CHECK_RE = /^- \[( |x)\] /;           // 체크리스트 마커 (A22 — 줄 시작 고정 문법)
+  var IMG_URI_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;   // 검증된 이미지 데이터 URI (B-1 예외)
+
+  var board = document.getElementById('board');
+  var welcomeEl = document.getElementById('welcome');
+  var noticeEl = document.getElementById('notice');
+  var noticeTextEl = document.getElementById('noticeText');
+  var noticeUndoEl = document.getElementById('noticeUndo');
+  var addBtn = document.getElementById('addBtn');
+  var searchBox = document.getElementById('searchBox');
+  var ctxMenuEl = document.getElementById('ctxMenu');
+  var boardTabsEl = document.getElementById('boardTabs');
+  var addBoardBtn = document.getElementById('addBoardBtn');
+  var themeSel = document.getElementById('themeSel');
+  var volSlider = document.getElementById('volSlider');
+  var noteImageInput = document.getElementById('noteImageInput');
+  var decorBgInput = document.getElementById('decorBgInput');
+  var decorPhotoInput = document.getElementById('decorPhotoInput');
+
+  /* 꾸미기 레이어: 배경(z0)·스티커(z1)는 노트(z10+) 뒤에 깔린다 — [data-note] 계약과 무간섭 */
+  var decorBgEl = document.createElement('div');
+  decorBgEl.className = 'decor-bg';
+  var stickerLayer = document.createElement('div');
+  stickerLayer.className = 'sticker-layer';
+  stickerLayer.setAttribute('data-sticker-layer', '');
+  board.insertBefore(decorBgEl, board.firstChild);
+  board.insertBefore(stickerLayer, decorBgEl.nextSibling);
+
+  var data = [];        // 로컬 노트 모델 [{id,text,color,x,y,rot,z,updatedAt,w?,h?,skin?,img?}]
+  var els = {};         // id -> {root, textEl, ta, imgEl}
+  var deletedIds = {};  // 이 창에서 삭제한 노트 id (병합 시 부활 방지) — 활성 보드 몫
+  var undoStack = [];   // 떼어낸 노트 되돌리기 버퍼 — 메모리 전용 (저장소에 남기지 않음, A20) — 활성 보드 몫
+  var deletedIdsCache = {};   // 보드별 deletedIds 보관 (전환 시 교체)
+  var undoStacks = {};        // 보드별 undo 버퍼 보관
+  var boards = ['b1'];  // 보드 id 목록 (b1 = 기존 postit-notes)
+  var boardId = 'b1';   // 활성 보드
+  var activeId = null;
+  var zCounter = 10;
+  var createdCount = 0;
+  var saveTimer = null;
+  var dragState = null;
+  var resizeState = null;
+  var imageTargetId = null;   // 사진 첨부 대상 노트 (파일 선택 창이 닫힌 뒤 사용)
+  var noticeTimer = null;
+  var searchQuery = '';
+  var ctxOpen = false;
+
+  /* ── 꾸미기 상태 (postit-decor-layout — additive 신규 키, 보드별 저장) ── */
+  var DECOR_KEY = 'postit-decor-layout';
+  var decor = { bg: null, stickers: [] };   /* 활성 보드 몫 */
+  var stickerEls = {};                       /* sticker id -> element */
+  var decorSaveTimer = null;
+  var stDrag = null;                         /* 스티커 드래그/리사이즈 상태 */
+  var bgLoadToken = 0;                       /* 보드 전환 중 비동기 배경 로드 경합 방지 */
+  var imgCache = {};                         /* IndexedDB 이미지 캐시 (key -> data URI | null) */
+
+  /* ── 설정 (postit-settings — additive 신규 키): 기본값 = 현행 동작 그대로 ── */
+  var SETTINGS_KEY = 'postit-settings';
+  var SETTINGS_DEF = {
+    fontSize: 'normal',   /* small | normal(19px 현행) | large */
+    font: 'hand',         /* hand(손글씨 현행) | gothic */
+    defColor: 'auto',     /* auto(현행 순환) | 팔레트 hex */
+    defSize: 'normal',    /* normal(현행 150) | large(210) */
+    tilt: 'natural',      /* natural(현행 랜덤 기울임) | straight — 신규 노트에만 적용 */
+    arrange: 'default',   /* default(현행 알고리즘) | grid3 | grid2 | masonry | time */
+    anim: 'on',           /* on(현행) | reduced | off */
+    tapeColor: 'default', /* default(현행 반투명 흰 테이프) | sun | rose | mint | sky — 꾸미기 */
+    tapePattern: 'default', /* default(무지) | stripe | dot — 꾸미기 */
+    frameColor: 'default'   /* default(현행 월넛) | green | navy | rose — 꾸미기 */
+  };
+  var SETTINGS = loadSettings();
+  applySettings();
+
+  function loadSettings() {
+    var s = {};
+    Object.keys(SETTINGS_DEF).forEach(function (k) { s[k] = SETTINGS_DEF[k]; });
+    var raw = null;
+    try { raw = localStorage.getItem(SETTINGS_KEY); } catch (err) { raw = null; }
+    if (raw === null) return s;
+    var v = null;
+    try { v = JSON.parse(raw); } catch (err) { v = null; }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) {
+      backupCorrupt(SETTINGS_KEY, raw);   /* 손상 설정도 A9 규약대로 백업 후 기본값 */
+      return s;
+    }
+    if (v.fontSize === 'small' || v.fontSize === 'normal' || v.fontSize === 'large') s.fontSize = v.fontSize;
+    if (v.font === 'hand' || v.font === 'gothic') s.font = v.font;
+    if (v.defColor === 'auto' || PALETTE.indexOf(v.defColor) !== -1) s.defColor = v.defColor;
+    if (v.defSize === 'normal' || v.defSize === 'large') s.defSize = v.defSize;
+    if (v.tilt === 'natural' || v.tilt === 'straight') s.tilt = v.tilt;
+    if (v.arrange === 'default' || v.arrange === 'grid3' || v.arrange === 'grid2' || v.arrange === 'masonry' || v.arrange === 'time') s.arrange = v.arrange;
+    if (v.anim === 'on' || v.anim === 'reduced' || v.anim === 'off') s.anim = v.anim;
+    if (v.tapeColor === 'sun' || v.tapeColor === 'rose' || v.tapeColor === 'mint' || v.tapeColor === 'sky') s.tapeColor = v.tapeColor;
+    if (v.tapePattern === 'stripe' || v.tapePattern === 'dot') s.tapePattern = v.tapePattern;
+    if (v.frameColor === 'green' || v.frameColor === 'navy' || v.frameColor === 'rose') s.frameColor = v.frameColor;
+    return s;
+  }
+
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); } catch (err) {
+      /* 침묵 금지 — 캘린더와 동일 문구로 알린다 */
+      showNotice('설정 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
+    }
+  }
+
+  /* 문서 반영: 기본값이면 클래스가 하나도 붙지 않아 fresh 프로필 DOM/스타일이 현행과 동일하다 */
+  function applySettings() {
+    var b = document.body;
+    b.classList.toggle('fs-small', SETTINGS.fontSize === 'small');
+    b.classList.toggle('fs-large', SETTINGS.fontSize === 'large');
+    b.classList.toggle('font-gothic', SETTINGS.font === 'gothic');
+    b.classList.toggle('fx-calm', SETTINGS.anim !== 'on');
+    b.classList.toggle('fx-off', SETTINGS.anim === 'off');
+    /* 꾸미기: 테이프·프레임 (기본 = 클래스 없음 → 현행 그대로) */
+    b.classList.toggle('tape-c-sun', SETTINGS.tapeColor === 'sun');
+    b.classList.toggle('tape-c-rose', SETTINGS.tapeColor === 'rose');
+    b.classList.toggle('tape-c-mint', SETTINGS.tapeColor === 'mint');
+    b.classList.toggle('tape-c-sky', SETTINGS.tapeColor === 'sky');
+    b.classList.toggle('tape-p-stripe', SETTINGS.tapePattern === 'stripe');
+    b.classList.toggle('tape-p-dot', SETTINGS.tapePattern === 'dot');
+    b.classList.toggle('frame-green', SETTINGS.frameColor === 'green');
+    b.classList.toggle('frame-navy', SETTINGS.frameColor === 'navy');
+    b.classList.toggle('frame-rose', SETTINGS.frameColor === 'rose');
+    syncPanelUI();
+    syncDecorUI();
+  }
+
+  function uid() {
+    return 'n' + Date.now().toString(36) + '-' +
+      Math.floor(Math.random() * 2176782336).toString(36) + '-' +
+      Math.floor(Math.random() * 2176782336).toString(36);
+  }
+
+  function showNoticeCore(msg, withUndo, dur) {
+    noticeTextEl.textContent = msg;
+    if (withUndo) noticeUndoEl.removeAttribute('hidden');
+    else noticeUndoEl.setAttribute('hidden', '');
+    noticeEl.classList.add('show');
+    if (noticeTimer) clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(hideNotice, dur);
+  }
+  function showNotice(msg) {
+    showNoticeCore(msg, false, 15000);
+  }
+  /* 삭제·정리 직후 안내 — "실행 취소" 단추 포함, 최소 5초 이상 유지 (A20).
+     handler 를 주면 그 동작을, 없으면 기본(노트 삭제 되돌리기)을 실행한다. */
+  var undoHandler = null;
+  function showUndoNotice(msg, handler) {
+    undoHandler = typeof handler === 'function' ? handler : null;
+    showNoticeCore(msg, true, 8000);
+  }
+  function hideNotice() {
+    noticeEl.classList.remove('show');
+    noticeUndoEl.setAttribute('hidden', '');
+  }
+  document.getElementById('noticeClose').addEventListener('click', hideNotice);
+  noticeUndoEl.addEventListener('click', function () {
+    var h = undoHandler;
+    undoHandler = null;
+    if (h) h();
+    else undoLastDelete();
+  });
+
+  function prefersReducedMotion() {
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (err) { return false; }
+  }
+
+  /* OS 동작 축소 선호 또는 설정 [효과] 줄임/끔 — 장식 모션 공통 게이트 */
+  function calmMotion() {
+    return prefersReducedMotion() || SETTINGS.anim !== 'on';
+  }
+
+  /* ── 효과음: Web Audio 순수 합성 (파일·네트워크 없음) ──
+     AudioContext 는 첫 사용자 제스처 때 게으르게 생성하고, 모든 호출은 try/catch 로 감싸
+     오디오 미지원·실패 시 조용히 무시한다. 소리는 오직 직접 제스처 핸들러에서만 낸다. */
+  var SOUND_KEY = 'postit-sound';
+  var soundOn = true;
+  try { soundOn = localStorage.getItem(SOUND_KEY) !== '0'; } catch (err) { soundOn = true; }
+  var audioCtx = null;
+  var masterGain = null;
+
+  function audio() {
+    try {
+      if (!audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        audioCtx = new AC();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = gainValue();   /* 마스터 볼륨 = 슬라이더값/100 (A37) */
+        masterGain.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === 'suspended') {
+        var p = audioCtx.resume();
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+      }
+      return masterGain ? audioCtx : null;
+    } catch (err) { return null; }
+  }
+
+  function noiseBuffer(ctx, dur) {
+    var len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var ch = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  /* 노트 생성: 종이 스치는 스우시 — 노이즈 + 로우패스 하강 스윕 ~120ms */
+  function playCreate() {
+    if (!soundOn) return;
+    try {
+      var ctx = audio();
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      var src = ctx.createBufferSource();
+      src.buffer = noiseBuffer(ctx, 0.14);
+      var f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.Q.value = 0.8;
+      f.frequency.setValueAtTime(2600, t);
+      f.frequency.exponentialRampToValueAtTime(480, t + 0.12);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.9, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+      src.connect(f);
+      f.connect(g);
+      g.connect(masterGain);
+      src.start(t);
+      src.stop(t + 0.15);
+    } catch (err) { /* 소리는 장식 — 실패해도 침묵 */ }
+  }
+
+  /* 드래그 놓기: 나지막한 '톡' — 사인 ~180Hz 빠른 감쇠 */
+  function playDrop() {
+    if (!soundOn) return;
+    try {
+      var ctx = audio();
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      var o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(180, t);
+      o.frequency.exponentialRampToValueAtTime(120, t + 0.1);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.85, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      o.connect(g);
+      g.connect(masterGain);
+      o.start(t);
+      o.stop(t + 0.14);
+    } catch (err) { /* 침묵 */ }
+  }
+
+  /* 노트 삭제: 종이 구겨짐 — 하강하는 노이즈 버스트 3개 ~250ms */
+  function playDelete() {
+    if (!soundOn) return;
+    try {
+      var ctx = audio();
+      if (!ctx) return;
+      var t0 = ctx.currentTime;
+      var freqs = [1900, 1150, 650];
+      for (var i = 0; i < 3; i++) {
+        var t = t0 + i * 0.075;
+        var src = ctx.createBufferSource();
+        src.buffer = noiseBuffer(ctx, 0.09);
+        var f = ctx.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.value = freqs[i];
+        f.Q.value = 1.2;
+        var g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.8 - i * 0.18, t + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
+        src.connect(f);
+        f.connect(g);
+        g.connect(masterGain);
+        src.start(t);
+        src.stop(t + 0.1);
+      }
+    } catch (err) { /* 침묵 */ }
+  }
+
+  /* 색 선택·소리 켜기: 아주 짧은 틱 */
+  function playTick() {
+    if (!soundOn) return;
+    try {
+      var ctx = audio();
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      var o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(1250, t);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.5, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+      o.connect(g);
+      g.connect(masterGain);
+      o.start(t);
+      o.stop(t + 0.05);
+    } catch (err) { /* 침묵 */ }
+  }
+
+  var soundBtn = document.getElementById('soundBtn');
+  function renderSoundBtn() {
+    soundBtn.textContent = soundOn ? '🔊' : '🔇';
+    soundBtn.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
+    soundBtn.title = soundOn ? '효과음 끄기' : '효과음 켜기';
+  }
+  /* 음소거 상태 단일 진입점 — 툴바 단추와 설정 패널 미러가 함께 쓴다 (postit-sound 양방향 동기화) */
+  function setSoundOn(on) {
+    soundOn = !!on;
+    try { localStorage.setItem(SOUND_KEY, soundOn ? '1' : '0'); } catch (err) { /* 무시 */ }
+    renderSoundBtn();
+    syncPanelSound();
+  }
+  soundBtn.addEventListener('click', function () {
+    setSoundOn(!soundOn);
+    if (soundOn) playTick();   /* 켤 때만 확인음 (제스처 내부) */
+  });
+  renderSoundBtn();
+
+  /* ── 볼륨 슬라이더: postit-sound-vol(문자열 0~100) ↔ 마스터 게인(값/100) 노출 (A37) ── */
+  var volume = 30;
+  try {
+    var vraw = localStorage.getItem(VOL_KEY);
+    if (vraw !== null && vraw !== '') {
+      var vn = parseInt(vraw, 10);
+      if (isFinite(vn)) volume = Math.max(0, Math.min(100, vn));
+    }
+  } catch (err) { /* 무시 */ }
+
+  function gainValue() { return Math.round(volume) / 100; }
+
+  function reflectVolume() {
+    /* 현재 마스터 게인을 body[data-volume-gain] 에 소수 문자열로 상시 반영 */
+    try { document.body.setAttribute('data-volume-gain', gainValue().toFixed(2)); } catch (err) { /* 무시 */ }
+    try { if (masterGain) masterGain.gain.value = gainValue(); } catch (err) { /* 무시 */ }
+  }
+  /* 볼륨 단일 진입점 — 툴바 슬라이더와 설정 패널 미러가 함께 쓴다 (postit-sound-vol 양방향 동기화) */
+  function setVolume(v) {
+    volume = isFinite(v) ? Math.max(0, Math.min(100, v)) : 0;
+    try { localStorage.setItem(VOL_KEY, String(volume)); } catch (err) { /* 무시 */ }
+    reflectVolume();
+    if (volSlider.value !== String(volume)) volSlider.value = String(volume);
+    syncPanelSound();
+  }
+  volSlider.value = String(volume);
+  reflectVolume();
+  volSlider.addEventListener('input', function () {
+    setVolume(parseInt(volSlider.value, 10));
+  });
+  volSlider.addEventListener('change', function () {
+    if (soundOn && volume > 0) playTick();   /* 직접 제스처(슬라이더 조작) 내부 */
+  });
+  /* 읽기 전용 게터 — rev.5 B-5 가 허용하는 유일한 신규 전역 노출 */
+  window.__getMasterGain = function () { return gainValue(); };
+
+  /* ── 테마 프리셋: 기본/다크/화이트 — postit-theme 저장, html[data-theme-preset] 반영 (A36) ── */
+  var theme = 'basic';
+  try {
+    var traw = localStorage.getItem(THEME_KEY);
+    if (traw === 'dark' || traw === 'white' || traw === 'basic') theme = traw;
+  } catch (err) { /* 무시 */ }
+
+  function applyTheme() {
+    document.documentElement.setAttribute('data-theme-preset', theme);
+    themeSel.value = theme;
+  }
+  applyTheme();
+  themeSel.addEventListener('change', function () {
+    var v = themeSel.value;
+    theme = (v === 'dark' || v === 'white') ? v : 'basic';
+    try { localStorage.setItem(THEME_KEY, theme); } catch (err) { /* 무시 */ }
+    applyTheme();
+    playTick();   /* 직접 제스처(선택) 내부 */
+  });
+
+  /* ── 저장소 ──
+     보드 1 = 기존 postit-notes (하위호환), 추가 보드 = postit-notes-<boardId> (A25) */
+
+  function storeKey(id) {
+    return id === 'b1' ? KEY : KEY + '-' + id;
+  }
+
+  function readStore(key) {
+    var raw = null;
+    try { raw = localStorage.getItem(key); } catch (err) { return { ok: true, list: [], raw: null }; }
+    if (raw === null) return { ok: true, list: [], raw: null };
+    try {
+      var v = JSON.parse(raw);
+      if (!Array.isArray(v)) return { ok: false, list: [], raw: raw };
+      return { ok: true, list: v, raw: raw };
+    } catch (err) {
+      return { ok: false, list: [], raw: raw };
+    }
+  }
+
+  /* 손상 원본을 <원래키>-corrupt-<타임스탬프ms> 로 백업. 기존 백업 키는 절대 덮어쓰지 않는다. */
+  function backupCorrupt(key, raw) {
+    if (raw === null || raw === undefined) return;
+    var ts = Date.now();
+    try {
+      var k = key + '-corrupt-' + ts;
+      while (localStorage.getItem(k) !== null) {
+        ts += 1;
+        k = key + '-corrupt-' + ts;
+      }
+      localStorage.setItem(k, raw);
+    } catch (err) { /* 저장 공간 부족 등 — 백업 실패는 치명적이지 않음 */ }
+  }
+
+  function noteToPlain(n) {
+    var o = { id: n.id, text: n.text, color: n.color, x: n.x, y: n.y, rot: n.rot, z: n.z, updatedAt: n.updatedAt };
+    /* 신규 필드는 additive 로만 — 없는 노트는 예전 스키마 그대로 (B-3 하위호환) */
+    if (typeof n.w === 'number') o.w = n.w;
+    if (typeof n.h === 'number') o.h = n.h;
+    if (n.skin === 'lined' || n.skin === 'grid') o.skin = n.skin;
+    if (typeof n.img === 'string' && n.img) o.img = n.img;
+    if (typeof n.date === 'string' && n.date) o.date = n.date;
+    return o;
+  }
+
+  /* 쓰기 전에 저장소를 다시 읽어 병합 — 두 창이 서로를 덮어쓰지 않도록 (A8) */
+  function saveNow() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    var sk = storeKey(boardId);
+    var st = readStore(sk);
+    if (!st.ok) backupCorrupt(sk, st.raw);
+    var merged = {};
+    var order = [];
+    if (st.ok) {
+      st.list.forEach(function (sn) {
+        if (!sn || typeof sn !== 'object') return;
+        var sid = typeof sn.id === 'string' ? sn.id : null;
+        if (!sid || deletedIds[sid]) return;
+        if (!Object.prototype.hasOwnProperty.call(merged, sid)) order.push(sid);
+        merged[sid] = sn;
+      });
+    }
+    data.forEach(function (n) {
+      if (deletedIds[n.id]) return;
+      var prev = merged[n.id];
+      if (prev && typeof prev.updatedAt === 'number' && typeof n.updatedAt === 'number' && prev.updatedAt > n.updatedAt) return;
+      if (!Object.prototype.hasOwnProperty.call(merged, n.id)) order.push(n.id);
+      merged[n.id] = noteToPlain(n);
+    });
+    var arr = order.map(function (i) { return merged[i]; });
+    try {
+      localStorage.setItem(sk, JSON.stringify(arr));
+    } catch (err) {
+      showNotice('저장 공간이 가득 차서 메모를 저장하지 못했어요.');
+    }
+  }
+
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, 250);
+  }
+
+  /* ══ 꾸미기 (🎨): IndexedDB postit-decor — 대용량 이미지는 localStorage 를 잠식하지 않는다 ══ */
+
+  var idbHandle = null;
+  var idbFailed = false;
+
+  function openDecorDB(cb) {
+    if (idbHandle) { cb(idbHandle); return; }
+    if (idbFailed || typeof indexedDB === 'undefined') { cb(null); return; }
+    var req = null;
+    try { req = indexedDB.open('postit-decor', 1); } catch (err) { idbFailed = true; cb(null); return; }
+    req.onupgradeneeded = function () {
+      try { req.result.createObjectStore('images'); } catch (err) { /* 이미 있음 */ }
+    };
+    req.onsuccess = function () { idbHandle = req.result; cb(idbHandle); };
+    req.onerror = function () { idbFailed = true; cb(null); };
+    req.onblocked = function () { cb(null); };
+  }
+
+  function idbPut(key, val, done) {
+    openDecorDB(function (db) {
+      if (!db) { done(false); return; }
+      try {
+        var tx = db.transaction('images', 'readwrite');
+        tx.objectStore('images').put(val, key);
+        tx.oncomplete = function () { done(true); };
+        tx.onerror = function () { done(false); };
+        tx.onabort = function () { done(false); };
+      } catch (err) { done(false); }
+    });
+  }
+
+  function idbGet(key, done) {
+    openDecorDB(function (db) {
+      if (!db) { done(null); return; }
+      try {
+        var rq = db.transaction('images', 'readonly').objectStore('images').get(key);
+        rq.onsuccess = function () { done(rq.result); };
+        rq.onerror = function () { done(null); };
+      } catch (err) { done(null); }
+    });
+  }
+
+  function idbDel(key, done) {
+    openDecorDB(function (db) {
+      if (!db) { done(false); return; }
+      try {
+        var tx = db.transaction('images', 'readwrite');
+        tx.objectStore('images')['delete'](key);
+        tx.oncomplete = function () { done(true); };
+        tx.onerror = function () { done(false); };
+        tx.onabort = function () { done(false); };
+      } catch (err) { done(false); }
+    });
+  }
+
+  /* 전 이미지 순회 (내보내기 "이미지 포함" 용) — 실패 시 null */
+  function collectDecorImages(cb) {
+    openDecorDB(function (db) {
+      if (!db) { cb(null); return; }
+      try {
+        var out = {};
+        var rq = db.transaction('images', 'readonly').objectStore('images').openCursor();
+        rq.onsuccess = function () {
+          var cur = rq.result;
+          if (cur) {
+            if (typeof cur.value === 'string' && IMG_URI_RE.test(cur.value)) out[String(cur.key)] = cur.value;
+            cur['continue']();
+          } else cb(out);
+        };
+        rq.onerror = function () { cb(null); };
+      } catch (err) { cb(null); }
+    });
+  }
+
+  /* 검증된 data:image URI 만 통과 (B-1 예외 범위 — 그 외는 null) */
+  function loadDecorImage(key, cb) {
+    if (Object.prototype.hasOwnProperty.call(imgCache, key)) { cb(imgCache[key]); return; }
+    idbGet(key, function (val) {
+      var uri = (typeof val === 'string' && val.length <= 8 * 1024 * 1024 && IMG_URI_RE.test(val)) ? val : null;
+      imgCache[key] = uri;
+      cb(uri);
+    });
+  }
+
+  /* ── 꾸미기 레이아웃 저장 (postit-decor-layout — 이모지·좌표는 가벼워 localStorage) ── */
+
+  function readDecorAll() {
+    var raw = null;
+    try { raw = localStorage.getItem(DECOR_KEY); } catch (err) { return {}; }
+    if (raw === null) return {};
+    try {
+      var v = JSON.parse(raw);
+      if (v && typeof v === 'object' && !Array.isArray(v)) return v;
+    } catch (err) { /* 아래에서 백업 */ }
+    backupCorrupt(DECOR_KEY, raw);   /* A9 규약 동일 적용 */
+    return {};
+  }
+
+  function sanitizeDecor(b) {
+    var out = { bg: null, stickers: [] };
+    if (!b || typeof b !== 'object') return out;
+    var bg = b.bg;
+    if (bg && typeof bg === 'object') {
+      if (bg.type === 'preset' && (bg.id === 'wood' || bg.id === 'linen' || bg.id === 'chalk')) {
+        out.bg = { type: 'preset', id: bg.id };
+      } else if (bg.type === 'image') {
+        out.bg = { type: 'image', fit: bg.fit === 'tile' ? 'tile' : 'cover' };
+      }
+    }
+    if (Array.isArray(b.stickers)) {
+      b.stickers.forEach(function (s) {
+        if (!s || typeof s !== 'object') return;
+        var id = typeof s.id === 'string' && s.id ? s.id : 'st-' + uid();
+        var x = typeof s.x === 'number' && isFinite(s.x) ? Math.round(s.x) : 60;
+        var y = typeof s.y === 'number' && isFinite(s.y) ? Math.round(s.y) : 120;
+        if (s.type === 'emoji' && typeof s.emoji === 'string' && s.emoji && s.emoji.length <= 8) {
+          var size = typeof s.size === 'number' && isFinite(s.size) ? Math.max(24, Math.min(200, Math.round(s.size))) : 64;
+          out.stickers.push({ id: id, type: 'emoji', emoji: s.emoji, x: x, y: y, size: size });
+        } else if (s.type === 'photo' && typeof s.img === 'string' && /^img-[\w-]+$/.test(s.img)) {
+          var w = typeof s.w === 'number' && isFinite(s.w) ? Math.max(64, Math.min(420, Math.round(s.w))) : 160;
+          out.stickers.push({ id: id, type: 'photo', img: s.img, x: x, y: y, w: w });
+        }
+      });
+    }
+    return out;
+  }
+
+  function decorEntryPlain(d) {
+    if (!d || (!d.bg && (!d.stickers || !d.stickers.length))) return null;
+    var entry = {
+      stickers: (d.stickers || []).map(function (s) {
+        return s.type === 'photo'
+          ? { id: s.id, type: 'photo', img: s.img, x: s.x, y: s.y, w: s.w }
+          : { id: s.id, type: 'emoji', emoji: s.emoji, x: s.x, y: s.y, size: s.size };
+      })
+    };
+    if (d.bg) entry.bg = d.bg.type === 'preset' ? { type: 'preset', id: d.bg.id } : { type: 'image', fit: d.bg.fit };
+    return entry;
+  }
+
+  /* 쓰기 직전 전체를 다시 읽어 해당 보드 몫만 바꾼다 (merge-on-write — 두 창 안전, A8 동형) */
+  function writeDecorEntry(bid, entry) {
+    var all = readDecorAll();
+    if (!all.boards || typeof all.boards !== 'object' || Array.isArray(all.boards)) all.boards = {};
+    if (entry) all.boards[bid] = entry;
+    else delete all.boards[bid];
+    try {
+      localStorage.setItem(DECOR_KEY, JSON.stringify(all));
+      return true;
+    } catch (err) {
+      showNotice('저장 공간이 가득 차서 꾸미기를 저장하지 못했어요.');
+      return false;
+    }
+  }
+
+  function saveDecorNow() {
+    if (decorSaveTimer) { clearTimeout(decorSaveTimer); decorSaveTimer = null; }
+    writeDecorEntry(boardId, decorEntryPlain(decor));
+  }
+
+  function scheduleDecorSave() {
+    if (decorSaveTimer) clearTimeout(decorSaveTimer);
+    decorSaveTimer = setTimeout(saveDecorNow, 250);
+  }
+
+  /* ── 배경 반영: #board 스타일은 불변, .decor-bg 레이어만 바꾼다 (A10·A17·A36 안전) ── */
+
+  function applyDecorBg() {
+    bgLoadToken += 1;
+    var token = bgLoadToken;
+    decorBgEl.className = 'decor-bg';
+    decorBgEl.style.backgroundImage = '';
+    decorBgEl.style.backgroundSize = '';
+    decorBgEl.style.backgroundRepeat = '';
+    var bg = decor.bg;
+    if (!bg) return;   /* 기본 코르크 = 레이어 숨김 */
+    decorBgEl.classList.add('on');
+    if (bg.type === 'preset') {
+      decorBgEl.classList.add('bg-' + bg.id);
+      return;
+    }
+    loadDecorImage('bg-' + boardId, function (uri) {
+      if (token !== bgLoadToken || !uri) return;
+      decorBgEl.style.backgroundImage = 'url("' + uri + '")';
+      if (decor.bg && decor.bg.fit === 'tile') {
+        decorBgEl.style.backgroundSize = '480px auto';
+        decorBgEl.style.backgroundRepeat = 'repeat';
+      } else {
+        decorBgEl.style.backgroundSize = 'cover';
+        decorBgEl.style.backgroundRepeat = 'no-repeat';
+      }
+    });
+  }
+
+  /* ── 스티커 ── */
+
+  function findSticker(id) {
+    for (var i = 0; i < decor.stickers.length; i++) if (decor.stickers[i].id === id) return decor.stickers[i];
+    return null;
+  }
+
+  function renderSticker(s) {
+    var el = document.createElement('div');
+    el.className = 'psticker' + (s.type === 'photo' ? ' photo' : '');
+    el.setAttribute('data-sticker', '');
+    el.setAttribute('data-sid', s.id);
+    el.style.left = s.x + 'px';
+    el.style.top = s.y + 'px';
+    if (s.type === 'emoji') {
+      el.style.fontSize = s.size + 'px';
+      var q = document.createElement('span');
+      q.className = 'stq';
+      q.textContent = s.emoji;
+      el.appendChild(q);
+    } else {
+      el.style.width = s.w + 'px';
+      var img = document.createElement('img');
+      img.className = 'stimg';
+      img.alt = '';
+      img.draggable = false;
+      loadDecorImage(s.img, function (uri) {
+        if (uri) img.src = uri;   /* loadDecorImage 가 IMG_URI_RE 로 검증한 데이터 URI (B-1 예외) */
+      });
+      el.appendChild(img);
+    }
+    var grip = document.createElement('div');
+    grip.className = 'stgrip';
+    grip.setAttribute('data-sticker-resize', '');
+    grip.title = '모서리를 끌어 크기 조절';
+    el.appendChild(grip);
+    el.addEventListener('pointerdown', function (e) { onStickerDown(e, s.id, false); });
+    grip.addEventListener('pointerdown', function (e) { onStickerDown(e, s.id, true); });
+    stickerLayer.appendChild(el);
+    stickerEls[s.id] = el;
+    return el;
+  }
+
+  function onStickerDown(e, id, isResize) {
+    if (e.button !== 0) return;
+    var s = findSticker(id);
+    var el = stickerEls[id];
+    if (!s || !el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stDrag = {
+      id: id,
+      resize: isResize,
+      pid: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: s.x,
+      origY: s.y,
+      origSize: s.type === 'emoji' ? s.size : s.w,
+      moved: false
+    };
+    document.addEventListener('pointermove', onStickerMove);
+    document.addEventListener('pointerup', onStickerUp);
+    document.addEventListener('pointercancel', onStickerUp);
+  }
+
+  function onStickerMove(e) {
+    if (!stDrag) return;
+    if (e.pointerId !== undefined && stDrag.pid !== undefined && e.pointerId !== stDrag.pid) return;
+    var s = findSticker(stDrag.id);
+    var el = stickerEls[stDrag.id];
+    if (!s || !el) return;
+    var dx = e.clientX - stDrag.startX;
+    var dy = e.clientY - stDrag.startY;
+    if (dx !== 0 || dy !== 0) stDrag.moved = true;
+    if (stDrag.resize) {
+      var delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+      if (s.type === 'emoji') {
+        s.size = Math.max(24, Math.min(200, Math.round(stDrag.origSize + delta)));
+        el.style.fontSize = s.size + 'px';
+      } else {
+        s.w = Math.max(64, Math.min(420, Math.round(stDrag.origSize + delta)));
+        el.style.width = s.w + 'px';
+      }
+    } else {
+      var bw = board.clientWidth;
+      var bh = board.clientHeight;
+      var w = el.offsetWidth;
+      var nx = stDrag.origX + dx;
+      var ny = stDrag.origY + dy;
+      if (nx < 24 - w) nx = 24 - w;
+      if (nx > bw - 24) nx = bw - 24;
+      if (ny < 0) ny = 0;
+      if (ny > bh - 24) ny = bh - 24;
+      s.x = nx;
+      s.y = ny;
+      el.style.left = nx + 'px';
+      el.style.top = ny + 'px';
+    }
+    e.preventDefault();
+  }
+
+  function onStickerUp(e) {
+    if (stDrag && e && e.type === 'pointerup' && e.pointerId !== undefined &&
+        stDrag.pid !== undefined && e.pointerId !== stDrag.pid) return;
+    var d = stDrag;
+    stDrag = null;
+    document.removeEventListener('pointermove', onStickerMove);
+    document.removeEventListener('pointerup', onStickerUp);
+    document.removeEventListener('pointercancel', onStickerUp);
+    if (!d) return;
+    if (d.moved) {
+      saveDecorNow();
+      playDrop();   /* 직접 제스처(드래그 끝) 내부 */
+    }
+  }
+
+  /* 스티커의 대략적 점유 크기 (겹침 판정용 — 이모지 글리프는 font-size 보다 넓게 그려지고,
+     사진은 폴라로이드 프레임을 포함해 추정) */
+  function stickerSize(s) {
+    if (s.type === 'photo') return { w: s.w + 14, h: Math.round(s.w * 1.05) + 31 };
+    return { w: Math.round(s.size * 1.45), h: Math.round(s.size * 1.1) };
+  }
+
+  /* 계단식 스폰: 가운데를 기준으로 회차마다 칸을 옮겨 흩뿌리고, 이미 있는 스티커와
+     겹치는 칸은 건너뛴다 (다 차 있으면 마지막 후보에 그대로 — 실패 없음) */
+  var stickerSpawnSeq = 0;
+  function stickerSpawnXY(w, h) {
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var cx = Math.round(bw / 2 - w / 2);
+    var cy = Math.round(bh / 2 - h / 2);
+    var stepX = Math.max(72, Math.round(w * 0.9));
+    var stepY = Math.max(56, Math.round(h * 0.8));
+    var cols = Math.max(3, Math.min(7, Math.floor((bw * 0.72) / stepX)));
+    var rows = 5;
+    var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
+    var free = function (x, y) {
+      for (var i = 0; i < decor.stickers.length; i++) {
+        var o = decor.stickers[i];
+        var os = stickerSize(o);
+        if (x < o.x + os.w + 8 && x + w + 8 > o.x && y < o.y + os.h + 8 && y + h + 8 > o.y) return false;
+      }
+      return true;
+    };
+    var fx = cx;
+    var fy = cy;
+    for (var t = 0; t < cols * rows; t++) {
+      var k = stickerSpawnSeq + t;
+      var col = k % cols;
+      var row = Math.floor(k / cols) % rows;
+      var x = clamp(
+        cx + Math.round((col - (cols - 1) / 2) * stepX + (row % 2 ? stepX / 2 : 0) + (Math.random() * 16 - 8)),
+        10, Math.max(10, bw - w - 10));
+      var y = clamp(
+        cy + Math.round((row - (rows - 1) / 2) * stepY + (Math.random() * 12 - 6)),
+        10, Math.max(10, bh - h - 10));
+      if (t === 0) { fx = x; fy = y; }
+      if (free(x, y)) { stickerSpawnSeq = k + 1; return { x: x, y: y }; }
+    }
+    stickerSpawnSeq += 1;
+    return { x: fx, y: fy };
+  }
+
+  /* 방금 붙인(또는 되살린) 스티커의 리사이즈 손잡이를 2초간 보여준다 */
+  function revealStickerGrip(el) {
+    if (!el) return;
+    el.classList.add('fresh');
+    setTimeout(function () { el.classList.remove('fresh'); }, 2000);
+  }
+
+  function addEmojiSticker(emoji) {
+    var p = stickerSpawnXY(93, 70);   /* 이모지 실측 점유(≈ size×1.45 × size×1.1) 기준으로 자리 잡기 */
+    var s = { id: 'st-' + uid(), type: 'emoji', emoji: emoji, x: p.x, y: p.y, size: 64 };
+    decor.stickers.push(s);
+    revealStickerGrip(renderSticker(s));
+    saveDecorNow();
+    playTick();   /* 직접 제스처(팔레트 클릭) 내부 */
+  }
+
+  /* 어느 보드에서도 더 안 쓰는 사진만 IndexedDB 에서 지운다 */
+  function maybeDeleteDecorImage(key) {
+    var used = false;
+    var all = readDecorAll();
+    var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
+    Object.keys(bs).forEach(function (bid) {
+      var list = bs[bid] && Array.isArray(bs[bid].stickers) ? bs[bid].stickers : [];
+      list.forEach(function (s2) { if (s2 && s2.img === key) used = true; });
+    });
+    decor.stickers.forEach(function (s2) { if (s2.img === key) used = true; });
+    if (!used) {
+      delete imgCache[key];
+      idbDel(key, function () {});
+    }
+  }
+
+  /* 스티커 떼어내기: 저장소에서는 즉시 제거하되(A20 관용구) 토스트의 "실행 취소"로 복원할 수 있다.
+     사진 원본(IndexedDB)은 토스트가 소멸한 뒤에야 지운다 — 그 사이 복원되면 사용 중으로 판정돼 남는다 */
+  function deleteStickerById(id) {
+    var idx = -1;
+    for (var i = 0; i < decor.stickers.length; i++) if (decor.stickers[i].id === id) { idx = i; break; }
+    if (idx === -1) return;
+    var s = decor.stickers[idx];
+    decor.stickers.splice(idx, 1);
+    var el = stickerEls[id];
+    delete stickerEls[id];
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    saveDecorNow();
+    var bid = boardId;
+    showUndoNotice('스티커를 떼어냈어요.', function () {
+      restoreSticker(bid, s, idx);
+      playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
+      showNotice('스티커를 다시 붙였어요.');
+    });
+    if (s.type === 'photo' && s.img) scheduleDecorImageSweep(s.img);
+  }
+
+  /* 떼어낸 스티커 복원 — 같은 보드면 화면·순서까지, 다른 보드로 넘어갔으면 저장분만 병합 복원 */
+  function restoreSticker(bid, s, idx) {
+    if (bid === boardId) {
+      if (!findSticker(s.id)) {
+        var at = Math.max(0, Math.min(idx, decor.stickers.length));
+        decor.stickers.splice(at, 0, s);
+        var el = renderSticker(s);
+        var ref = stickerLayer.children[at];   /* 원래 쌓임 순서 복원 (레이어 안은 스티커뿐) */
+        if (ref && ref !== el) stickerLayer.insertBefore(el, ref);
+        revealStickerGrip(el);
+      }
+      saveDecorNow();
+    } else {
+      var all = readDecorAll();
+      var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
+      var cur = sanitizeDecor(bs[bid]);
+      var dup = false;
+      cur.stickers.forEach(function (o) { if (o.id === s.id) dup = true; });
+      if (!dup) cur.stickers.splice(Math.max(0, Math.min(idx, cur.stickers.length)), 0, s);
+      writeDecorEntry(bid, decorEntryPlain(cur));
+    }
+  }
+
+  /* undo 토스트(8초) 소멸 뒤에만 사진 원본 정리 — maybeDeleteDecorImage 가 사용 여부를 재확인한다 */
+  function scheduleDecorImageSweep(key) {
+    setTimeout(function () { maybeDeleteDecorImage(key); }, 9000);
+  }
+
+  /* 스티커를 스티커들 중 맨 앞으로 (노트 뒤 레이어라는 사실은 그대로) */
+  function bringStickerToFront(id) {
+    var idx = -1;
+    for (var i = 0; i < decor.stickers.length; i++) if (decor.stickers[i].id === id) { idx = i; break; }
+    if (idx === -1) return;
+    var s = decor.stickers.splice(idx, 1)[0];
+    decor.stickers.push(s);
+    var el = stickerEls[id];
+    if (el) stickerLayer.appendChild(el);
+    saveDecorNow();
+  }
+
+  /* 활성 보드의 꾸미기(배경+스티커)를 저장분에서 읽어 통째로 반영 */
+  function applyDecor() {
+    Object.keys(stickerEls).forEach(function (k) {
+      var el = stickerEls[k];
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+    stickerEls = {};
+    var all = readDecorAll();
+    decor = sanitizeDecor(all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards[boardId] : null);
+    applyDecorBg();
+    decor.stickers.forEach(renderSticker);
+    syncDecorUI();
+  }
+
+  /* ── 공용 이미지 판독·다운스케일 (배경·사진 스티커 몫 — 노트 사진 A26 파이프라인과 별개) ── */
+
+  function readAsImage(file, cb) {
+    var typeOk = file && typeof file.type === 'string' && file.type.indexOf('image/') === 0;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var src = String(reader.result || '');
+      if (!typeOk || src.indexOf('data:image/') !== 0) { cb(null); return; }
+      var probe = document.createElement('img');   /* 디코드 확인용 — DOM 에 넣지 않음 */
+      probe.onload = function () { cb(probe); };
+      probe.onerror = function () { cb(null); };
+      probe.src = src;   /* 앱이 접두를 검증한 데이터 URI (B-1 예외) */
+    };
+    reader.onerror = function () { cb(null); };
+    reader.readAsDataURL(file);
+  }
+
+  function downscaleToUri(im, maxSide, limit) {
+    var w = im.naturalWidth;
+    var h = im.naturalHeight;
+    if (!w || !h) return null;
+    var scale = Math.min(1, maxSide / Math.max(w, h));
+    var qualities = [0.85, 0.72, 0.6, 0.45];
+    for (var pass = 0; pass < 4; pass++) {
+      var cw = Math.max(1, Math.round(w * scale));
+      var ch = Math.max(1, Math.round(h * scale));
+      var c = document.createElement('canvas');
+      c.width = cw;
+      c.height = ch;
+      var cctx = c.getContext('2d');
+      if (!cctx) return null;
+      cctx.drawImage(im, 0, 0, cw, ch);
+      for (var qi = 0; qi < qualities.length; qi++) {
+        var uri = c.toDataURL('image/jpeg', qualities[qi]);
+        if (uri.length <= limit && IMG_URI_RE.test(uri)) return uri;
+      }
+      scale *= 0.7;
+    }
+    return null;
+  }
+
+  /* ── 달력 연동 (S1/A41): 날짜 지정한 노트를 cal-events 에 "📌 첫 줄" 일정으로 붙인다 ──
+     연동 일정의 id 는 'postit-<노트id>' — 같은 노트의 재저장은 upsert(항상 정확히 1건),
+     수동 입력 일정(다른 id)은 절대 건드리지 않는다. 쓰기 직전에 저장소를 다시 읽어
+     병합하므로 캘린더 창과 동시에 써도 안전하다 (merge-on-write, A8 동형).
+     cal-events 스키마는 기존 {id,time,text} 그대로 — additive 항목 추가만 (B-3 하위호환). */
+  var CAL_KEY = 'cal-events';
+  var DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  function calEventId(noteId) { return 'postit-' + noteId; }
+
+  function noteFirstLine(text) {
+    var t = typeof text === 'string' ? text : '';
+    var nl = t.indexOf('\n');
+    return nl >= 0 ? t.slice(0, nl) : t;
+  }
+
+  /* cal-events 를 객체로 읽는다 — 손상 시 <키>-corrupt-<ts> 로 백업 후 빈 객체 (A9 규약) */
+  function readCalEvents() {
+    var raw = null;
+    try { raw = localStorage.getItem(CAL_KEY); } catch (err) { return null; }
+    if (raw === null) return {};
+    try {
+      var v = JSON.parse(raw);
+      if (v && typeof v === 'object' && !Array.isArray(v)) return v;
+    } catch (err) { /* 아래에서 백업 */ }
+    backupCorrupt(CAL_KEY, raw);
+    return {};
+  }
+
+  /* 이 노트 몫의 연동 일정만 갱신: 전 날짜에서 제거 → dateKey 가 있으면 그 날짜에 1건 추가 */
+  function syncNoteToCalendar(noteId, dateKey, text) {
+    var store = readCalEvents();
+    if (store === null) return;
+    var evId = calEventId(noteId);
+    var changed = false;
+    Object.keys(store).forEach(function (k) {
+      var list = store[k];
+      if (!Array.isArray(list)) return;
+      var kept = list.filter(function (ev) {
+        return !(ev && typeof ev === 'object' && ev.id === evId);
+      });
+      if (kept.length !== list.length) {
+        changed = true;
+        if (kept.length) store[k] = kept;
+        else delete store[k];
+      }
+    });
+    if (dateKey) {
+      if (!Array.isArray(store[dateKey])) store[dateKey] = [];
+      store[dateKey].push({ id: evId, time: '', text: '📌 ' + text });
+      changed = true;
+    }
+    if (!changed) return;
+    try { localStorage.setItem(CAL_KEY, JSON.stringify(store)); } catch (err) {
+      showNotice('저장 공간이 가득 차서 달력에 붙이지 못했어요.');
+    }
+  }
+
+  /* 날짜 지정/변경/해제 — 노트에 date 를 기록하고 연동 일정을 즉시 맞춘다 */
+  function setNoteDate(id, dateKey) {
+    var n = findNote(id);
+    if (!n) return;
+    var d = (typeof dateKey === 'string' && DATE_KEY_RE.test(dateKey)) ? dateKey : '';
+    if (!d && !n.date) return;   /* 원래도 미지정 — 할 일 없음 */
+    if (d) n.date = d; else delete n.date;
+    n.updatedAt = Date.now();
+    syncNoteToCalendar(id, d, noteFirstLine(n.text));
+    saveNow();
+    showNotice(d ? '달력 ' + d + ' 에 📌 로 붙여 두었어요.' : '달력에서 날짜를 해제했어요.');
+  }
+
+  /* ── 모델 유틸 ── */
+
+  function findNote(id) {
+    for (var i = 0; i < data.length; i++) if (data[i].id === id) return data[i];
+    return null;
+  }
+
+  function randomRot() {
+    var mag = 0.8 + Math.random() * 2.2;      /* 0.8 ~ 3.0deg */
+    return Math.random() < 0.5 ? -mag : mag;
+  }
+
+  function sanitizeList(list) {
+    var out = [];
+    var fallback = 0;
+    list.forEach(function (sn) {
+      if (!sn || typeof sn !== 'object') return;
+      var n = {
+        id: typeof sn.id === 'string' && sn.id ? sn.id : uid(),
+        text: typeof sn.text === 'string' ? sn.text : '',
+        color: typeof sn.color === 'string' && sn.color ? sn.color : PALETTE[0],
+        x: typeof sn.x === 'number' && isFinite(sn.x) ? sn.x : 24 + fallback * 34,
+        y: typeof sn.y === 'number' && isFinite(sn.y) ? sn.y : 96 + fallback * 30,
+        rot: typeof sn.rot === 'number' && isFinite(sn.rot) && Math.abs(sn.rot) >= 0.1 ? sn.rot : randomRot(),
+        z: typeof sn.z === 'number' && isFinite(sn.z) ? sn.z : 10,
+        updatedAt: typeof sn.updatedAt === 'number' ? sn.updatedAt : Date.now()
+      };
+      if (typeof sn.w === 'number' && isFinite(sn.w)) n.w = Math.max(120, Math.min(480, Math.round(sn.w)));
+      if (typeof sn.h === 'number' && isFinite(sn.h)) n.h = Math.max(120, Math.min(480, Math.round(sn.h)));
+      if (sn.skin === 'lined' || sn.skin === 'grid') n.skin = sn.skin;
+      if (typeof sn.img === 'string' && sn.img.length <= 409600 && IMG_URI_RE.test(sn.img)) n.img = sn.img;
+      if (typeof sn.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sn.date)) n.date = sn.date;
+      fallback += 1;
+      out.push(n);
+    });
+    return out;
+  }
+
+  /* ── 겹치지 않는 생성 위치 찾기 ── */
+
+  /* 도구 선반이 여러 줄로 접힌 화면에서도 노트가 그 아래부터 놓이게 */
+  function shelfBottom() {
+    var y0 = 90;
+    try {
+      var tb = document.querySelector('.toolbar');
+      if (tb) {
+        var r = tb.getBoundingClientRect();
+        if (r.bottom + 10 > y0) y0 = Math.round(r.bottom + 10);
+      }
+    } catch (err) { /* 무시 */ }
+    return y0;
+  }
+
+  function findSpawn(w, h) {
+    var occ = [];
+    data.forEach(function (n) {
+      var ref = els[n.id];
+      occ.push({
+        x: n.x, y: n.y,
+        w: ref ? ref.root.offsetWidth : NOTE_W,
+        h: ref ? ref.root.offsetHeight : NOTE_H
+      });
+    });
+    var st = readStore(storeKey(boardId));
+    if (st.ok) {
+      st.list.forEach(function (sn) {
+        if (!sn || typeof sn !== 'object') return;
+        if (typeof sn.id === 'string' && (findNote(sn.id) || deletedIds[sn.id])) return;
+        if (typeof sn.x === 'number' && typeof sn.y === 'number' && isFinite(sn.x) && isFinite(sn.y)) {
+          occ.push({ x: sn.x, y: sn.y, w: NOTE_W, h: NOTE_H });
+        }
+      });
+    }
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var pad = 4;
+    function free(x, y) {
+      for (var i = 0; i < occ.length; i++) {
+        var r = occ[i];
+        if (x < r.x + r.w + pad && x + w + pad > r.x && y < r.y + r.h + pad && y + h + pad > r.y) return false;
+      }
+      return true;
+    }
+    var x0 = 16;
+    var y0 = shelfBottom();   /* 도구 선반 아래부터 */
+    var x, y;
+    for (y = y0; y + h <= bh - 8; y += h + 6) {
+      for (x = x0; x + w <= bw - 8; x += w + 6) {
+        if (free(x, y)) return { x: x, y: y };
+      }
+    }
+    for (y = y0; y + h <= bh - 8; y += 26) {
+      for (x = x0; x + w <= bw - 8; x += 34) {
+        if (free(x, y)) return { x: x, y: y };
+      }
+    }
+    /* 보드가 가득 찼을 때의 계단식 배치 */
+    var n = data.length;
+    var rx = Math.max(40, bw - w - 48);
+    var ry = Math.max(40, bh - h - y0 - 20);
+    return { x: 24 + ((n * 38) % rx), y: y0 + ((n * 30) % ry) };
+  }
+
+  /* ── 노트 렌더링 ── */
+
+  function renderNote(n) {
+    var root = document.createElement('div');
+    root.className = 'pnote';
+    root.setAttribute('data-note', '');
+    root.setAttribute('data-id', n.id);
+    root.style.left = n.x + 'px';
+    root.style.top = n.y + 'px';
+    root.style.zIndex = String(n.z);
+    root.style.backgroundColor = n.color;
+    /* 회전은 CSS 변수로 내려 테이프 각도·오프셋이 노트마다 달라지게 한다 (스타일은 CSS 규칙이 담당) */
+    root.style.setProperty('--rot', n.rot + 'deg');
+    root.style.setProperty('--rotn', n.rot.toFixed(2));   /* 단위 없는 값 — 그림자 x오프셋 계산용 */
+    root.style.setProperty('--tape-x', (n.rot * 6).toFixed(1) + 'px');
+
+    var handle = document.createElement('div');
+    handle.className = 'nhandle';
+    handle.setAttribute('data-drag-handle', '');
+
+    /* 회전값 기반의 안정적 선택: 일부 노트는 테이프 대신 압정으로 붙인다 */
+    var fastener = document.createElement('span');
+    fastener.className = Math.abs(n.rot) >= 2.1 ? 'npin' : 'tape';
+    handle.appendChild(fastener);
+
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'ndel';
+    del.setAttribute('data-delete-note', '');
+    del.title = '이 포스트잇 떼어내기';
+    del.textContent = '✕';
+    handle.appendChild(del);
+
+    var textEl = document.createElement('div');
+    textEl.className = 'ntext';
+    textEl.setAttribute('data-note-text', '');
+
+    var ta = document.createElement('textarea');
+    ta.className = 'nedit';
+    ta.setAttribute('data-note-edit', '');
+    ta.setAttribute('spellcheck', 'false');
+    ta.placeholder = '내용을 적어 보세요';
+
+    /* 우하단 리사이즈 손잡이 — 여기서 시작한 드래그는 이동이 아니라 크기 조절 (A23) */
+    var grip = document.createElement('div');
+    grip.className = 'rgrip';
+    grip.setAttribute('data-resize-handle', '');
+    grip.title = '모서리를 끌어 크기 조절';
+
+    root.appendChild(handle);
+    root.appendChild(textEl);
+    root.appendChild(ta);
+    root.appendChild(grip);
+
+    /* 터치·펜에서도 같은 경로로 동작하도록 포인터 이벤트 사용 (P10) */
+    root.addEventListener('pointerdown', onNoteDown);
+    grip.addEventListener('pointerdown', function (e) { startResize(e, n.id); });
+
+    del.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    del.addEventListener('click', function (e) {
+      e.stopPropagation();
+      playDelete();          /* 직접 제스처(클릭) 내부 */
+      removeNote(n.id);
+    });
+
+    ta.addEventListener('input', function () {
+      var m = findNote(n.id);
+      if (!m) return;
+      m.text = ta.value;
+      m.updatedAt = Date.now();
+      var ref2 = els[n.id];
+      if (ref2) renderNoteText(m, ref2);
+      applySearch();
+      scheduleSave();
+    });
+    ta.addEventListener('blur', function () {
+      root.classList.remove('editing');
+      var m = findNote(n.id);
+      if (m && m.date) syncNoteToCalendar(m.id, m.date, noteFirstLine(m.text));   /* 연동 일정 제목 최신화 (S1) */
+      saveNow();
+    });
+    ta.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') ta.blur();
+    });
+
+    board.appendChild(root);
+    var ref = { root: root, textEl: textEl, ta: ta, imgEl: null };
+    els[n.id] = ref;
+    renderNoteText(n, ref);
+    applyNoteSize(n, ref);
+    applySkin(n, ref);
+    applyNoteImage(n, ref);
+    return root;
+  }
+
+  /* ── 노트 본문 렌더 (A22): "- [ ] "/"- [x] " 줄만 체크리스트로, 그 외는 리터럴 텍스트 ──
+     마커 줄이 하나도 없으면 텍스트 노드 하나로 원문 그대로 (줄바꿈 \n 보존 — A2·A11 계약). */
+  function renderNoteText(n, ref) {
+    var textEl = ref.textEl;
+    while (textEl.firstChild) textEl.removeChild(textEl.firstChild);
+    var lines = n.text.split('\n');
+    var hasCheck = false;
+    for (var i = 0; i < lines.length; i++) {
+      if (CHECK_RE.test(lines[i])) { hasCheck = true; break; }
+    }
+    if (!hasCheck) {
+      textEl.textContent = n.text;
+      return;
+    }
+    lines.forEach(function (line, idx) {
+      var m = CHECK_RE.exec(line);
+      if (m) {
+        var row = document.createElement('div');
+        row.className = 'check-line' + (m[1] === 'x' ? ' done' : '');
+        row.setAttribute('data-check-line', '');
+        var box = document.createElement('input');
+        box.type = 'checkbox';
+        box.className = 'clbox';
+        box.checked = m[1] === 'x';
+        box.title = '완료 표시';
+        box.addEventListener('change', function () {
+          toggleCheckLine(n.id, idx, box.checked);
+        });
+        var sp = document.createElement('span');
+        sp.className = 'cltext';
+        sp.textContent = line.slice(m[0].length);
+        row.appendChild(box);
+        row.appendChild(sp);
+        textEl.appendChild(row);
+      } else {
+        var d = document.createElement('div');
+        d.className = 'plain-line';
+        d.textContent = line;
+        textEl.appendChild(d);
+      }
+    });
+  }
+
+  /* 체크박스 토글 → 원문 마커만 바꿔 저장 (편집기 재진입 시 원문 보존 — A22) */
+  function toggleCheckLine(id, lineIdx, checked) {
+    var n = findNote(id);
+    var ref = els[id];
+    if (!n || !ref) return;
+    var lines = n.text.split('\n');
+    var m = CHECK_RE.exec(lines[lineIdx] || '');
+    if (!m) return;
+    lines[lineIdx] = '- [' + (checked ? 'x' : ' ') + '] ' + lines[lineIdx].slice(m[0].length);
+    n.text = lines.join('\n');
+    n.updatedAt = Date.now();
+    renderNoteText(n, ref);
+    playTick();   /* 직접 제스처(체크) 내부 */
+    applySearch();
+    saveNow();
+  }
+
+  /* 노트별 크기 반영 — left/top 은 건드리지 않는다 (A23: 리사이즈 ≠ 이동) */
+  function applyNoteSize(n, ref) {
+    ref.root.style.width = typeof n.w === 'number' ? n.w + 'px' : '';
+    ref.root.style.height = typeof n.h === 'number' ? n.h + 'px' : '';
+    ref.root.classList.toggle('sized', typeof n.h === 'number');
+  }
+
+  /* 노트별 스킨 클래스 반영 (A27 — background-image 레이어만 바뀐다) */
+  function applySkin(n, ref) {
+    ref.root.classList.toggle('skin-lined', n.skin === 'lined');
+    ref.root.classList.toggle('skin-grid', n.skin === 'grid');
+  }
+
+  /* 검증된 데이터 URI 만 createElement('img') 의 src 로 (A26 — B-1 예외 범위) */
+  function applyNoteImage(n, ref) {
+    if (ref.imgEl && ref.imgEl.parentNode) ref.imgEl.parentNode.removeChild(ref.imgEl);
+    ref.imgEl = null;
+    ref.root.classList.remove('has-img');
+    if (typeof n.img === 'string' && IMG_URI_RE.test(n.img)) {
+      var img = document.createElement('img');
+      img.className = 'nimg';
+      img.alt = '';
+      img.draggable = false;
+      img.src = n.img;
+      ref.root.insertBefore(img, ref.textEl);
+      ref.imgEl = img;
+      ref.root.classList.add('has-img');
+    }
+  }
+
+  function activate(n) {
+    var ref = els[n.id];
+    if (!ref) return;
+    if (activeId && activeId !== n.id && els[activeId]) els[activeId].root.classList.remove('active');
+    activeId = n.id;
+    ref.root.classList.add('active');
+    if (n.z < zCounter) {
+      zCounter += 1;
+      n.z = zCounter;
+      ref.root.style.zIndex = String(zCounter);
+      scheduleSave();
+    }
+  }
+
+  function openEditor(n) {
+    var ref = els[n.id];
+    if (!ref) return;
+    ref.root.classList.add('editing');
+    ref.ta.value = n.text;
+    try {
+      ref.ta.focus({ preventScroll: true });
+      var L = ref.ta.value.length;
+      ref.ta.setSelectionRange(L, L);
+    } catch (err) { /* 무시 */ }
+  }
+
+  function removeNote(id) {
+    /* 되돌리기 버퍼는 메모리에만 둔다 — 저장소에서는 즉시 사라져야 한다 (A20 지연 삭제 금지) */
+    var removed = findNote(id);
+    if (removed) {
+      undoStack.push(noteToPlain(removed));
+      if (undoStack.length > 20) undoStack.shift();
+    }
+    deletedIds[id] = true;
+    var next = [];
+    data.forEach(function (n) { if (n.id !== id) next.push(n); });
+    data = next;
+    var ref = els[id];
+    delete els[id];
+    if (activeId === id) activeId = null;
+    if (ref && ref.root && ref.root.parentNode) {
+      var el = ref.root;
+      if (calmMotion()) {
+        el.parentNode.removeChild(el);
+      } else {
+        /* 시각만 ~220ms 구겨짐 — 모델·저장소 삭제는 아래 saveNow() 로 즉시 반영 (A5·A18) */
+        el.classList.add('removing');
+        var gone = false;
+        var drop = function () {
+          if (gone) return;
+          gone = true;
+          if (el.parentNode) el.parentNode.removeChild(el);
+        };
+        el.addEventListener('animationend', drop);
+        setTimeout(drop, 400);
+      }
+    }
+    if (removed && removed.date) syncNoteToCalendar(id, '', '');   /* 연동 일정도 함께 떼기 (S1) */
+    updateWelcome();
+    saveNow();
+    if (removed) showUndoNotice('포스트잇을 떼어냈어요.');
+  }
+
+  /* 실행 취소: 마지막으로 떼어낸 포스트잇을 화면·저장소에 복원 (A20) */
+  function undoLastDelete() {
+    var sn = undoStack.pop();
+    if (!sn) { hideNotice(); return; }
+    delete deletedIds[sn.id];
+    if (!findNote(sn.id)) {
+      var n = sanitizeList([sn])[0];
+      if (n) {
+        n.updatedAt = Date.now();
+        data.push(n);
+        renderNote(n);
+        if (n.z > zCounter) zCounter = n.z;
+        if (n.date) syncNoteToCalendar(n.id, n.date, noteFirstLine(n.text));   /* 연동 일정 복원 (S1) */
+      }
+    }
+    playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
+    updateWelcome();
+    applySearch();
+    saveNow();
+    if (undoStack.length) showUndoNotice('포스트잇을 되돌렸어요. 한 번 더 되돌릴 수 있어요.');
+    else hideNotice();
+  }
+
+  /* ── 드래그(포인터 이벤트 — 마우스·터치·펜 공통, P10): 잡은 오프셋 유지, 스냅 없음, 이동 없는 클릭은 편집 ── */
+
+  function onNoteDown(e) {
+    if (e.button !== 0) return;
+    var root = e.currentTarget;
+    var t = e.target;
+    if (t && t.closest && t.closest('.nedit')) return;   /* 편집기 안: 기본 동작 */
+    if (t && t.closest && t.closest('.ndel')) return;    /* 삭제 단추: 별도 처리 */
+    if (t && t.closest && t.closest('.rgrip, input')) return;   /* 리사이즈 손잡이·체크박스: 드래그 아님 */
+    var id = root.getAttribute('data-id');
+    var n = findNote(id);
+    if (!n) return;
+    /* preventDefault 로 기본 블러가 막히므로 열린 편집기를 직접 닫는다 */
+    var ae = document.activeElement;
+    if (ae && ae !== t && ae.tagName === 'TEXTAREA') ae.blur();
+    e.preventDefault();
+    activate(n);
+    dragState = {
+      id: id,
+      pid: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      origX: n.x,
+      origY: n.y,
+      moved: false,
+      noTilt: calmMotion()
+    };
+    document.addEventListener('pointermove', onDragMove);
+    document.addEventListener('pointerup', onDragUp);
+    document.addEventListener('pointercancel', onDragUp);
+  }
+
+  function onDragMove(e) {
+    if (!dragState) return;
+    if (e.pointerId !== undefined && dragState.pid !== undefined && e.pointerId !== dragState.pid) return;
+    var ref = els[dragState.id];
+    var n = findNote(dragState.id);
+    if (!ref || !n) return;
+    var dx = e.clientX - dragState.startX;
+    var dy = e.clientY - dragState.startY;
+    if (!dragState.moved) {
+      if (dx === 0 && dy === 0) return;
+      dragState.moved = true;
+      ref.root.classList.add('dragging');
+    }
+    var bw = board.clientWidth;
+    var bh = board.clientHeight;
+    var w = ref.root.offsetWidth;
+    var nx = dragState.origX + dx;
+    var ny = dragState.origY + dy;
+    /* 노트를 완전히 잃어버리지 않을 정도의 느슨한 경계만 적용 (격자·스냅 없음) */
+    if (nx < 44 - w) nx = 44 - w;
+    if (nx > bw - 44) nx = bw - 44;
+    if (ny < 0) ny = 0;
+    if (ny > bh - 34) ny = bh - 34;
+    n.x = nx;
+    n.y = ny;
+    /* 위치는 언제나 직접 갱신 (A4) — 아래 기울임은 transform 전용 장식 */
+    ref.root.style.left = nx + 'px';
+    ref.root.style.top = ny + 'px';
+    if (!dragState.noTilt) {
+      var stepX = e.clientX - dragState.lastX;
+      var tilt = stepX * 0.4;
+      if (tilt > 2.5) tilt = 2.5;
+      if (tilt < -2.5) tilt = -2.5;
+      ref.root.style.setProperty('--tilt', tilt.toFixed(2) + 'deg');
+    }
+    dragState.lastX = e.clientX;
+    e.preventDefault();
+  }
+
+  function onDragUp(e) {
+    if (dragState && e && e.type === 'pointerup' && e.pointerId !== undefined &&
+        dragState.pid !== undefined && e.pointerId !== dragState.pid) return;
+    var d = dragState;
+    dragState = null;
+    document.removeEventListener('pointermove', onDragMove);
+    document.removeEventListener('pointerup', onDragUp);
+    document.removeEventListener('pointercancel', onDragUp);
+    if (!d) return;
+    var ref = els[d.id];
+    var n = findNote(d.id);
+    if (ref) {
+      ref.root.style.setProperty('--tilt', '0deg');   /* 기울임 스프링 복귀 — 최종 안착은 rotate(--rot) */
+      ref.root.classList.remove('dragging');
+    }
+    if (!ref || !n) return;
+    if (d.moved) {
+      n.updatedAt = Date.now();
+      saveNow();
+      /* 아주 살짝 움직인 클릭도 편집 의도로 본다 */
+      if (Math.hypot(n.x - d.origX, n.y - d.origY) < 3) {
+        openEditor(n);
+      } else {
+        playDrop();   /* 실제 드래그 끝(mouseup 제스처)에서만 '톡' */
+      }
+    } else {
+      openEditor(n);
+    }
+  }
+
+  /* ── 노트 리사이즈 (A23): 우하단 손잡이 드래그 — 120~480 클램프, 좌상단 불변 ── */
+
+  function clampSize(v) {
+    return Math.max(120, Math.min(480, Math.round(v)));
+  }
+
+  function startResize(e, id) {
+    if (e.button !== 0) return;
+    var n = findNote(id);
+    var ref = els[id];
+    if (!n || !ref) return;
+    e.preventDefault();
+    e.stopPropagation();
+    activate(n);
+    resizeState = {
+      id: id,
+      pid: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origW: ref.root.offsetWidth,
+      origH: ref.root.offsetHeight
+    };
+    document.addEventListener('pointermove', onResizeMove);
+    document.addEventListener('pointerup', onResizeUp);
+    document.addEventListener('pointercancel', onResizeUp);
+  }
+
+  function onResizeMove(e) {
+    if (!resizeState) return;
+    if (e.pointerId !== undefined && resizeState.pid !== undefined && e.pointerId !== resizeState.pid) return;
+    var n = findNote(resizeState.id);
+    var ref = els[resizeState.id];
+    if (!n || !ref) return;
+    n.w = clampSize(resizeState.origW + (e.clientX - resizeState.startX));
+    n.h = clampSize(resizeState.origH + (e.clientY - resizeState.startY));
+    applyNoteSize(n, ref);   /* 크기만 바꾼다 — left/top 불변 (리사이즈가 이동으로 새지 않게) */
+    e.preventDefault();
+  }
+
+  function onResizeUp(e) {
+    if (resizeState && e && e.type === 'pointerup' && e.pointerId !== undefined &&
+        resizeState.pid !== undefined && e.pointerId !== resizeState.pid) return;
+    var rs = resizeState;
+    resizeState = null;
+    document.removeEventListener('pointermove', onResizeMove);
+    document.removeEventListener('pointerup', onResizeUp);
+    document.removeEventListener('pointercancel', onResizeUp);
+    if (!rs) return;
+    var n = findNote(rs.id);
+    if (n) {
+      n.updatedAt = Date.now();
+      saveNow();
+      playDrop();   /* 직접 제스처(리사이즈 끝, pointerup) 내부 */
+    }
+  }
+
+  /* ── 생성·색상 ── */
+
+  /* 팝인은 220ms 뒤 정확히 rotate(--rot)·scale(1) 에서 끝난다 (A2·A17) */
+  function popIn(root) {
+    if (calmMotion()) return;
+    root.classList.add('pop-in');
+    var popDone = false;
+    var endPop = function () {
+      if (popDone) return;
+      popDone = true;
+      root.classList.remove('pop-in');
+    };
+    root.addEventListener('animationend', endPop);
+    setTimeout(endPop, 300);
+  }
+
+  /* 새 노트 기본값 (설정 [노트 기본값] — 신규 노트에만 적용, 기존 노트 불변) */
+  function defaultNoteColor() {
+    if (PALETTE.indexOf(SETTINGS.defColor) !== -1) return SETTINGS.defColor;
+    return PALETTE[createdCount % PALETTE.length];   /* auto = 현행 순환 */
+  }
+  function defaultNoteRot() {
+    if (SETTINGS.tilt === 'straight') return Math.random() < 0.5 ? -0.1 : 0.1;   /* 시각적으로 반듯 (저장 스키마 불변) */
+    return randomRot();
+  }
+  function defaultNoteSize() {
+    return SETTINGS.defSize === 'large' ? 210 : NOTE_W;
+  }
+
+  function addNoteAt(x, y) {
+    zCounter += 1;
+    var n = {
+      id: uid(),
+      text: '',
+      color: defaultNoteColor(),
+      x: x,
+      y: y,
+      rot: defaultNoteRot(),
+      z: zCounter,
+      updatedAt: Date.now()
+    };
+    if (SETTINGS.defSize === 'large') { n.w = 210; n.h = 210; }
+    createdCount += 1;
+    data.push(n);
+    var root = renderNote(n);
+    popIn(root);
+    playCreate();          /* 직접 제스처(추가 버튼·메뉴 클릭) 내부 */
+    updateWelcome();
+    applySearch();
+    saveNow();
+    activate(n);
+    openEditor(n);
+    return n;
+  }
+
+  function addNote() {
+    var s = defaultNoteSize();
+    var spot = findSpawn(s, s);
+    return addNoteAt(spot.x, spot.y);
+  }
+  addBtn.addEventListener('click', addNote);
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-color]'), function (sw) {
+    sw.addEventListener('click', function () {
+      if (!activeId) return;
+      var n = findNote(activeId);
+      var ref = els[activeId];
+      if (!n || !ref) return;
+      var col = getComputedStyle(sw).backgroundColor;   /* 견본 자신의 계산된 배경색이 곧 적용 색 */
+      n.color = col;
+      n.updatedAt = Date.now();
+      ref.root.style.backgroundColor = col;
+      playTick();          /* 직접 제스처(견본 클릭) 내부 */
+      saveNow();
+    });
+  });
+
+  function updateWelcome() {
+    welcomeEl.style.display = data.length ? 'none' : '';
+  }
+
+  /* 모델 값으로 기존 노트 요소를 통째로 갱신 (가져오기 병합 등) */
+  function updateNoteEl(n) {
+    var ref = els[n.id];
+    if (!ref) return;
+    ref.root.style.left = n.x + 'px';
+    ref.root.style.top = n.y + 'px';
+    ref.root.style.zIndex = String(n.z);
+    ref.root.style.backgroundColor = n.color;
+    ref.root.style.setProperty('--rot', n.rot + 'deg');
+    ref.root.style.setProperty('--rotn', n.rot.toFixed(2));
+    ref.root.style.setProperty('--tape-x', (n.rot * 6).toFixed(1) + 'px');
+    renderNoteText(n, ref);
+    applyNoteSize(n, ref);
+    applySkin(n, ref);
+    applyNoteImage(n, ref);
+  }
+
+  /* ── 검색: 표시만 바꾼다 — 저장소·위치 불변, 비매칭은 숨김이 아니라 흐림 (A24) ── */
+
+  function applySearch() {
+    data.forEach(function (n) {
+      var ref = els[n.id];
+      if (!ref) return;
+      var hit = !searchQuery || n.text.toLowerCase().indexOf(searchQuery) !== -1;
+      ref.root.classList.toggle('dimmed', !hit);
+    });
+  }
+  searchBox.addEventListener('input', function () {
+    searchQuery = searchBox.value.trim().toLowerCase();
+    applySearch();
+  });
+
+  /* ── 한 번에 정리: 겹침 없는 자유 배치 재배열 — 스냅·격자 상시화 없음 (A28) ── */
+
+  /* 흐름 배치 코어 — 기본(현행 알고리즘)과 시간순 모드가 순서만 달리하여 공유한다 */
+  function arrangeFlow(order) {
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var margin = 16;
+    var gap = 14;
+    var startY = shelfBottom();   /* 도구 선반 아래 */
+    var x = margin;
+    var y = startY;
+    var rowH = 0;
+    order.forEach(function (n) {
+      var ref = els[n.id];
+      if (!ref) return;
+      var r = ref.root.getBoundingClientRect();
+      var W = Math.ceil(r.width);
+      var H = Math.ceil(r.height);
+      var w = ref.root.offsetWidth;
+      var h = ref.root.offsetHeight;
+      if (x + W > bw - margin && x > margin) {
+        x = margin;
+        y += rowH + gap;
+        rowH = 0;
+      }
+      if (y + H > bh - margin) {
+        /* 세로 공간이 모자라면 남은 노트는 촘촘한 간격으로 이어 붙인다 */
+        y = Math.max(startY, bh - margin - H);
+      }
+      /* 경계상자가 (x,y)에 오도록 좌상단을 회전 팽창분만큼 보정 */
+      n.x = Math.round(x + (W - w) / 2);
+      n.y = Math.round(y + (H - h) / 2);
+      n.updatedAt = Date.now();
+      ref.root.style.left = n.x + 'px';
+      ref.root.style.top = n.y + 'px';
+      if (H > rowH) rowH = H;
+      x += W + gap;
+    });
+    saveNow();
+  }
+
+  /* 기본 정리 = 현행 알고리즘 그대로 (A28 fresh 기본값 보호): 현재 위치 순(위→아래, 왼→오른쪽) */
+  function arrangeNotes() {
+    if (!data.length) return;
+    arrangeFlow(data.slice().sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); }));
+  }
+
+  /* 시간순: 최근 수정이 좌상단부터 오도록 흐름 배치 */
+  function arrangeByTime() {
+    arrangeFlow(data.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); }));
+  }
+
+  /* ── 격자·마소너리 공용 충돌 유틸: 경계상자(px) 기준, 겹침 0 보장 ── */
+  function isFreeRect(x, y, W, H, placed, pad) {
+    for (var i = 0; i < placed.length; i++) {
+      var p = placed[i];
+      if (x < p.x + p.w + pad && x + W + pad > p.x && y < p.y + p.h + pad && y + H + pad > p.y) return false;
+    }
+    return true;
+  }
+
+  /* (px,py) 근처의 빈자리 탐색 — 없으면 보드 전체를 훑어 가장 가까운 빈자리를 반환 */
+  function nearestFree(px, py, W, H, placed, bw, bh, startY, margin) {
+    var step = 14;
+    var minY = Math.min(startY, Math.max(0, bh - margin - H));
+    var maxX = Math.max(margin, bw - margin - W);
+    var maxY = Math.max(minY, bh - margin - H);
+    var best = null;
+    var bestD = Infinity;
+    for (var y = minY; y <= maxY; y += step) {
+      for (var x = margin; x <= maxX; x += step) {
+        if (!isFreeRect(x, y, W, H, placed, 6)) continue;
+        var d = (x - px) * (x - px) + (y - py) * (y - py);
+        if (d < bestD) { bestD = d; best = { x: x, y: y }; }
+      }
+    }
+    return best;
+  }
+
+  /* 경계상자 좌상단 (bx,by)에 오도록 노트 좌상단을 회전 팽창분만큼 보정해 배치 */
+  function setNoteBBoxPos(n, ref, bx, by, W, H) {
+    var w = ref.root.offsetWidth;
+    var h = ref.root.offsetHeight;
+    n.x = Math.round(bx + (W - w) / 2);
+    n.y = Math.round(by + (H - h) / 2);
+    n.updatedAt = Date.now();
+    ref.root.style.left = n.x + 'px';
+    ref.root.style.top = n.y + 'px';
+  }
+
+  /* N×N 격자: 보드를 구역으로 나눠 셀 중앙에 순서대로 — 넘치거나 셀보다 크면 가까운 빈자리로 (겹침 0) */
+  function arrangeGrid(N) {
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var margin = 16;
+    var startY = shelfBottom();
+    var cellW = Math.max(40, (bw - margin * 2) / N);
+    var cellH = Math.max(40, (bh - startY - margin) / N);
+    var order = data.slice().sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); });
+    var placed = [];
+    order.forEach(function (n, idx) {
+      var ref = els[n.id];
+      if (!ref) return;
+      var r = ref.root.getBoundingClientRect();
+      var W = Math.ceil(r.width);
+      var H = Math.ceil(r.height);
+      var cell = idx % (N * N);   /* 넘치면 처음 구역부터 이어서 — 겹침은 아래에서 회피 */
+      var col = cell % N;
+      var row = Math.floor(cell / N);
+      var px = Math.round(margin + col * cellW + (cellW - W) / 2);
+      var py = Math.round(startY + row * cellH + (cellH - H) / 2);
+      var minY = Math.min(startY, Math.max(0, bh - margin - H));
+      px = Math.max(margin, Math.min(px, Math.max(margin, bw - margin - W)));
+      py = Math.max(minY, Math.min(py, Math.max(minY, bh - margin - H)));
+      var spot = isFreeRect(px, py, W, H, placed, 6)
+        ? { x: px, y: py }
+        : nearestFree(px, py, W, H, placed, bw, bh, startY, margin);
+      if (!spot) spot = { x: px, y: py };   /* 보드가 물리적으로 가득 찬 극단 — 최선 위치로 */
+      placed.push({ x: spot.x, y: spot.y, w: W, h: H });
+      setNoteBBoxPos(n, ref, spot.x, spot.y, W, H);
+    });
+    saveNow();
+  }
+
+  /* 동적 마소너리: 큰 노트 먼저, 각 노트를 가장 위·왼쪽의 빈자리에 채워 넣는 self-packing */
+  function arrangeMasonry() {
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var margin = 16;
+    var gap = 12;
+    var startY = shelfBottom();
+    var items = [];
+    data.forEach(function (n) {
+      var ref = els[n.id];
+      if (!ref) return;
+      var r = ref.root.getBoundingClientRect();
+      items.push({ n: n, ref: ref, W: Math.ceil(r.width), H: Math.ceil(r.height) });
+    });
+    items.sort(function (a, b) {
+      return (b.W * b.H - a.W * a.H) || ((b.n.updatedAt || 0) - (a.n.updatedAt || 0));
+    });
+    var placed = [];
+    items.forEach(function (it) {
+      var step = 10;
+      var minY = Math.min(startY, Math.max(0, bh - margin - it.H));
+      var maxX = Math.max(margin, bw - margin - it.W);
+      var maxY = Math.max(minY, bh - margin - it.H);
+      var spot = null;
+      for (var y = minY; y <= maxY && !spot; y += step) {
+        for (var x = margin; x <= maxX; x += step) {
+          if (isFreeRect(x, y, it.W, it.H, placed, gap)) { spot = { x: x, y: y }; break; }
+        }
+      }
+      if (!spot) spot = nearestFree(margin, minY, it.W, it.H, placed, bw, bh, startY, margin);
+      if (!spot) spot = { x: maxX, y: maxY };   /* 극단적 만석 — 최선 위치로 */
+      placed.push({ x: spot.x, y: spot.y, w: it.W, h: it.H });
+      setNoteBBoxPos(it.n, it.ref, spot.x, spot.y, it.W, it.H);
+    });
+    saveNow();
+  }
+
+  /* 정리 진입점: [data-arrange] 버튼·보드 메뉴 공용 — 설정 [배치] 방식 사용 (기본 = 현행 알고리즘).
+     실행 전 위치 스냅샷을 담아 실행 취소 토스트를 띄운다 (비가역 해소 — A20 패턴). */
+  function arrangeBoard() {
+    if (!data.length) return;
+    var snap = data.map(function (n) { return { id: n.id, x: n.x, y: n.y }; });
+    if (SETTINGS.arrange === 'grid3') arrangeGrid(3);
+    else if (SETTINGS.arrange === 'grid2') arrangeGrid(2);
+    else if (SETTINGS.arrange === 'masonry') arrangeMasonry();
+    else if (SETTINGS.arrange === 'time') arrangeByTime();
+    else arrangeNotes();
+    showUndoNotice('포스트잇 ' + snap.length + '개를 정리했어요.', function () {
+      snap.forEach(function (p) {
+        var n = findNote(p.id);
+        var ref = els[p.id];
+        if (!n || !ref) return;
+        n.x = p.x;
+        n.y = p.y;
+        n.updatedAt = Date.now();
+        ref.root.style.left = n.x + 'px';
+        ref.root.style.top = n.y + 'px';
+      });
+      saveNow();
+      playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
+      showNotice('정리 전 위치로 되돌렸어요.');
+    });
+  }
+  document.getElementById('arrangeBtn').addEventListener('click', function () {
+    arrangeBoard();
+    playDrop();   /* 직접 제스처(정리 클릭) 내부 */
+  });
+
+  /* ── 백업 내보내기·가져오기 (A19) ── */
+
+  function pad2(v) { return v < 10 ? '0' + v : '' + v; }
+  function fileStamp() {
+    var d = new Date();
+    return '' + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) +
+      '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+  }
+
+  /* 내보내기: 전 보드를 {version, boards:{저장키: 노트[]}} 로 — 버튼 라벨(모든 보드 저장)과 동작 일치.
+     v2 확장: decor(꾸미기 레이아웃) 포함 + "이미지 포함" 체크 시 IndexedDB 이미지를 data URI 로 동봉 */
+  function finishExport(payload, boardCount, total, suffix) {
+    try {
+      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'postit-backup-' + fileStamp() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      showNotice('보드 ' + boardCount + '개, 메모 ' + total + '개를 파일로 내보냈어요.' + (suffix || ''));
+    } catch (err) {
+      showNotice('내보내기에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  }
+
+  function doExport() {
+    saveNow();   /* 이 창의 최신 상태를 저장소에 병합한 뒤 전체를 내보낸다 */
+    if (decorSaveTimer) saveDecorNow();
+    var ids = discoverBoards();
+    if (ids.indexOf(boardId) === -1) ids.push(boardId);
+    var boardsOut = {};
+    var total = 0;
+    ids.forEach(function (id) {
+      var sk = storeKey(id);
+      var st = readStore(sk);
+      var list = st.ok ? st.list : (id === boardId ? data.map(noteToPlain) : []);
+      boardsOut[sk] = list;
+      total += list.length;
+    });
+    var payload = {
+      app: 'postit',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      boards: boardsOut
+    };
+    var decorAll = readDecorAll();
+    if (decorAll.boards && typeof decorAll.boards === 'object' && Object.keys(decorAll.boards).length) {
+      payload.decor = decorAll;
+    }
+    var withImages = document.getElementById('spExportImages');
+    if (!withImages || !withImages.checked) {
+      finishExport(payload, ids.length, total, '');
+      return;
+    }
+    collectDecorImages(function (imgs) {
+      if (imgs === null) {
+        finishExport(payload, ids.length, total, ' (이미지 저장소를 읽지 못해 이미지는 뺐어요)');
+        return;
+      }
+      var keys = Object.keys(imgs);
+      var suffix = '';
+      if (keys.length) {
+        payload.decorImages = imgs;
+        var approx = 0;
+        keys.forEach(function (k) { approx += imgs[k].length; });
+        suffix = ' (이미지 ' + keys.length + '개 포함' + (approx > 1024 * 1024 ? ' — 파일이 커요, 약 ' + fmtBytes(approx) : '') + ')';
+      }
+      finishExport(payload, ids.length, total, suffix);
+    });
+  }
+  document.getElementById('exportBtn').addEventListener('click', doExport);
+
+  var importFile = document.getElementById('importFile');
+  document.getElementById('importBtn').addEventListener('click', function () {
+    importFile.click();
+  });
+
+  function extractNoteList(obj) {
+    if (Array.isArray(obj)) return obj;
+    if (obj && typeof obj === 'object') {
+      if (Array.isArray(obj.notes)) return obj.notes;
+      var keys = Object.keys(obj);
+      for (var i = 0; i < keys.length; i++) {
+        if (Array.isArray(obj[keys[i]])) return obj[keys[i]];
+      }
+    }
+    return null;
+  }
+
+  function importNotes(list) {
+    var clean = sanitizeList(list);
+    var count = 0;
+    clean.forEach(function (n) {
+      delete deletedIds[n.id];   /* 백업 복원은 과거 삭제보다 우선한다 */
+      n.updatedAt = Date.now();  /* 병합 시 가져온 쪽이 이기도록 */
+      var cur = findNote(n.id);
+      if (cur) {
+        cur.text = n.text;
+        cur.color = n.color;
+        cur.x = n.x;
+        cur.y = n.y;
+        cur.rot = n.rot;
+        cur.z = n.z;
+        cur.updatedAt = n.updatedAt;
+        /* 백업의 확장 필드도 그대로 반영 — 없으면 제거 (파일 상태로 충실 복원) */
+        if (typeof n.w === 'number') cur.w = n.w; else delete cur.w;
+        if (typeof n.h === 'number') cur.h = n.h; else delete cur.h;
+        if (n.skin === 'lined' || n.skin === 'grid') cur.skin = n.skin; else delete cur.skin;
+        if (typeof n.img === 'string' && n.img) cur.img = n.img; else delete cur.img;
+        var hadDate = typeof cur.date === 'string' && cur.date;
+        if (typeof n.date === 'string' && n.date) cur.date = n.date; else delete cur.date;
+        updateNoteEl(cur);
+        /* 날짜 복원/해제 시 달력 연동 일정도 맞춘다 (S1/A41 upsert — 수동 일정 불변) */
+        if (cur.date) syncNoteToCalendar(cur.id, cur.date, noteFirstLine(cur.text));
+        else if (hadDate) syncNoteToCalendar(cur.id, '', '');
+      } else {
+        data.push(n);
+        renderNote(n);
+        if (typeof n.date === 'string' && n.date) syncNoteToCalendar(n.id, n.date, noteFirstLine(n.text));
+      }
+      if (n.z > zCounter) zCounter = n.z;
+      count += 1;
+    });
+    updateWelcome();
+    applySearch();
+    saveNow();
+    return count;
+  }
+
+  /* 보드 키 정규화: 신형식 boards 의 키는 저장키(postit-notes[-bN]) 또는 보드 id(bN)를 허용 */
+  function normalizeBoardKey(k) {
+    if (typeof k !== 'string') return null;
+    if (/^postit-notes(-b\d+)?$/.test(k)) return k;
+    if (/^b\d+$/.test(k)) return storeKey(k);
+    return null;
+  }
+
+  /* 비활성 보드 몫: 저장소 수준 병합 (merge-on-write 동형 — 기존 노트 보존, 가져온 쪽이 갱신 우선) */
+  function mergeIntoStore(sk, list) {
+    var clean = sanitizeList(list);
+    var st = readStore(sk);
+    if (!st.ok) backupCorrupt(sk, st.raw);
+    var merged = {};
+    var order = [];
+    if (st.ok) {
+      st.list.forEach(function (sn) {
+        if (!sn || typeof sn !== 'object') return;
+        var sid = typeof sn.id === 'string' ? sn.id : null;
+        if (!sid) return;
+        if (!Object.prototype.hasOwnProperty.call(merged, sid)) order.push(sid);
+        merged[sid] = sn;
+      });
+    }
+    var bid = sk === KEY ? 'b1' : sk.slice(KEY.length + 1);
+    clean.forEach(function (n) {
+      n.updatedAt = Date.now();
+      if (deletedIdsCache[bid]) delete deletedIdsCache[bid][n.id];   /* 복원이 과거 삭제보다 우선 */
+      if (!Object.prototype.hasOwnProperty.call(merged, n.id)) order.push(n.id);
+      merged[n.id] = noteToPlain(n);
+    });
+    try {
+      localStorage.setItem(sk, JSON.stringify(order.map(function (i) { return merged[i]; })));
+    } catch (err) {
+      showNotice('저장 공간이 가득 차서 일부 보드를 가져오지 못했어요.');
+    }
+    return clean.length;
+  }
+
+  /* v2 확장 복원: decor 레이아웃은 보드별 병합, decorImages 는 검증 후 IndexedDB 재기록 */
+  function importDecorPayload(obj) {
+    var changed = false;
+    if (obj.decor && typeof obj.decor === 'object' && !Array.isArray(obj.decor) &&
+        obj.decor.boards && typeof obj.decor.boards === 'object' && !Array.isArray(obj.decor.boards)) {
+      Object.keys(obj.decor.boards).forEach(function (bid) {
+        if (!/^b\d+$/.test(bid)) return;
+        var entry = decorEntryPlain(sanitizeDecor(obj.decor.boards[bid]));
+        if (entry) {
+          writeDecorEntry(bid, entry);
+          changed = true;
+        }
+      });
+    }
+    if (obj.decorImages && typeof obj.decorImages === 'object' && !Array.isArray(obj.decorImages)) {
+      Object.keys(obj.decorImages).forEach(function (k) {
+        if (!/^(bg-b\d+|img-[\w-]+)$/.test(k)) return;
+        var v = obj.decorImages[k];
+        if (typeof v === 'string' && v.length <= 8 * 1024 * 1024 && IMG_URI_RE.test(v)) {
+          imgCache[k] = v;
+          idbPut(k, v, function () {});
+          changed = true;
+        }
+      });
+    }
+    if (changed) applyDecor();   /* 활성 보드 화면 즉시 갱신 */
+  }
+
+  /* 가져오기 본체: 신형식({version, boards:{키:노트[]}}) = 전 보드 병합 / 구형식(배열·{notes:[]}) = 활성 보드 */
+  function handleImportPayload(obj) {
+    if (obj && typeof obj === 'object' && !Array.isArray(obj) &&
+        obj.boards && typeof obj.boards === 'object' && !Array.isArray(obj.boards)) {
+      var total = 0;
+      var touched = 0;
+      Object.keys(obj.boards).forEach(function (k) {
+        var list = obj.boards[k];
+        if (!Array.isArray(list)) return;
+        var sk = normalizeBoardKey(k);
+        if (!sk) return;
+        touched += 1;
+        if (sk === storeKey(boardId)) total += importNotes(list);
+        else total += mergeIntoStore(sk, list);
+      });
+      if (!touched) return null;
+      boards = discoverBoards();   /* 새로 생긴 보드 키를 탭에 반영 */
+      renderTabs();
+      importDecorPayload(obj);     /* v2 확장: 꾸미기 레이아웃·이미지 복원 (없으면 무시) */
+      return '보드 ' + touched + '개에서 메모 ' + total + '개를 가져왔어요.';
+    }
+    var list2 = extractNoteList(obj);
+    if (!list2) return null;
+    return '메모 ' + importNotes(list2) + '개를 가져왔어요.';
+  }
+
+  importFile.addEventListener('change', function () {
+    var file = importFile.files && importFile.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var msg = null;
+      try {
+        msg = handleImportPayload(JSON.parse(String(reader.result)));
+      } catch (err) {
+        msg = null;
+      }
+      if (msg === null) showNotice('가져오기 실패: 올바른 포스트잇 백업 파일이 아니에요.');
+      else showNotice(msg);
+      importFile.value = '';
+      refreshDataPanel();
+    };
+    reader.onerror = function () {
+      showNotice('파일을 읽을 수 없어요.');
+      importFile.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  /* ── 복제·맨 앞으로 (A21 메뉴 동작) ── */
+
+  function duplicateNote(id) {
+    var src = findNote(id);
+    if (!src) return;
+    var ref = els[id];
+    var w = ref ? ref.root.offsetWidth : NOTE_W;
+    var h = ref ? ref.root.offsetHeight : NOTE_H;
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var nx = src.x + 18;
+    var ny = src.y + 18;
+    if (nx > bw - w - 8) nx = Math.max(8, src.x - 18);
+    if (ny > bh - h - 8) ny = Math.max(0, src.y - 18);
+    zCounter += 1;
+    var n = {
+      id: uid(),
+      text: src.text,
+      color: src.color,
+      x: nx,
+      y: ny,
+      rot: randomRot(),
+      z: zCounter,
+      updatedAt: Date.now()
+    };
+    if (typeof src.w === 'number') n.w = src.w;
+    if (typeof src.h === 'number') n.h = src.h;
+    if (src.skin === 'lined' || src.skin === 'grid') n.skin = src.skin;
+    if (typeof src.img === 'string' && src.img) n.img = src.img;
+    data.push(n);
+    var root = renderNote(n);
+    popIn(root);
+    playCreate();   /* 직접 제스처(메뉴 클릭) 내부 */
+    updateWelcome();
+    applySearch();
+    saveNow();
+    activate(n);
+  }
+
+  function bringToFront(id) {
+    var n = findNote(id);
+    var ref = els[id];
+    if (!n || !ref) return;
+    zCounter += 1;
+    n.z = zCounter;
+    n.updatedAt = Date.now();
+    ref.root.style.zIndex = String(zCounter);
+    saveNow();
+  }
+
+  /* ── 노트 스킨 선택 (A27) ── */
+
+  function setSkin(id, skin) {
+    var n = findNote(id);
+    var ref = els[id];
+    if (!n || !ref) return;
+    if (skin === 'lined' || skin === 'grid') n.skin = skin;
+    else delete n.skin;
+    n.updatedAt = Date.now();
+    applySkin(n, ref);
+    playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+    saveNow();
+  }
+
+  /* ── 사진 첨부 (A26): 파일 판독 → data:image/ 검증 → 다운스케일 ≤ 300KB → img.src ── */
+
+  function downscaleImage(im) {
+    var MAX_SIDE = 640;
+    var LIMIT = 300 * 1024;
+    var w = im.naturalWidth;
+    var h = im.naturalHeight;
+    if (!w || !h) return null;
+    var scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+    var qualities = [0.85, 0.72, 0.6, 0.45];
+    for (var pass = 0; pass < 4; pass++) {
+      var cw = Math.max(1, Math.round(w * scale));
+      var ch = Math.max(1, Math.round(h * scale));
+      var c = document.createElement('canvas');
+      c.width = cw;
+      c.height = ch;
+      var cctx = c.getContext('2d');
+      if (!cctx) return null;
+      cctx.drawImage(im, 0, 0, cw, ch);
+      for (var qi = 0; qi < qualities.length; qi++) {
+        var uri = c.toDataURL('image/jpeg', qualities[qi]);
+        if (uri.length <= LIMIT && IMG_URI_RE.test(uri)) return uri;
+      }
+      scale *= 0.7;   /* 그래도 크면 한 단계 더 줄여서 재시도 */
+    }
+    return null;
+  }
+
+  function processImageFile(file, targetId) {
+    var typeOk = typeof file.type === 'string' && file.type.indexOf('image/') === 0;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var src = String(reader.result || '');
+      if (!typeOk || src.indexOf('data:image/') !== 0) {
+        showNotice('이미지 파일만 붙일 수 있어요. (jpg·png 사진 파일을 골라 주세요)');
+        return;
+      }
+      var probe = document.createElement('img');   /* 디코드 확인용 — DOM 에 넣지 않음 */
+      probe.onload = function () {
+        try {
+          var uri = downscaleImage(probe);
+          if (!uri) {
+            showNotice('사진을 줄이는 데 실패했어요. 다른 사진으로 시도해 주세요.');
+            return;
+          }
+          var n = findNote(targetId);
+          if (!n) return;
+          n.img = uri;
+          n.updatedAt = Date.now();
+          var ref = els[targetId];
+          if (ref) applyNoteImage(n, ref);
+          saveNow();
+          showNotice('사진을 붙였어요.');
+        } catch (err) {
+          showNotice('사진을 처리하지 못했어요.');
+        }
+      };
+      probe.onerror = function () {
+        showNotice('이미지 파일을 읽지 못했어요. 다른 파일로 시도해 주세요.');
+      };
+      probe.src = src;   /* 앱이 접두를 검증한 데이터 URI (B-1 예외) */
+    };
+    reader.onerror = function () {
+      showNotice('파일을 읽을 수 없어요.');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  noteImageInput.addEventListener('change', function () {
+    var file = noteImageInput.files && noteImageInput.files[0];
+    var targetId = imageTargetId;
+    imageTargetId = null;
+    noteImageInput.value = '';
+    if (!file || !targetId) return;
+    processImageFile(file, targetId);
+  });
+
+  /* ── memo.html 메모 이전 (A29): memo-notes 는 읽기 전용 — 절대 쓰지 않는다 ── */
+
+  function importMemos() {
+    var raw = null;
+    try { raw = localStorage.getItem('memo-notes'); } catch (err) { raw = null; }
+    var list = null;
+    if (raw !== null) {
+      try { list = JSON.parse(raw); } catch (err) { list = null; }
+    }
+    if (!Array.isArray(list) || list.length === 0) {
+      showNotice('가져올 메모가 없어요. 메모장(memo)에 저장된 메모가 있어야 해요.');
+      return;
+    }
+    var count = 0;
+    list.forEach(function (mm) {
+      if (!mm || typeof mm !== 'object' || typeof mm.text !== 'string') return;
+      var nid = 'memo-' + (typeof mm.id === 'string' && mm.id ? mm.id : uid());
+      delete deletedIds[nid];
+      var cur = findNote(nid);
+      if (cur) {
+        cur.text = mm.text;   /* 재실행 = 같은 메모 갱신 (중복 생성 방지) */
+        cur.updatedAt = Date.now();
+        updateNoteEl(cur);
+      } else {
+        var spot = findSpawn(NOTE_W, NOTE_H);
+        zCounter += 1;
+        var n = {
+          id: nid,
+          text: mm.text,
+          color: PALETTE[createdCount % PALETTE.length],
+          x: spot.x,
+          y: spot.y,
+          rot: randomRot(),
+          z: zCounter,
+          updatedAt: Date.now()
+        };
+        createdCount += 1;
+        data.push(n);
+        popIn(renderNote(n));
+      }
+      count += 1;
+    });
+    updateWelcome();
+    applySearch();
+    saveNow();
+    if (count) showNotice('메모 ' + count + '개를 포스트잇으로 가져왔어요. (원본 메모는 그대로예요)');
+    else showNotice('가져올 수 있는 형식의 메모가 없어요.');
+  }
+
+  /* ── 우클릭 메뉴: 브라우저 기본 메뉴 대체, 바깥 클릭으로 닫힘 (A21) ── */
+
+  function ctxItem(label, onPick, extraClass) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ctx-item' + (extraClass ? ' ' + extraClass : '');
+    b.setAttribute('data-ctx-item', '');
+    b.textContent = label;
+    b.addEventListener('click', function () {
+      closeCtxMenu();
+      onPick();
+    });
+    return b;
+  }
+
+  function ctxSep() {
+    var d = document.createElement('div');
+    d.className = 'ctx-sep';
+    return d;
+  }
+
+  function buildNoteMenu(id) {
+    /* 색상 행: 라벨 + 팔레트 점 — 점 자신의 계산된 배경색이 곧 적용 색 (A3 동형) */
+    var row = document.createElement('div');
+    row.className = 'ctx-item';
+    row.setAttribute('data-ctx-item', '');
+    var lab = document.createElement('span');
+    lab.textContent = '색상';
+    row.appendChild(lab);
+    var dots = document.createElement('span');
+    dots.className = 'ctx-dots';
+    PALETTE.forEach(function (hex) {
+      var d = document.createElement('button');
+      d.type = 'button';
+      d.className = 'ctx-dot';
+      d.title = '이 색으로 바꾸기';
+      d.style.backgroundColor = hex;
+      d.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var n = findNote(id);
+        var ref = els[id];
+        if (n && ref) {
+          var col = getComputedStyle(d).backgroundColor;
+          n.color = col;
+          n.updatedAt = Date.now();
+          ref.root.style.backgroundColor = col;
+          playTick();   /* 직접 제스처(색 점 클릭) 내부 */
+          saveNow();
+        }
+        closeCtxMenu();
+      });
+      dots.appendChild(d);
+    });
+    row.appendChild(dots);
+    ctxMenuEl.appendChild(row);
+
+    ctxMenuEl.appendChild(ctxItem('복제', function () { duplicateNote(id); }));
+    ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () { bringToFront(id); }));
+    ctxMenuEl.appendChild(ctxSep());
+
+    /* 스킨 행 (A27): 라벨 + 선택지 3종 — [data-skin] / [data-skin-option] */
+    var skinRow = document.createElement('div');
+    skinRow.className = 'ctx-item';
+    skinRow.setAttribute('data-ctx-item', '');
+    skinRow.setAttribute('data-skin', '');
+    var slab = document.createElement('span');
+    slab.textContent = '스킨';
+    skinRow.appendChild(slab);
+    var sopts = document.createElement('span');
+    sopts.className = 'skin-opts';
+    [['', '기본'], ['lined', '줄노트'], ['grid', '모눈']].forEach(function (pair) {
+      var ob = document.createElement('button');
+      ob.type = 'button';
+      ob.className = 'skin-opt';
+      ob.setAttribute('data-skin-option', '');
+      ob.textContent = pair[1];
+      ob.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setSkin(id, pair[0]);
+        closeCtxMenu();
+      });
+      sopts.appendChild(ob);
+    });
+    skinRow.appendChild(sopts);
+    ctxMenuEl.appendChild(skinRow);
+
+    ctxMenuEl.appendChild(ctxItem('사진 넣기', function () {
+      imageTargetId = id;
+      noteImageInput.click();   /* 직접 제스처 — 파일 선택 창 (A26) */
+    }));
+    ctxMenuEl.appendChild(ctxSep());
+    /* 달력 연동 (S1/A41): 날짜를 고르면 캘린더 그 날짜에 "📌 첫 줄" 일정으로 붙는다 */
+    var noteForDate = findNote(id);
+    var dateRow = document.createElement('div');
+    dateRow.className = 'ctx-item';
+    dateRow.setAttribute('data-ctx-item', '');
+    var dlab = document.createElement('span');
+    dlab.textContent = '날짜 지정';
+    dateRow.appendChild(dlab);
+    var dinp = document.createElement('input');
+    dinp.type = 'date';
+    dinp.className = 'ctx-date';
+    dinp.setAttribute('data-note-date', '');
+    dinp.title = '고른 날짜의 달력에 📌 일정으로 붙어요';
+    if (noteForDate && typeof noteForDate.date === 'string') dinp.value = noteForDate.date;
+    dinp.addEventListener('change', function () {
+      setNoteDate(id, dinp.value || '');
+    });
+    dateRow.appendChild(dinp);
+    ctxMenuEl.appendChild(dateRow);
+    if (noteForDate && noteForDate.date) {
+      ctxMenuEl.appendChild(ctxItem('날짜 해제', function () { setNoteDate(id, ''); }));
+    }
+    ctxMenuEl.appendChild(ctxSep());
+    ctxMenuEl.appendChild(ctxItem('삭제', function () {
+      playDelete();   /* 직접 제스처(메뉴 클릭) 내부 */
+      removeNote(id);
+    }));
+  }
+
+  function buildBoardMenu(px, py) {
+    ctxMenuEl.appendChild(ctxItem('여기에 새 포스트잇', function () {
+      var b = board.getBoundingClientRect();
+      var bw = board.clientWidth || 1280;
+      var bh = board.clientHeight || 800;
+      var x = Math.round(px - b.left) - 20;
+      var y = Math.round(py - b.top) - 14;
+      if (x < 8) x = 8;
+      if (x > bw - NOTE_W - 8) x = bw - NOTE_W - 8;
+      if (y < 0) y = 0;
+      if (y > bh - NOTE_H - 8) y = bh - NOTE_H - 8;
+      addNoteAt(x, y);
+    }));
+    ctxMenuEl.appendChild(ctxItem('한 번에 정리', function () {
+      arrangeBoard();
+      playDrop();   /* 직접 제스처(메뉴 클릭) 내부 */
+    }));
+    ctxMenuEl.appendChild(ctxSep());
+    ctxMenuEl.appendChild(ctxItem('🎨 꾸미기', function () { openDecorPanel(); }));
+    ctxMenuEl.appendChild(ctxSep());
+    var memoItem = ctxItem('메모 가져오기', function () { importMemos(); });
+    memoItem.setAttribute('data-import-memo', '');   /* A29 진입점 — 보드 컨텍스트 메뉴 */
+    ctxMenuEl.appendChild(memoItem);
+    ctxMenuEl.appendChild(ctxItem('새 보드 만들기', function () { addBoard(); }));
+    /* 보드 삭제 — 기본 보드·마지막 보드는 비활성 + 안내(title) (실행은 즉시, 취소는 토스트) */
+    var delItem = ctxItem('보드 삭제', function () {
+      playDelete();   /* 직접 제스처(메뉴 클릭) 내부 */
+      deleteBoard(boardId);
+    });
+    if (boardId === 'b1' || boards.length <= 1) {
+      delItem.disabled = true;
+      delItem.classList.add('soon');
+      delItem.title = boardId === 'b1' ? '기본 보드는 삭제할 수 없어요' : '마지막 남은 보드는 삭제할 수 없어요';
+    } else {
+      delItem.title = '이 보드를 삭제해요 (토스트의 실행 취소로 되돌릴 수 있어요)';
+    }
+    ctxMenuEl.appendChild(delItem);
+  }
+
+  /* 스티커 미니 메뉴: 맨 앞으로 / 삭제(실행 취소 가능) */
+  function buildStickerMenu(id) {
+    ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () {
+      bringStickerToFront(id);
+      playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+    }));
+    ctxMenuEl.appendChild(ctxSep());
+    var del = ctxItem('삭제', function () {
+      playDelete();   /* 직접 제스처(메뉴 클릭) 내부 */
+      deleteStickerById(id);
+    });
+    del.title = '스티커를 떼어내요 (토스트의 실행 취소로 되돌릴 수 있어요)';
+    ctxMenuEl.appendChild(del);
+  }
+
+  function openCtxMenu(type, px, py, id) {
+    while (ctxMenuEl.firstChild) ctxMenuEl.removeChild(ctxMenuEl.firstChild);
+    ctxMenuEl.setAttribute('data-ctx-menu', type);
+    if (type === 'note') buildNoteMenu(id);
+    else if (type === 'sticker') buildStickerMenu(id);
+    else buildBoardMenu(px, py);
+    ctxMenuEl.classList.add('open');
+    ctxOpen = true;
+    /* 화면 밖으로 나가지 않게 보정 */
+    ctxMenuEl.style.left = '0px';
+    ctxMenuEl.style.top = '0px';
+    var mw = ctxMenuEl.offsetWidth;
+    var mh = ctxMenuEl.offsetHeight;
+    var lx = Math.max(4, Math.min(px, window.innerWidth - mw - 4));
+    var ly = Math.max(4, Math.min(py, window.innerHeight - mh - 4));
+    ctxMenuEl.style.left = lx + 'px';
+    ctxMenuEl.style.top = ly + 'px';
+  }
+
+  function closeCtxMenu() {
+    if (!ctxOpen) return;
+    ctxOpen = false;
+    ctxMenuEl.classList.remove('open');
+  }
+
+  document.addEventListener('contextmenu', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    /* 입력창·알림 위에서는 브라우저 기본 메뉴(복사·붙여넣기)를 그대로 둔다 */
+    if (t.closest('input, textarea, .notice')) return;
+    if (t.closest('.ctxmenu')) { e.preventDefault(); return; }
+    /* 스티커 우클릭 = 미니 메뉴(맨 앞으로/삭제) — 노트 뒤 레이어라 노트와 겹치면 노트 메뉴가 우선 */
+    var stEl = t.closest('[data-sticker]');
+    if (stEl && stEl.getAttribute('data-sid')) {
+      e.preventDefault();
+      openCtxMenu('sticker', e.clientX, e.clientY, stEl.getAttribute('data-sid'));
+      return;
+    }
+    var noteEl = t.closest('.pnote');
+    if (noteEl && noteEl.getAttribute('data-id') && !noteEl.classList.contains('removing')) {
+      e.preventDefault();
+      openCtxMenu('note', e.clientX, e.clientY, noteEl.getAttribute('data-id'));
+      return;
+    }
+    e.preventDefault();
+    if (t.closest('.toolbar')) { closeCtxMenu(); return; }
+    openCtxMenu('board', e.clientX, e.clientY, null);
+  });
+
+  document.addEventListener('pointerdown', function (e) {
+    if (!ctxOpen) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('.ctxmenu')) return;
+    closeCtxMenu();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeCtxMenu();
+      closeSettings();
+      closeDecorPanel();
+    }
+  });
+
+  /* ── 다중 보드 (A25): 목록 발견·탭·전환 — 보드 1 은 기존 키 그대로 (하위호환) ── */
+
+  function discoverBoards() {
+    var found = { b1: true };
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        var m = /^postit-notes-(b\d+)$/.exec(k || '');
+        if (m) found[m[1]] = true;   /* -corrupt- 백업 키는 패턴상 제외된다 */
+      }
+      var act = localStorage.getItem(ACTIVE_KEY);
+      if (act && /^b\d+$/.test(act)) found[act] = true;
+    } catch (err) { /* 저장소 접근 불가 — 기본 보드만 */ }
+    return Object.keys(found).sort(function (a, b) {
+      return parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10);
+    });
+  }
+
+  function renderTabs() {
+    while (boardTabsEl.firstChild) boardTabsEl.removeChild(boardTabsEl.firstChild);
+    boards.forEach(function (id, i) {
+      var wrap = document.createElement('span');
+      wrap.className = 'board-tab-wrap';
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'board-tab';
+      b.setAttribute('data-board-tab', '');
+      b.setAttribute('data-active', id === boardId ? 'true' : 'false');
+      b.textContent = '보드' + (i + 1);
+      b.title = '보드 ' + (i + 1) + ' 열기';
+      b.addEventListener('click', function () { switchBoard(id); });
+      wrap.appendChild(b);
+      /* 탭 삭제 단추 (hover 시 표시) — 기본 보드·마지막 보드는 비활성 + 안내(title) */
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'board-tab-del';
+      del.setAttribute('data-delete-board', '');
+      del.textContent = '✕';
+      if (id === 'b1') {
+        del.disabled = true;
+        del.title = '기본 보드는 삭제할 수 없어요';
+      } else if (boards.length <= 1) {
+        del.disabled = true;
+        del.title = '마지막 남은 보드는 삭제할 수 없어요';
+      } else {
+        del.title = '이 보드 삭제 (실행 취소 가능)';
+      }
+      del.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (del.disabled) return;
+        playDelete();   /* 직접 제스처(클릭) 내부 */
+        deleteBoard(id);
+      });
+      wrap.appendChild(del);
+      boardTabsEl.appendChild(wrap);
+    });
+  }
+
+  /* ── 보드 삭제 (즉시 실행 + 실행 취소 토스트 — A20 패턴): 저장소에서 즉시 제거,
+     undo 클릭 시 보드 메타+노트+꾸미기를 통째로 재기록·복원한다 ── */
+  function deleteBoard(id) {
+    if (id === 'b1') { showNotice('기본 보드는 삭제할 수 없어요.'); return; }
+    if (boards.length <= 1 || boards.indexOf(id) === -1) { showNotice('마지막 남은 보드는 삭제할 수 없어요.'); return; }
+    var wasActive = boardId === id;
+    var sk = storeKey(id);
+    if (wasActive) {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      saveNow();               /* 미저장분까지 병합해 스냅샷을 완결한다 */
+      if (decorSaveTimer) saveDecorNow();
+    }
+    var st = readStore(sk);
+    var snapNotes = st.ok ? st.list : [];
+    if (!st.ok) backupCorrupt(sk, st.raw);   /* 손상돼 있었다면 규약대로 백업 후 진행 (A9) */
+    var allDecor = readDecorAll();
+    var snapDecor = (allDecor.boards && typeof allDecor.boards === 'object' && !Array.isArray(allDecor.boards))
+      ? (allDecor.boards[id] || null) : null;
+    try { localStorage.removeItem(sk); } catch (err) { /* 무시 */ }
+    writeDecorEntry(id, null);
+    boards = boards.filter(function (b) { return b !== id; });
+    delete deletedIdsCache[id];
+    delete undoStacks[id];
+    closeCtxMenu();
+    if (wasActive) {
+      /* 저장 없이 떠난다 — 키를 이미 제거했으므로 switchBoard 의 saveNow 경로를 타지 않는다 */
+      Array.prototype.forEach.call(board.querySelectorAll('.pnote'), function (el) {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      });
+      els = {};
+      data = [];
+      activeId = null;
+      dragState = null;
+      resizeState = null;
+      zCounter = 10;
+      boardId = 'b1';
+      deletedIds = deletedIdsCache.b1 || {};
+      undoStack = undoStacks.b1 || [];
+      try { localStorage.setItem(ACTIVE_KEY, 'b1'); } catch (err) { /* 무시 */ }
+      loadBoard();   /* 꾸미기 포함 기본 보드 복원 */
+    }
+    renderTabs();
+    showUndoNotice('보드를 삭제했어요. (메모 ' + snapNotes.length + '개 포함)', function () {
+      try {
+        localStorage.setItem(sk, JSON.stringify(snapNotes));
+      } catch (err) {
+        showNotice('저장 공간이 부족해 보드를 복원하지 못했어요.');
+        return;
+      }
+      if (snapDecor) writeDecorEntry(id, snapDecor);
+      if (boards.indexOf(id) === -1) {
+        boards.push(id);
+        boards.sort(function (a, b) { return parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10); });
+      }
+      renderTabs();
+      switchBoard(id);   /* 복원한 보드를 바로 보여준다 */
+      playTick();        /* 직접 제스처(실행 취소 클릭) 내부 */
+      showNotice('보드를 복원했어요.');
+    });
+  }
+
+  /* 활성 보드의 저장분을 읽어 렌더 (손상 시 백업 후 빈 보드 — A9 규약을 보드 키에도 동일 적용) */
+  function loadBoard() {
+    var sk = storeKey(boardId);
+    var st = readStore(sk);
+    if (!st.ok) {
+      backupCorrupt(sk, st.raw);
+      try { localStorage.setItem(sk, '[]'); } catch (err) { /* 무시 */ }
+      showNotice('저장된 메모 데이터가 조금 손상되어 있어 빈 보드로 새로 시작해요. 예전 데이터는 안전하게 보관해 두었어요.');
+      data = [];
+    } else {
+      data = sanitizeList(st.list);
+    }
+    data.forEach(function (n) {
+      renderNote(n);
+      if (n.z > zCounter) zCounter = n.z;
+    });
+    createdCount = data.length;
+    updateWelcome();
+    applySearch();
+    applyDecor();   /* 이 보드 몫의 꾸미기(배경·스티커)도 함께 */
+  }
+
+  function switchBoard(id) {
+    if (id === boardId) return;
+    if (saveTimer) saveNow();   /* 떠나기 전 이 보드의 미저장분만 반영 */
+    if (decorSaveTimer) saveDecorNow();
+    closeCtxMenu();
+    hideNotice();
+    Array.prototype.forEach.call(board.querySelectorAll('.pnote'), function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    els = {};
+    data = [];
+    deletedIdsCache[boardId] = deletedIds;
+    undoStacks[boardId] = undoStack;
+    boardId = id;
+    deletedIds = deletedIdsCache[id] || {};
+    undoStack = undoStacks[id] || [];
+    activeId = null;
+    dragState = null;
+    resizeState = null;
+    zCounter = 10;
+    try { localStorage.setItem(ACTIVE_KEY, id); } catch (err) { /* 무시 */ }
+    loadBoard();
+    renderTabs();
+  }
+
+  function addBoard() {
+    var maxN = 1;
+    boards.forEach(function (id) {
+      var num = parseInt(id.slice(1), 10);
+      if (isFinite(num) && num > maxN) maxN = num;
+    });
+    var nid = 'b' + (maxN + 1);
+    boards.push(nid);
+    try {
+      if (localStorage.getItem(storeKey(nid)) === null) localStorage.setItem(storeKey(nid), '[]');
+    } catch (err) { /* 무시 */ }
+    playTick();   /* 직접 제스처(버튼·메뉴 클릭) 내부 */
+    switchBoard(nid);
+    showNotice('새 보드를 만들었어요. 위의 탭으로 보드를 오갈 수 있어요.');
+  }
+  addBoardBtn.addEventListener('click', addBoard);
+
+  /* ── 설정 패널: 오른쪽 슬라이드, 비모달 — ESC/바깥 클릭 닫기, 열려 있어도 보드 조작 가능 ── */
+
+  var settingsBtn = document.getElementById('settingsBtn');
+  var spEl = document.getElementById('settingsPanel');
+
+  function settingsOpen() {
+    return spEl.classList.contains('open');
+  }
+
+  function openSettings() {
+    closeDecorPanel();   /* 오른쪽 자리는 하나 — 꾸미기 패널과 겹치지 않게 */
+    /* 도구 선반 아래에서 시작 — 선반의 톱니·버튼이 패널에 가려지지 않게 (열 때마다 재계산) */
+    try { spEl.style.top = Math.min(shelfBottom(), Math.max(60, window.innerHeight - 220)) + 'px'; } catch (err) { /* 무시 */ }
+    spEl.classList.add('open');
+    settingsBtn.setAttribute('aria-expanded', 'true');
+    settingsBtn.title = '설정 닫기';
+    syncPanelUI();
+    refreshDataPanel();
+  }
+
+  function closeSettings() {
+    if (!settingsOpen()) return;
+    /* 패널 안에 포커스가 남아 있으면 토글 버튼으로 돌려보낸다 (숨은 패널 잔류 포커스 경고 방지) */
+    try {
+      if (spEl.contains(document.activeElement)) settingsBtn.focus({ preventScroll: true });
+    } catch (err) { /* 무시 */ }
+    spEl.classList.remove('open');
+    settingsBtn.setAttribute('aria-expanded', 'false');
+    settingsBtn.title = '설정 열기';
+  }
+
+  settingsBtn.addEventListener('click', function () {
+    if (settingsOpen()) closeSettings();
+    else { openSettings(); playTick(); }   /* 직접 제스처(톱니 클릭) 내부 */
+  });
+  document.getElementById('spClose').addEventListener('click', closeSettings);
+
+  /* 바깥 클릭 = 닫기 — preventDefault 없음: 같은 클릭이 보드·노트 조작으로 그대로 이어진다 (비모달) */
+  document.addEventListener('pointerdown', function (e) {
+    if (!settingsOpen()) return;
+    var t = e.target;
+    if (t && t.closest && (t.closest('.spanel') || t.closest('#settingsBtn'))) return;
+    closeSettings();
+  });
+
+  /* ── 꾸미기 패널 (🎨): 설정 패널과 동일 관용구 — 오른쪽 슬라이드·비모달·ESC/바깥 클릭 닫기 ── */
+
+  var decorBtn = document.getElementById('decorBtn');
+  var dpEl = document.getElementById('decorPanel');
+
+  function decorPanelOpen() {
+    return dpEl.classList.contains('open');
+  }
+
+  function openDecorPanel() {
+    closeSettings();
+    try { dpEl.style.top = Math.min(shelfBottom(), Math.max(60, window.innerHeight - 220)) + 'px'; } catch (err) { /* 무시 */ }
+    dpEl.classList.add('open');
+    decorBtn.setAttribute('aria-expanded', 'true');
+    decorBtn.title = '꾸미기 닫기';
+    syncDecorUI();
+  }
+
+  function closeDecorPanel() {
+    if (!decorPanelOpen()) return;
+    /* 패널 안에 포커스가 남아 있으면 토글 버튼으로 돌려보낸다 (숨은 패널 잔류 포커스 경고 방지) */
+    try {
+      if (dpEl.contains(document.activeElement)) decorBtn.focus({ preventScroll: true });
+    } catch (err) { /* 무시 */ }
+    dpEl.classList.remove('open');
+    decorBtn.setAttribute('aria-expanded', 'false');
+    decorBtn.title = '꾸미기 열기';
+  }
+
+  decorBtn.addEventListener('click', function () {
+    if (decorPanelOpen()) closeDecorPanel();
+    else { openDecorPanel(); playTick(); }   /* 직접 제스처(🎨 클릭) 내부 */
+  });
+  document.getElementById('dpClose').addEventListener('click', closeDecorPanel);
+
+  document.addEventListener('pointerdown', function (e) {
+    if (!decorPanelOpen()) return;
+    var t = e.target;
+    if (t && t.closest && (t.closest('.dpanel') || t.closest('#decorBtn'))) return;
+    closeDecorPanel();
+  });
+
+  /* 패널 상태 칠하기: 배경 선택·맞춤·테이프·프레임 */
+  function syncDecorUI() {
+    var bgWrap = document.getElementById('dpBg');
+    if (!bgWrap) return;
+    var bgSel = decor.bg ? (decor.bg.type === 'preset' ? decor.bg.id : 'image') : 'cork';
+    Array.prototype.forEach.call(bgWrap.querySelectorAll('button[data-bg]'), function (b) {
+      b.classList.toggle('sel', b.getAttribute('data-bg') === bgSel);
+    });
+    /* "내 사진" 세그: 사진 배경이 활성이거나(선택 표시) 이 보드에 저장된 사진이 있으면 보인다
+       (캘린더 setDecorSeg 의 숨은 "내 이미지" 버튼과 같은 관용구) */
+    var imgBtn = document.getElementById('dpBgImageSeg');
+    if (imgBtn) {
+      var bkey = 'bg-' + boardId;
+      if (bgSel === 'image' || typeof imgCache[bkey] === 'string') {
+        imgBtn.hidden = false;
+      } else {
+        imgBtn.hidden = true;
+        if (!Object.prototype.hasOwnProperty.call(imgCache, bkey)) {
+          loadDecorImage(bkey, function (uri) {
+            if (uri && bkey === 'bg-' + boardId) syncDecorUI();   /* 보드 그대로일 때만 재반영 */
+          });
+        }
+      }
+    }
+    paintSeg(document.getElementById('dpBgFit'), decor.bg && decor.bg.type === 'image' ? decor.bg.fit : '');
+    var tw = document.getElementById('dpTapeColor');
+    if (tw) {
+      Array.prototype.forEach.call(tw.querySelectorAll('button[data-tval]'), function (b) {
+        b.classList.toggle('sel', b.getAttribute('data-tval') === SETTINGS.tapeColor);
+      });
+    }
+    paintSeg(document.getElementById('dpTapePattern'), SETTINGS.tapePattern);
+    var fw = document.getElementById('dpFrame');
+    if (fw) {
+      Array.prototype.forEach.call(fw.querySelectorAll('button[data-fval]'), function (b) {
+        b.classList.toggle('sel', b.getAttribute('data-fval') === SETTINGS.frameColor);
+      });
+    }
+  }
+
+  /* 배경 프리셋 (기본 코르크 = 레이어 제거, "내 사진" = 저장된 사진 배경 재활성) */
+  Array.prototype.forEach.call(document.getElementById('dpBg').querySelectorAll('button[data-bg]'), function (b) {
+    b.addEventListener('click', function () {
+      var v = b.getAttribute('data-bg');
+      if (v === 'image') {
+        if (!(decor.bg && decor.bg.type === 'image') && typeof imgCache['bg-' + boardId] !== 'string') {
+          showNotice('먼저 "내 사진 배경"으로 사진을 올려 주세요.');
+          return;
+        }
+        decor.bg = { type: 'image', fit: decor.bg && decor.bg.type === 'image' && decor.bg.fit === 'tile' ? 'tile' : 'cover' };
+      } else {
+        decor.bg = v === 'cork' ? null : { type: 'preset', id: v };
+      }
+      applyDecorBg();
+      saveDecorNow();
+      syncDecorUI();
+      playTick();   /* 직접 제스처 내부 */
+    });
+  });
+
+  /* 사진 배경: filechooser → 1920px 다운스케일 JPEG → IndexedDB postit-decor */
+  document.getElementById('dpBgUpload').addEventListener('click', function () {
+    decorBgInput.click();   /* 직접 제스처 — 파일 선택 창 */
+  });
+  decorBgInput.addEventListener('change', function () {
+    var file = decorBgInput.files && decorBgInput.files[0];
+    decorBgInput.value = '';
+    if (!file) return;
+    readAsImage(file, function (im) {
+      if (!im) { showNotice('이미지 파일만 배경으로 쓸 수 있어요. (jpg·png 사진 파일을 골라 주세요)'); return; }
+      var uri = null;
+      try { uri = downscaleToUri(im, 1920, 3 * 1024 * 1024); } catch (err) { uri = null; }
+      if (!uri) { showNotice('사진을 줄이는 데 실패했어요. 다른 사진으로 시도해 주세요.'); return; }
+      var key = 'bg-' + boardId;
+      idbPut(key, uri, function (ok) {
+        if (!ok) {
+          showNotice('이미지 저장소(IndexedDB)를 쓸 수 없어 사진 배경을 저장하지 못했어요. 기본·프리셋 배경은 계속 쓸 수 있어요.');
+          return;
+        }
+        imgCache[key] = uri;
+        decor.bg = { type: 'image', fit: decor.bg && decor.bg.type === 'image' && decor.bg.fit === 'tile' ? 'tile' : 'cover' };
+        applyDecorBg();
+        saveDecorNow();
+        syncDecorUI();
+        showNotice('사진 배경을 붙였어요.');
+      });
+    });
+  });
+
+  /* 채우기/타일 (사진 배경일 때만 의미) */
+  Array.prototype.forEach.call(document.getElementById('dpBgFit').querySelectorAll('button[data-val]'), function (b) {
+    b.addEventListener('click', function () {
+      if (!decor.bg || decor.bg.type !== 'image') {
+        showNotice('사진 배경일 때만 고를 수 있어요. 먼저 "내 사진 배경"으로 사진을 올려 주세요.');
+        return;
+      }
+      decor.bg.fit = b.getAttribute('data-val') === 'tile' ? 'tile' : 'cover';
+      applyDecorBg();
+      saveDecorNow();
+      syncDecorUI();
+      playTick();   /* 직접 제스처 내부 */
+    });
+  });
+
+  /* 배경 제거: 즉시 기본 코르크로 (저장소도 즉시) + 토스트 실행 취소로 복원 가능.
+     사진 원본(IndexedDB)은 토스트 소멸 후에야 지운다 — 복원되었으면 그대로 남긴다 */
+  document.getElementById('dpBgRemove').addEventListener('click', function () {
+    if (!decor.bg) { showNotice('이미 기본 코르크 배경이에요.'); return; }
+    var bid = boardId;
+    var prevBg = decor.bg;
+    decor.bg = null;
+    applyDecorBg();
+    saveDecorNow();
+    syncDecorUI();
+    showUndoNotice('배경을 기본 코르크로 되돌렸어요.', function () {
+      restoreDecorBg(bid, prevBg);
+      playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
+      showNotice('배경을 다시 붙였어요.');
+    });
+    if (prevBg.type === 'image') scheduleBgImageSweep(bid);
+    playTick();   /* 직접 제스처 내부 */
+  });
+
+  /* 제거한 배경 복원 — 같은 보드면 화면까지, 다른 보드로 넘어갔으면 저장분만 병합 복원 */
+  function restoreDecorBg(bid, prevBg) {
+    if (bid === boardId) {
+      decor.bg = prevBg;
+      applyDecorBg();
+      saveDecorNow();
+      syncDecorUI();
+    } else {
+      var all = readDecorAll();
+      var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
+      var cur = sanitizeDecor(bs[bid]);
+      cur.bg = prevBg;
+      writeDecorEntry(bid, decorEntryPlain(cur));
+    }
+  }
+
+  /* undo 토스트(8초) 소멸 뒤에만 배경 원본 정리 — 그 사이 복원되었으면 지우지 않는다 */
+  function scheduleBgImageSweep(bid) {
+    setTimeout(function () {
+      var stillImage = boardId === bid && decor.bg && decor.bg.type === 'image';
+      var all = readDecorAll();
+      var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
+      var e = bs[bid];
+      if (e && e.bg && e.bg.type === 'image') stillImage = true;
+      if (!stillImage) {
+        delete imgCache['bg-' + bid];
+        idbDel('bg-' + bid, function () {});
+        syncDecorUI();   /* "내 사진" 세그 표시 갱신 */
+      }
+    }, 9000);
+  }
+
+  /* 이모지 스티커 팔레트 — 계절·기분·사무 3세트 (각 12종 이상) */
+  var EMOJI_SETS = {
+    season: ['🌸', '🌷', '🌻', '🍀', '🌿', '🍁', '🍂', '🍄', '⛄', '❄️', '🌊', '☀️', '🌙', '🌈', '🎄'],
+    mood: ['😀', '😍', '🥳', '😎', '🤔', '😴', '😭', '😡', '🤩', '🥰', '😆', '🙌', '💖', '✨', '🔥'],
+    office: ['📌', '📎', '✏️', '📚', '💡', '📅', '⏰', '✅', '❗', '⭐', '📞', '💻', '☕', '📝', '📊']
+  };
+
+  function fillPalette(hostId, list) {
+    var host = document.getElementById(hostId);
+    if (!host) return;
+    list.forEach(function (em) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.title = '스티커 붙이기';
+      b.textContent = em;
+      b.addEventListener('click', function () { addEmojiSticker(em); });
+      host.appendChild(b);
+    });
+  }
+  fillPalette('dpStSeason', EMOJI_SETS.season);
+  fillPalette('dpStMood', EMOJI_SETS.mood);
+  fillPalette('dpStOffice', EMOJI_SETS.office);
+
+  /* 사진 스티커: filechooser → 1024px 다운스케일 → IndexedDB → 폴라로이드 프레임 배치 */
+  document.getElementById('dpPhotoAdd').addEventListener('click', function () {
+    decorPhotoInput.click();   /* 직접 제스처 — 파일 선택 창 */
+  });
+  decorPhotoInput.addEventListener('change', function () {
+    var file = decorPhotoInput.files && decorPhotoInput.files[0];
+    decorPhotoInput.value = '';
+    if (!file) return;
+    readAsImage(file, function (im) {
+      if (!im) { showNotice('이미지 파일만 스티커로 쓸 수 있어요. (jpg·png 사진 파일을 골라 주세요)'); return; }
+      var uri = null;
+      try { uri = downscaleToUri(im, 1024, 800 * 1024); } catch (err) { uri = null; }
+      if (!uri) { showNotice('사진을 줄이는 데 실패했어요. 다른 사진으로 시도해 주세요.'); return; }
+      var key = 'img-' + uid();
+      idbPut(key, uri, function (ok) {
+        if (!ok) {
+          showNotice('이미지 저장소(IndexedDB)를 쓸 수 없어 사진 스티커를 저장하지 못했어요.');
+          return;
+        }
+        imgCache[key] = uri;
+        var p = stickerSpawnXY(160, 190);
+        var s = { id: 'st-' + uid(), type: 'photo', img: key, x: p.x, y: p.y, w: 160 };
+        decor.stickers.push(s);
+        revealStickerGrip(renderSticker(s));
+        saveDecorNow();
+        showNotice('사진 스티커를 붙였어요.');
+      });
+    });
+  });
+
+  /* 노트 꾸밈: 테이프 색·무늬·보드 프레임 — postit-settings 저장 (기본 = 현행) */
+  Array.prototype.forEach.call(document.getElementById('dpTapeColor').querySelectorAll('button[data-tval]'), function (b) {
+    b.addEventListener('click', function () {
+      SETTINGS.tapeColor = b.getAttribute('data-tval') === 'default' ? 'default' : b.getAttribute('data-tval');
+      saveSettings();
+      applySettings();
+      playTick();   /* 직접 제스처 내부 */
+    });
+  });
+  bindSeg('dpTapePattern', 'tapePattern');
+  Array.prototype.forEach.call(document.getElementById('dpFrame').querySelectorAll('button[data-fval]'), function (b) {
+    b.addEventListener('click', function () {
+      SETTINGS.frameColor = b.getAttribute('data-fval') === 'default' ? 'default' : b.getAttribute('data-fval');
+      saveSettings();
+      applySettings();
+      playTick();   /* 직접 제스처 내부 */
+    });
+  });
+
+  /* 패널 컨트롤 상태를 SETTINGS 값으로 칠한다 (열 때·값 변경 때) */
+  function paintSeg(el, val) {
+    if (!el) return;
+    Array.prototype.forEach.call(el.querySelectorAll('button[data-val]'), function (b) {
+      b.classList.toggle('sel', b.getAttribute('data-val') === val);
+    });
+  }
+
+  function syncPanelSound() {
+    var mute = document.getElementById('spMute');
+    var vol = document.getElementById('spVol');
+    if (!mute || !vol) return;
+    mute.checked = !soundOn;
+    if (vol.value !== String(volume)) vol.value = String(volume);
+  }
+
+  function syncPanelUI() {
+    paintSeg(document.getElementById('spFontSize'), SETTINGS.fontSize);
+    paintSeg(document.getElementById('spFont'), SETTINGS.font);
+    paintSeg(document.getElementById('spDefSize'), SETTINGS.defSize);
+    paintSeg(document.getElementById('spTilt'), SETTINGS.tilt);
+    paintSeg(document.getElementById('spAnim'), SETTINGS.anim);
+    var colWrap = document.getElementById('spDefColor');
+    if (colWrap) {
+      Array.prototype.forEach.call(colWrap.querySelectorAll('button[data-cval]'), function (b) {
+        b.classList.toggle('sel', b.getAttribute('data-cval') === SETTINGS.defColor);
+      });
+    }
+    var arr = document.getElementById('spArrange');
+    if (arr && arr.value !== SETTINGS.arrange) arr.value = SETTINGS.arrange;
+    syncPanelSound();
+  }
+
+  function bindSeg(id, key) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    Array.prototype.forEach.call(el.querySelectorAll('button[data-val]'), function (b) {
+      b.addEventListener('click', function () {
+        SETTINGS[key] = b.getAttribute('data-val');
+        saveSettings();
+        applySettings();
+        playTick();   /* 직접 제스처(설정 클릭) 내부 */
+      });
+    });
+  }
+  bindSeg('spFontSize', 'fontSize');
+  bindSeg('spFont', 'font');
+  bindSeg('spDefSize', 'defSize');
+  bindSeg('spTilt', 'tilt');
+  bindSeg('spAnim', 'anim');
+
+  Array.prototype.forEach.call(document.getElementById('spDefColor').querySelectorAll('button[data-cval]'), function (b) {
+    b.addEventListener('click', function () {
+      SETTINGS.defColor = b.getAttribute('data-cval');
+      saveSettings();
+      applySettings();
+      playTick();   /* 직접 제스처 내부 */
+    });
+  });
+
+  document.getElementById('spArrange').addEventListener('change', function () {
+    var v = this.value;
+    SETTINGS.arrange = (v === 'grid3' || v === 'grid2' || v === 'masonry' || v === 'time') ? v : 'default';
+    saveSettings();
+    applySettings();
+    playTick();   /* 직접 제스처(선택) 내부 */
+  });
+
+  /* 사운드 미러: 툴바 원본과 같은 진입점(setSoundOn/setVolume)을 써서 양방향 동기화 */
+  document.getElementById('spMute').addEventListener('change', function () {
+    setSoundOn(!this.checked);
+    if (soundOn) playTick();   /* 켤 때만 확인음 (제스처 내부) */
+  });
+  document.getElementById('spVol').addEventListener('input', function () {
+    setVolume(parseInt(this.value, 10));
+  });
+  document.getElementById('spVol').addEventListener('change', function () {
+    if (soundOn && volume > 0) playTick();   /* 직접 제스처(슬라이더 조작) 내부 */
+  });
+
+  /* 데이터 미러 */
+  document.getElementById('spExport').addEventListener('click', function () {
+    doExport();
+    refreshDataPanel();
+  });
+  document.getElementById('spImport').addEventListener('click', function () {
+    importFile.click();
+  });
+
+  function fmtBytes(b) {
+    if (b >= 1048576) return (b / 1048576).toFixed(2) + 'MB';
+    if (b >= 1024) return (b / 1024).toFixed(1) + 'KB';
+    return b + 'B';
+  }
+
+  /* [데이터] 섹션 갱신: 용량 게이지(UTF-16 2바이트/문자 추정) + 사진 개수 + 손상 백업 키 목록 */
+  function refreshDataPanel() {
+    var fillEl = document.getElementById('spGaugeFill');
+    var textEl = document.getElementById('spGaugeText');
+    var photoEl = document.getElementById('spPhotoText');
+    var listEl = document.getElementById('spCorruptList');
+    if (!fillEl || !textEl || !photoEl || !listEl) return;
+    var bytes = 0;
+    var photos = 0;
+    var corrupt = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k === null) continue;
+        var v = null;
+        try { v = localStorage.getItem(k); } catch (err) { v = null; }
+        var len = (k.length + (v === null ? 0 : v.length)) * 2;
+        bytes += len;
+        if (k.indexOf('-corrupt-') !== -1) corrupt.push({ key: k, size: len });
+        if (/^postit-notes(-b\d+)?$/.test(k) && v) {
+          try {
+            var arr2 = JSON.parse(v);
+            if (Array.isArray(arr2)) {
+              arr2.forEach(function (sn) {
+                if (sn && typeof sn === 'object' && typeof sn.img === 'string' && sn.img) photos += 1;
+              });
+            }
+          } catch (err) { /* 손상 보드는 개수 집계 제외 */ }
+        }
+      }
+    } catch (err) { /* 저장소 접근 불가 — 0 으로 표시 */ }
+    var LIMIT = 5 * 1024 * 1024;
+    var pct = Math.min(100, (bytes / LIMIT) * 100);
+    fillEl.style.width = pct.toFixed(1) + '%';
+    textEl.textContent = '약 ' + fmtBytes(bytes) + ' / 5MB 사용 (' +
+      (pct < 0.1 ? '0.1% 미만' : pct.toFixed(1) + '%') + ' · file:// 오리진 추정치)';
+    photoEl.textContent = '사진 포스트잇 ' + photos + '개 — 사진이 저장 공간을 가장 많이 차지해요.';
+    /* 손상 백업 UI: "손상 백업 (N)" + 개별 삭제 + 모두 정리 (캘린더와 동일 관용구) */
+    var cntEl = document.getElementById('spCorruptCount');
+    if (cntEl) cntEl.textContent = String(corrupt.length);
+    var clearBtn = document.getElementById('spCorruptClear');
+    if (clearBtn) clearBtn.hidden = corrupt.length === 0;
+    while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+    if (!corrupt.length) {
+      var none = document.createElement('p');
+      none.className = 'sp-small';
+      none.textContent = '손상 백업 없음';
+      listEl.appendChild(none);
+      return;
+    }
+    corrupt.sort(function (a, b) { return a.key < b.key ? -1 : 1; });
+    corrupt.forEach(function (c) {
+      var row = document.createElement('div');
+      row.className = 'sp-crow';
+      var name = document.createElement('span');
+      name.className = 'sp-ckey';
+      name.textContent = c.key + ' (' + fmtBytes(c.size) + ')';
+      name.title = c.key;
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'sp-cdel';
+      del.textContent = '삭제';
+      del.title = '이 백업 키를 삭제';
+      del.addEventListener('click', function () {
+        try { localStorage.removeItem(c.key); } catch (err) { /* 무시 */ }
+        refreshDataPanel();
+      });
+      row.appendChild(name);
+      row.appendChild(del);
+      listEl.appendChild(row);
+    });
+  }
+
+  document.getElementById('spCorruptClear').addEventListener('click', function () {
+    var keys = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('-corrupt-') !== -1) keys.push(k);
+      }
+    } catch (err) { /* 무시 */ }
+    keys.forEach(function (k) {
+      try { localStorage.removeItem(k); } catch (err) { /* 무시 */ }
+    });
+    showNotice(keys.length + '개의 손상 백업 키를 정리했습니다.');
+    refreshDataPanel();
+  });
+
+  /* ── 기동: 보드 목록 발견 → 활성 보드 복원 → 렌더 ── */
+
+  boards = discoverBoards();
+  var act0 = null;
+  try { act0 = localStorage.getItem(ACTIVE_KEY); } catch (err) { act0 = null; }
+  boardId = act0 && boards.indexOf(act0) !== -1 ? act0 : 'b1';
+  renderTabs();
+  loadBoard();
+})();
+</script>
+</body>
+</html>

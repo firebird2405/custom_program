@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(**)",
+      "Bash(npm test:*)",
+      "Bash(npm install:*)",
+      "Bash(npx playwright:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Edit(protocol/grader/**)",
+      "Edit(protocol/SCORECARD.md)"
+    ]
+  }
+}

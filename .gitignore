@@ -1,0 +1,12 @@
+# Edge 앱 프로필 — 개인 브라우저 데이터 (~1GB), 절대 커밋 금지
+.edge/
+
+# 채점기 의존성·실행 산출물 (package-lock.json 기준 npm ci 로 복원)
+protocol/grader/node_modules/
+protocol/grader/test-results/
+protocol/grader/playwright-report/
+protocol/grader/.last-run.json
+
+# OS 잔재
+Thumbs.db
+desktop.ini

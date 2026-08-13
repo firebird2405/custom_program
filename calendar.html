@@ -1,0 +1,2536 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>캘린더</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📅</text></svg>">
+<script>
+(function(){
+  /* 페인트 전 테마 프리셋 적용 (A36). cal-theme 우선, 구 'theme' 키 하위호환 */
+  var p = null, t = null;
+  try{ p = localStorage.getItem('cal-theme'); }catch(e){}
+  try{ t = localStorage.getItem('theme'); }catch(e){}
+  if (p !== 'basic' && p !== 'dark' && p !== 'white') p = (t === 'dark') ? 'dark' : 'basic';
+  document.documentElement.setAttribute('data-preset', p);
+  if (p !== 'dark') document.documentElement.setAttribute('data-theme','light');
+})();
+</script>
+<style>
+@font-face {
+  font-family: "Gaegu";
+  src: url("assets/Gaegu-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "NanumPen";
+  src: url("assets/NanumPenScript-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+/* 포스트잇 월과 같은 따뜻한 세계관: 다크 = 밤의 서재 브라운, 라이트 = 크림 종이 */
+:root{
+  --bg:#1f1913; --surface:#2a2219; --surface2:#372c1e; --text:#f0e7d6;
+  --muted:#b1a184; --accent:#e0a933; --red:#ff7b70; --blue:#7fb2e8;
+  --border:#463a28;
+  --accent-soft:rgba(224,169,51,.18);
+  --on-accent:#241b0e;
+  --shadow:0 4px 16px rgba(0,0,0,.32);
+  --cell-bg:rgba(255,255,255,.015); --cell-border:rgba(255,255,255,.07);
+}
+[data-theme="light"]{
+  --bg:#f3e9d2; --surface:#fff8e9; --surface2:#f1e6cd; --text:#4a3421;
+  --muted:#8a7457; --accent:#c8912f; --red:#d94f44; --blue:#39699e;
+  --border:#e3d3b2;
+  --accent-soft:rgba(224,169,51,.16);
+  --on-accent:#ffffff;
+  --shadow:0 4px 14px rgba(122,84,51,.14);
+  --cell-bg:rgba(122,84,51,.03); --cell-border:rgba(122,84,51,.06);
+}
+/* 미니멀 화이트 프리셋 (A36) — [data-theme="light"] 변수 위에 덮어쓴다 */
+[data-preset="white"]{
+  --bg:#ffffff; --surface:#ffffff; --surface2:#f5f5f5; --text:#2f2f2f;
+  --muted:#8f8f8f; --accent:#b98a2e; --red:#d64545; --blue:#3d6dae;
+  --border:#e6e6e6;
+  --accent-soft:rgba(185,138,46,.12);
+  --on-accent:#ffffff;
+  --shadow:0 3px 10px rgba(0,0,0,.08);
+  --cell-bg:rgba(0,0,0,.012); --cell-border:rgba(0,0,0,.05);
+}
+/* 글자 크기 설정 (설정 패널 [표시]) — 기본 --fscale:1 = 현행 표시와 완전 동일 */
+html{--fscale:1;}
+html[data-font-size="small"]{--fscale:.88;}
+html[data-font-size="large"]{--fscale:1.25;}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%;}
+body{
+  font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif;
+  background:var(--bg); color:var(--text);
+  display:flex; flex-direction:column; overflow:hidden;
+  padding:16px; gap:14px;
+}
+button{
+  font-family:inherit; font-size:14px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:6px 12px; cursor:pointer;
+  transition:background .15s, border-color .15s, color .15s, transform .1s;
+}
+button:hover{background:var(--surface); border-color:var(--accent);}
+button:active{transform:scale(.96);}
+input[type="text"],input[type="time"]{
+  font-family:inherit; font-size:14px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:7px 10px; transition:border-color .15s;
+}
+input[type="text"]:focus,input[type="time"]:focus{outline:none; border-color:var(--accent);}
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--surface2); border-radius:8px; border:2px solid var(--bg);}
+::-webkit-scrollbar-thumb:hover{background:var(--border);}
+
+/* ---------- header ---------- */
+header{
+  display:flex; align-items:center; gap:10px; flex:none;
+}
+/* 제목 서체 통일: 나눔손글씨 펜 (C7) */
+#monthTitle{font-family:"NanumPen","Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:calc(33px * var(--fscale,1)); font-weight:400; min-width:150px; line-height:1;}
+.navBtn{width:36px; padding:6px 0; text-align:center; font-size:14px;}
+#todayBtn{font-weight:600;}
+header .spacer{flex:1;}
+#soundBtn{font-size:16px; width:40px; padding:5px 0; text-align:center;}
+#themeSel{
+  font-family:inherit; font-size:13px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:6px 8px; cursor:pointer;
+}
+#themeSel:focus{outline:none; border-color:var(--accent);}
+#volRange{width:92px; accent-color:var(--accent); cursor:pointer;}
+
+/* ---------- layout ---------- */
+main{flex:1; display:flex; gap:14px; min-height:0;}
+#calCard{
+  flex:1; min-width:0; display:flex; flex-direction:column;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--shadow); padding:14px; gap:8px;
+}
+#weekdays{
+  display:grid; grid-template-columns:repeat(7,1fr); gap:6px; flex:none;
+}
+#weekdays div{
+  text-align:center; font-size:calc(16px * var(--fscale,1)); font-weight:600; color:var(--muted); padding:2px 0;
+  font-family:"Gaegu",'Segoe UI','Malgun Gothic',sans-serif; /* 포스트잇 월과 같은 손글씨 다리 */
+}
+/* 주 시작 요일 설정에 따라 순서가 바뀌므로 위치가 아닌 클래스로 색을 준다 (기본 표시는 동일) */
+#weekdays div.wd-sun{color:var(--red);}
+#weekdays div.wd-sat{color:var(--blue);}
+#grid{
+  flex:1; display:grid; grid-template-columns:repeat(7,1fr);
+  grid-template-rows:repeat(6,1fr); gap:6px; min-height:0;
+}
+/* 주간 뷰 (A35): 한 줄 7칸 */
+#grid[data-view-mode="week"]{grid-template-rows:1fr;}
+#grid[data-view-mode="week"] .cell .num{font-size:calc(16px * var(--fscale,1));}
+#grid[data-view-mode="week"] .cell .lunar{font-size:calc(11px * var(--fscale,1));}
+#grid[data-view-mode="week"] .cell .evLine{font-size:calc(13px * var(--fscale,1)); line-height:1.5;}
+@keyframes fadeIn{from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:none;}}
+#grid.fade{animation:fadeIn .18s ease;}
+/* 달 넘김 방향 페이드 (C7): 다음 달 = 오른쪽에서, 이전 달 = 왼쪽에서 */
+@keyframes slideFromL{from{opacity:0; transform:translateX(-16px);} to{opacity:1; transform:none;}}
+@keyframes slideFromR{from{opacity:0; transform:translateX(16px);} to{opacity:1; transform:none;}}
+#grid.fadeL{animation:slideFromL .22s ease;}
+#grid.fadeR{animation:slideFromR .22s ease;}
+.cell{
+  display:flex; flex-direction:column; gap:2px; padding:6px 7px; min-height:0;
+  border-radius:8px; cursor:pointer; overflow:hidden; position:relative;
+  transition:background .15s;
+  /* 빈 셀에도 희미한 면·구분선을 줘 그리드 구조감 유지 (다크에서 휑함 방지) */
+  background:var(--cell-bg); border:1px solid var(--cell-border);
+}
+.cell:hover{background:var(--surface2);}
+.cell.other{opacity:.38;}
+.cell.selected{background:var(--accent-soft); border-color:var(--accent);}
+.cell.today{box-shadow:inset 0 0 0 2px var(--accent);}
+.cell .num{font-size:calc(14px * var(--fscale,1)); font-weight:600; line-height:1.2;}
+.cell.today .num{color:var(--accent);}
+.cell .num.sun{color:var(--red);}
+.cell .num.sat{color:var(--blue);}
+.cell.today .num.sun{color:var(--red);}
+.cell.today .num.sat{color:var(--blue);}
+.cell .holi{
+  font-size:calc(11px * var(--fscale,1)); color:var(--red); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.cell .rowTop{
+  display:flex; align-items:baseline; justify-content:space-between; gap:4px; flex:none; min-width:0;
+}
+/* 음력 표기 (A33) — font-size ≥ 9px 계약 */
+.cell .lunar{
+  font-size:calc(10px * var(--fscale,1)); color:var(--muted); line-height:1.2; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; flex:none;
+}
+/* 셀 안 일정 줄: 카테고리 점([data-event-dot], A34) + 일정 텍스트 (A30·A35) */
+.cell .evLine{
+  display:flex; align-items:center; gap:4px; flex:none; min-width:0;
+  font-size:calc(11px * var(--fscale,1)); line-height:1.4;
+}
+.cell .evLine i{flex:none; width:5px; height:5px; border-radius:50%; background:var(--accent);}
+.cell .evLine .t{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.cell .evLine.moreLine{color:var(--muted); font-size:calc(10px * var(--fscale,1));}
+/* D-day 배지 (A31) */
+.ddayBadge{
+  align-self:flex-start; flex:none; white-space:nowrap;
+  font-size:calc(10px * var(--fscale,1)); font-weight:700; line-height:1.5;
+  color:var(--on-accent); background:var(--accent);
+  border-radius:6px; padding:0 5px 1px;
+}
+#eventList .ddayBadge{font-size:calc(11px * var(--fscale,1)); padding:1px 6px 2px;}
+/* 카테고리 색 점 (A34) — 그리드 점은 .dots i 에 인라인 색 적용 */
+.catDot{flex:none; width:9px; height:9px; border-radius:50%;}
+
+/* ---------- side panel ---------- */
+#panel{
+  width:300px; flex:none; display:flex; flex-direction:column;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--shadow); padding:16px; gap:10px; min-height:0;
+}
+/* 라이트 테마: 종이 상단에 살짝 비치는 하이라이트 (크림 카드의 종이 질감 강화) */
+[data-theme="light"] #calCard,
+[data-theme="light"] #panel{
+  background-image:linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0) 22%);
+}
+#panelDate{font-family:"NanumPen","Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:calc(26px * var(--fscale,1)); font-weight:400; line-height:1;}
+#panelHoliday{font-size:calc(13px * var(--fscale,1)); color:var(--red); min-height:16px;}
+#panelHoliday:empty{display:none;}
+#eventList{
+  list-style:none; flex:1; overflow-y:auto; display:flex;
+  flex-direction:column; gap:8px; min-height:60px; padding-right:2px;
+}
+#eventList li{
+  display:flex; align-items:center; gap:8px;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; padding:8px 10px; transition:border-color .15s;
+}
+#eventList li:hover{border-color:var(--accent);}
+/* 새 일정 슬라이드 인 (~180ms, 자연 상태로 종료) */
+@keyframes evIn{from{opacity:0; transform:translateX(-8px);} to{opacity:1; transform:none;}}
+#eventList li.slideIn{animation:evIn .18s ease;}
+/* 삭제 페이드 아웃 — 저장은 즉시, 표시만 잠깐 배웅 */
+#eventList li.removing{
+  opacity:0; transform:translateX(10px); pointer-events:none;
+  transition:opacity .15s ease, transform .15s ease;
+}
+.timeBadge{
+  flex:none; font-size:calc(14px * var(--fscale,1)); font-weight:600; color:var(--accent);
+  background:var(--accent-soft); border-radius:6px; padding:1px 6px 2px;
+  font-family:"Gaegu",'Segoe UI','Malgun Gothic',sans-serif;
+}
+.evText{
+  flex:1; font-size:calc(14px * var(--fscale,1)); overflow-wrap:anywhere; word-break:break-word; min-width:0;
+}
+.evBtn{
+  flex:none; padding:2px 7px; font-size:13px; border-radius:6px;
+  background:transparent; border:1px solid transparent; color:var(--muted);
+}
+.evBtn:hover{background:var(--surface); border-color:var(--border); color:var(--text);}
+.evBtn.del:hover{color:var(--red); border-color:var(--red);}
+#emptyMsg{
+  color:var(--muted); font-size:calc(17px * var(--fscale,1)); text-align:center; padding:18px 0;
+  font-family:"Gaegu",'Segoe UI','Malgun Gothic',sans-serif;
+}
+.editRow{display:flex; flex-direction:column; gap:6px; flex:1; min-width:0;}
+.editRow .rowA{display:flex; gap:6px;}
+.editRow input[type="time"]{width:96px; flex:none; padding:5px 7px; font-size:13px;}
+.editRow input[type="text"]{flex:1; min-width:0; padding:5px 8px; font-size:13px;}
+.editRow .rowB{display:flex; gap:6px; justify-content:flex-end;}
+.editRow .rowB button{padding:4px 10px; font-size:13px;}
+#addForm{display:flex; flex-direction:column; gap:8px; flex:none;}
+#addForm .formRow{display:flex; gap:6px; align-items:center;}
+#addTime{width:96px; flex:none;}
+#addText{flex:1; min-width:0;}
+/* 카테고리 색 선택 (A34) */
+#catPick{display:flex; gap:6px; align-items:center;}
+.catBtn{
+  width:20px; height:20px; padding:0; border-radius:50%; flex:none;
+  border:2px solid transparent; cursor:pointer;
+}
+.catBtn:hover{border-color:var(--border); background:inherit;}
+.catBtn.on{border-color:var(--text); box-shadow:0 0 0 2px var(--surface), 0 0 0 3px var(--text);}
+.ddayLab{
+  display:flex; align-items:center; gap:5px; font-size:13px; color:var(--muted);
+  margin-left:auto; cursor:pointer; user-select:none;
+}
+.ddayLab input{accent-color:var(--accent); cursor:pointer;}
+.editRow .ddayLab{margin-left:0; margin-right:auto;}
+/* 반복 일정 선택 (A30) */
+#repeatSel{
+  font-family:inherit; font-size:12px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:5px 4px; cursor:pointer; flex:none; max-width:96px;
+}
+#repeatSel:focus{outline:none; border-color:var(--accent);}
+.repBadge{flex:none; font-size:12px; line-height:1;}
+/* 반복 일정 발생분 삭제 선택 (A30) */
+.delChoice{display:flex; flex-direction:column; gap:6px; flex:1; min-width:0;}
+.delChoice .q{font-size:13px; color:var(--muted); overflow-wrap:anywhere;}
+.delChoice .row{display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;}
+.delChoice button{padding:4px 10px; font-size:13px;}
+.delChoice button[data-del-one]{color:var(--red); border-color:var(--red);}
+#addBtn{
+  flex:none; background:var(--accent); color:var(--on-accent); border-color:var(--accent); font-weight:600;
+  font-family:"Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:17px; padding:4px 14px 6px;
+}
+#addBtn:hover{opacity:.88;}
+
+/* ---------- footer ---------- */
+footer{flex:none; display:flex; align-items:center; gap:8px;}
+footer .hint{font-size:12px; color:var(--muted); margin-left:auto;}
+
+/* ---------- toast (non-modal notice — 포스트잇 월의 크림 카드 알림과 동일한 모양) ---------- */
+#toast{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(8px);
+  display:flex; align-items:center; gap:12px;
+  max-width:min(480px, calc(100vw - 32px));
+  background:#fff8e9; color:#4a3421;
+  border:1px solid rgba(122,84,51,.22); border-radius:12px; box-shadow:0 8px 22px rgba(30,15,5,.4);
+  padding:12px 16px; font-size:15px; line-height:1.45;
+  opacity:0; pointer-events:none; z-index:1000;
+  transition:opacity .2s, transform .2s;
+}
+#toast.show{opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0);}
+#toastText{
+  white-space:pre-line; overflow-wrap:anywhere; word-break:break-word; min-width:0;
+}
+#toastClose{
+  flex:none; border:0; border-radius:8px; padding:4px 12px;
+  background:#e9dcc2; color:#4a3421; font-size:13px; cursor:pointer;
+}
+#toastClose:hover{background:#ddcda9; border:0;}
+#toastUndo{
+  flex:none; border:0; border-radius:8px; padding:4px 12px;
+  background:#c8912f; color:#fff; font-size:13px; font-weight:600; cursor:pointer;
+}
+#toastUndo:hover{background:#b9822a; border:0;}
+#toastUndo[hidden]{display:none;}
+
+/* ---------- context menu (A21) ---------- */
+#ctxMenu{
+  position:fixed; z-index:1100; min-width:172px;
+  display:flex; flex-direction:column; gap:2px;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  box-shadow:var(--shadow); padding:5px;
+}
+#ctxMenu[hidden]{display:none;}
+#ctxMenu button{
+  background:transparent; border:1px solid transparent; border-radius:6px;
+  text-align:left; padding:7px 12px; font-size:14px;
+}
+#ctxMenu button:hover{background:var(--surface2); border-color:transparent;}
+
+/* ---------- settings panel (⚙️ — 비모달 슬라이드, transform/opacity 전용) ---------- */
+#settingsBtn{font-size:16px; width:40px; padding:5px 0; text-align:center;}
+#settingsPanel{
+  position:fixed; top:0; right:0; bottom:0; width:330px; max-width:92vw;
+  display:flex; flex-direction:column; z-index:950;
+  background:var(--surface); border-left:1px solid var(--border);
+  box-shadow:-6px 0 22px rgba(0,0,0,.22);
+  transform:translateX(105%); visibility:hidden;
+  transition:transform .24s ease, visibility 0s linear .24s;
+}
+#settingsPanel.open{transform:translateX(0); visibility:visible; transition:transform .24s ease;}
+.spHead{flex:none; display:flex; align-items:center; gap:8px; padding:14px 16px 10px; border-bottom:1px solid var(--border);}
+.spTitle{font-family:"NanumPen","Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:26px; line-height:1; flex:1;}
+#settingsClose{width:32px; padding:4px 0; text-align:center; font-size:15px;}
+.spBody{flex:1; overflow-y:auto; padding:4px 16px 18px; display:flex; flex-direction:column;}
+.spSec{padding:10px 0 12px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:8px;}
+.spSec:last-child{border-bottom:0;}
+.spSec h3{
+  font-family:"Gaegu",'Segoe UI','Malgun Gothic',sans-serif;
+  font-size:17px; font-weight:600; color:var(--accent);
+}
+.spRow{display:flex; align-items:center; gap:8px; font-size:13px; flex-wrap:wrap;}
+.spRow.spCol{flex-direction:column; align-items:stretch; gap:5px;}
+.spLab{color:var(--muted); flex:none; min-width:74px;}
+/* 세그먼트 버튼 — 포스트잇 월 설정 패널과 같은 관용구 (.seg > button[data-val] + .sel) */
+.seg{display:inline-flex; background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:2px; gap:2px;}
+.seg button{
+  border:0; background:transparent; font-family:inherit; font-size:13px; color:var(--muted);
+  border-radius:7px; padding:3px 10px 4px; cursor:pointer;
+}
+.seg button:hover{background:var(--accent-soft); border:0; color:var(--text);}
+.seg button.sel{background:var(--accent); color:var(--on-accent); font-weight:600; box-shadow:0 1px 0 rgba(0,0,0,.12);}
+/* 글자 크기 미리보기 한 줄 — --fscale 를 그대로 따라간다 */
+.spPreview{
+  font-size:calc(15px * var(--fscale,1)); color:var(--text); line-height:1.4;
+  background:var(--surface2); border:1px dashed var(--border); border-radius:8px; padding:5px 10px;
+}
+.spCheck{cursor:pointer; user-select:none;}
+.spCheck input{accent-color:var(--accent); cursor:pointer;}
+#settingsPanel select{
+  font-family:inherit; font-size:13px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:5px 8px; cursor:pointer;
+}
+#settingsPanel select:focus{outline:none; border-color:var(--accent);}
+#setVol{flex:1; min-width:110px; accent-color:var(--accent); cursor:pointer;}
+#setGaugeBar{
+  height:10px; border-radius:6px; background:var(--surface2);
+  border:1px solid var(--border); overflow:hidden;
+}
+#setGaugeFill{display:block; height:100%; width:0%; background:var(--accent); border-radius:6px;}
+.spSmall{font-size:12px; color:var(--muted);}
+#setCorruptList{list-style:none; display:flex; flex-direction:column; gap:4px;}
+#setCorruptList li{
+  display:flex; align-items:center; gap:6px; font-size:12px;
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:4px 8px;
+}
+#setCorruptList li .k{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+#setCorruptList li button{padding:2px 8px; font-size:12px;}
+#setCorruptClear{align-self:flex-start; padding:4px 10px; font-size:13px;}
+.spInfo{font-size:13px; line-height:1.55;}
+/* 다크 프리셋: 설정 패널을 배경보다 살짝 띄운 따뜻한 브라운으로 — 컨트롤 표면·경계도 패널 안에서만 조화 */
+[data-preset="dark"] #settingsPanel{
+  background:#312818;
+  --surface:#312818; --surface2:#41351e; --border:#57472a;
+  box-shadow:-8px 0 28px rgba(0,0,0,.5);
+}
+
+/* ---------- 배경 꾸미기 (설정 [꾸미기] — 기본 상태에서는 display:none, 렌더 완전 불변) ----------
+ * 카드 뒤 z-레이어(z-index:-1, 본문 배경 위·콘텐츠 아래)에 은은한 오버레이만 얹는다. */
+#bgDecor{position:fixed; inset:0; z-index:-1; pointer-events:none; display:none; opacity:.18;}
+#bgDecor.on{display:block;}
+#bgDecor img{width:100%; height:100%; object-fit:cover; display:block;}
+/* 프리셋 1: 은은한 종이 — 부드러운 명암 얼룩 */
+#bgDecor.paper{background:
+  radial-gradient(1100px 750px at 18% 12%, rgba(255,252,240,.9), transparent 62%),
+  radial-gradient(900px 700px at 84% 88%, rgba(96,66,36,.75), transparent 60%),
+  radial-gradient(700px 500px at 62% 30%, rgba(255,244,214,.5), transparent 65%),
+  repeating-linear-gradient(0deg, rgba(96,66,36,.14) 0 1px, transparent 1px 5px);}
+/* 프리셋 2: 리넨 그라디언트 — 가는 직물 결 + 사선 톤 */
+#bgDecor.linen{background:
+  repeating-linear-gradient(0deg, rgba(96,66,36,.5) 0 1px, transparent 1px 3px),
+  repeating-linear-gradient(90deg, rgba(96,66,36,.5) 0 1px, transparent 1px 3px),
+  linear-gradient(135deg, rgba(255,244,214,.85), rgba(122,84,51,.4));}
+#setDecorAlpha{flex:1; min-width:100px; accent-color:var(--accent); cursor:pointer;}
+/* 배경 세그 버튼 속 미니 미리보기 스와치 — 프리셋 무늬를 원 강도로 보여준다 */
+#setDecorSeg button{display:inline-flex; align-items:center; gap:5px;}
+.decorSw{
+  width:16px; height:12px; border-radius:3px; flex:none; pointer-events:none;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);
+}
+.decorSw.swPaper{background:
+  radial-gradient(10px 8px at 30% 25%, rgba(255,252,240,.95), transparent 70%),
+  radial-gradient(9px 7px at 75% 80%, rgba(96,66,36,.55), transparent 70%),
+  linear-gradient(180deg, #f4e8cd, #e4d2ac);}
+.decorSw.swLinen{background:
+  repeating-linear-gradient(0deg, rgba(96,66,36,.4) 0 1px, transparent 1px 3px),
+  repeating-linear-gradient(90deg, rgba(96,66,36,.4) 0 1px, transparent 1px 3px),
+  linear-gradient(135deg, #f2e6c8, #cbb18e);}
+
+/* ---------- 애니메이션 설정 (설정 패널 [효과]) — 줄임: 모션 최소화 / 끔: 전면 해제 ---------- */
+html[data-anim="reduced"] *, html[data-anim="reduced"] *::before, html[data-anim="reduced"] *::after{
+  animation-duration:.01ms !important;
+  animation-iteration-count:1 !important;
+  transition-duration:.01ms !important;
+}
+html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] *::after{
+  animation:none !important;
+  transition:none !important;
+}
+
+/* ---------- 접근성: 사용자 모션 감소 설정 존중 ---------- */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+  }
+}
+
+/* ---------- narrow ---------- */
+@media (max-width:759px){
+  body{overflow:auto; height:auto; min-height:100%;}
+  main{flex-direction:column;}
+  #calCard{min-height:520px;}
+  #panel{width:auto;}
+  #eventList{max-height:300px;}
+  footer .hint{display:none;}
+}
+</style>
+</head>
+<body>
+<div id="bgDecor" aria-hidden="true"></div>
+<header>
+  <span id="monthTitle">.</span>
+  <button class="navBtn" id="prevBtn" title="이전 달 (←)">◀</button>
+  <button class="navBtn" id="nextBtn" title="다음 달 (→)">▶</button>
+  <button id="todayBtn" title="오늘로 이동 (T)">오늘</button>
+  <button id="weekBtn" data-week-view title="주간 보기로 전환 (W)">주간</button>
+  <span class="spacer"></span>
+  <button id="soundBtn" title="효과음 끄기">🔊</button>
+  <input type="range" id="volRange" data-volume min="0" max="100" step="1" title="효과음 볼륨">
+  <select id="themeSel" data-theme-preset title="테마 프리셋">
+    <option value="basic">기본</option>
+    <option value="dark">다크</option>
+    <option value="white">화이트</option>
+  </select>
+  <button id="settingsBtn" data-settings title="설정">⚙️</button>
+</header>
+
+<main>
+  <section id="calCard">
+    <div id="weekdays"></div>
+    <div id="grid"></div>
+  </section>
+
+  <aside id="panel">
+    <div id="panelDate">.</div>
+    <div id="panelHoliday"></div>
+    <ul id="eventList"></ul>
+    <div id="emptyMsg" hidden>일정이 없습니다</div>
+    <form id="addForm" autocomplete="off">
+      <div class="formRow">
+        <input type="time" id="addTime" title="시간 (선택)">
+        <input type="text" id="addText" placeholder="새 일정" maxlength="200">
+        <button type="submit" id="addBtn">추가</button>
+      </div>
+      <div class="formRow">
+        <select id="repeatSel" data-repeat title="반복 일정 (매주)">
+          <option value="">반복 없음</option>
+          <option value="weekly">매주</option>
+        </select>
+        <span id="catPick" data-category title="카테고리 색"></span>
+        <label class="ddayLab" title="기념일로 표시 (D-day 배지)"><input type="checkbox" id="addDday" data-dday> 기념일</label>
+      </div>
+    </form>
+  </aside>
+</main>
+
+<footer>
+  <button id="exportBtn" data-export>내보내기</button>
+  <button id="importBtn" data-import>가져오기</button>
+  <input type="file" id="importFile" accept=".json,application/json" hidden>
+  <span class="hint">← → 이동 · T 오늘 · W 주간/월간</span>
+</footer>
+
+<aside id="settingsPanel" data-settings-panel aria-label="설정" aria-hidden="true">
+  <div class="spHead">
+    <span class="spTitle">설정</span>
+    <button type="button" id="settingsClose" title="설정 닫기 (ESC)">×</button>
+  </div>
+  <div class="spBody">
+    <section class="spSec">
+      <h3>표시</h3>
+      <div class="spRow"><span class="spLab">글자 크기</span>
+        <span class="seg" id="setFontSeg">
+          <button type="button" data-val="small">작게</button>
+          <button type="button" data-val="normal">보통</button>
+          <button type="button" data-val="large">크게</button>
+        </span>
+      </div>
+      <div class="spPreview" title="글자 크기 미리보기">가나다 ABC 123</div>
+      <div class="spRow"><span class="spLab">주 시작 요일</span>
+        <span class="seg" id="setWeekStartSeg">
+          <button type="button" data-val="sun">일요일</button>
+          <button type="button" data-val="mon">월요일</button>
+        </span>
+      </div>
+      <label class="spRow spCheck"><input type="checkbox" id="setLunar" checked> 음력 표시</label>
+      <label class="spRow spCheck"><input type="checkbox" id="setDday" checked> D-day 배지</label>
+    </section>
+    <section class="spSec">
+      <h3>꾸미기</h3>
+      <div class="spRow"><span class="spLab">배경</span>
+        <span class="seg" id="setDecorSeg">
+          <button type="button" data-val="none">기본</button>
+          <button type="button" data-val="paper"><span class="decorSw swPaper" aria-hidden="true"></span>종이</button>
+          <button type="button" data-val="linen"><span class="decorSw swLinen" aria-hidden="true"></span>리넨</button>
+          <button type="button" data-val="image" id="setDecorImgSeg" hidden>내 이미지</button>
+        </span>
+      </div>
+      <div class="spRow"><span class="spLab">내 이미지</span>
+        <button type="button" id="setDecorImgBtn" title="사진을 골라 은은한 배경으로 깔기">이미지 선택…</button>
+        <button type="button" id="setDecorImgDel" hidden title="저장된 배경 이미지 삭제">제거</button>
+      </div>
+      <div class="spRow"><span class="spLab">강도</span>
+        <input type="range" id="setDecorAlpha" min="12" max="25" step="1" title="배경 진하기">
+        <span id="setDecorAlphaVal" class="spSmall"></span>
+      </div>
+      <p class="spSmall">배경은 카드 뒤에 은은하게 깔려요. 기본을 고르면 원래 화면 그대로예요.</p>
+      <input type="file" id="setDecorImgFile" accept="image/*" hidden>
+    </section>
+    <section class="spSec">
+      <h3>알림</h3>
+      <label class="spRow spCheck"><input type="checkbox" id="setAlarm" checked> 일정 시간 알림</label>
+      <div class="spRow"><span class="spLab">알림 시점</span>
+        <select id="setAlarmLead" title="일정 시각 기준 알림 선행 시간">
+          <option value="0">정각</option>
+          <option value="5">5분 전</option>
+          <option value="15">15분 전</option>
+        </select>
+      </div>
+    </section>
+    <section class="spSec">
+      <h3>효과</h3>
+      <div class="spRow"><span class="spLab">애니메이션</span>
+        <span class="seg" id="setAnimSeg" title="화면 전환·목록 애니메이션">
+          <button type="button" data-val="on">켬</button>
+          <button type="button" data-val="reduced">줄임</button>
+          <button type="button" data-val="off">끔</button>
+        </span>
+      </div>
+    </section>
+    <section class="spSec">
+      <h3>사운드</h3>
+      <label class="spRow spCheck"><input type="checkbox" id="setMute"> 음소거</label>
+      <div class="spRow"><span class="spLab">볼륨</span>
+        <input type="range" id="setVol" min="0" max="100" step="1" title="효과음 볼륨 (헤더 슬라이더와 동기화)">
+      </div>
+    </section>
+    <section class="spSec">
+      <h3>데이터</h3>
+      <div class="spRow">
+        <button type="button" id="setExport">내보내기</button>
+        <button type="button" id="setImport">가져오기</button>
+      </div>
+      <div class="spRow spCol">
+        <span class="spLab">저장 용량</span>
+        <div id="setGaugeBar"><i id="setGaugeFill"></i></div>
+        <span id="setGaugeText" class="spSmall"></span>
+      </div>
+      <div class="spRow spCol">
+        <span class="spLab">손상 백업 (<span id="setCorruptCount">0</span>)</span>
+        <ul id="setCorruptList"></ul>
+        <button type="button" id="setCorruptClear" hidden>모두 정리</button>
+      </div>
+    </section>
+    <section class="spSec">
+      <h3>정보</h3>
+      <p class="spInfo">캘린더 — 캘린더 + 포스트잇 월 (2026-08)</p>
+      <p class="spInfo spSmall">
+        글꼴: Gaegu · Nanum Pen Script (SIL OFL 1.1)<br>
+        음력 변환표: korean-lunar-calendar (MIT)<br>
+        전체 에셋 출처: assets/ASSETS.md
+      </p>
+      <p class="spInfo spSmall">단축키: ← → 이동 · T 오늘 · W 주간/월간 · ESC 닫기</p>
+    </section>
+  </div>
+</aside>
+
+<div id="toast" data-toast role="status" aria-live="polite">
+  <span id="toastText"></span>
+  <button type="button" id="toastUndo" data-undo hidden>실행 취소</button>
+  <button type="button" id="toastClose">닫기</button>
+</div>
+
+<div id="ctxMenu" data-ctx-menu hidden></div>
+
+<script>
+'use strict';
+
+/* ---------- holidays (2026-2027) ---------- */
+const HOLIDAYS = [{"date":"2026-01-01","name":"신정"},{"date":"2026-02-16","name":"설날 연휴"},{"date":"2026-02-17","name":"설날"},{"date":"2026-02-18","name":"설날 연휴"},{"date":"2026-03-01","name":"삼일절"},{"date":"2026-03-02","name":"대체공휴일(삼일절)"},{"date":"2026-05-05","name":"어린이날"},{"date":"2026-05-24","name":"석가탄신일"},{"date":"2026-05-25","name":"대체공휴일(석가탄신일)"},{"date":"2026-06-03","name":"전국동시지방선거일"},{"date":"2026-06-06","name":"현충일"},{"date":"2026-08-15","name":"광복절"},{"date":"2026-08-17","name":"대체공휴일(광복절)"},{"date":"2026-09-24","name":"추석 연휴"},{"date":"2026-09-25","name":"추석"},{"date":"2026-09-26","name":"추석 연휴"},{"date":"2026-10-03","name":"개천절"},{"date":"2026-10-05","name":"대체공휴일(개천절)"},{"date":"2026-10-09","name":"한글날"},{"date":"2026-12-25","name":"성탄절"},{"date":"2027-01-01","name":"신정"},{"date":"2027-02-06","name":"설날 연휴"},{"date":"2027-02-07","name":"설날"},{"date":"2027-02-08","name":"설날 연휴"},{"date":"2027-02-09","name":"대체공휴일(설날)"},{"date":"2027-03-01","name":"삼일절"},{"date":"2027-05-05","name":"어린이날"},{"date":"2027-05-13","name":"석가탄신일"},{"date":"2027-06-06","name":"현충일"},{"date":"2027-08-15","name":"광복절"},{"date":"2027-08-16","name":"대체공휴일(광복절)"},{"date":"2027-09-14","name":"추석 연휴"},{"date":"2027-09-15","name":"추석"},{"date":"2027-09-16","name":"추석 연휴"},{"date":"2027-10-03","name":"개천절"},{"date":"2027-10-04","name":"대체공휴일(개천절)"},{"date":"2027-10-09","name":"한글날"},{"date":"2027-10-11","name":"대체공휴일(한글날)"},{"date":"2027-12-25","name":"성탄절"},{"date":"2027-12-27","name":"대체공휴일(성탄절)"}];
+const HOLIDAY_MAP = {};
+for (const h of HOLIDAYS) HOLIDAY_MAP[h.date] = h.name;
+
+const WEEKDAY_NAMES = ['일','월','화','수','목','금','토'];
+const STORE_KEY = 'cal-events';
+const REPEAT_KEY = 'cal-repeats'; /* 매주 반복 규칙 (A30) — cal-events 는 불변 유지 */
+const VIEW_KEY = 'cal-view';      /* 'month' | 'week' (A35) */
+
+/* ---------- helpers ---------- */
+function pad(n){ return String(n).padStart(2,'0'); }
+function keyOf(y,m,d){ return y + '-' + pad(m+1) + '-' + pad(d); } /* m: 0-based */
+function todayKey(){
+  const now = new Date();
+  return keyOf(now.getFullYear(), now.getMonth(), now.getDate());
+}
+function dateFromKey(key){
+  const p = key.split('-');
+  return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+}
+/* 로컬 자정 기준 달력일 차이 (b - a) */
+function daysBetweenKeys(a, b){
+  return Math.round((dateFromKey(b).getTime() - dateFromKey(a).getTime()) / 86400000);
+}
+/* 비모달 알림 토스트 — 닫기 버튼 + 자동 숨김 (textContent 만 사용).
+   withUndo=true 면 "실행 취소" 버튼([data-undo])을 함께 표시 (A20, 최소 5초 유지 → 8초) */
+let toastTimer = null;
+function showToastBase(msg, withUndo, ms, kind){
+  const el = document.getElementById('toast');
+  const txt = document.getElementById('toastText');
+  const undo = document.getElementById('toastUndo');
+  if (!el || !txt) return;
+  txt.textContent = msg;
+  if (undo) undo.hidden = !withUndo;
+  el.setAttribute('data-toast-kind', kind || 'info');
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, ms);
+}
+function showToast(msg){ showToastBase(msg, false, 6000, 'info'); }
+function showUndoToast(msg){ showToastBase(msg, true, 8000, 'undo'); }
+function showAlarmToast(msg){ showToastBase(msg, false, 12000, 'alarm'); } /* 일정 시간 알림 (A32) */
+function hideToast(){
+  const el = document.getElementById('toast');
+  const undo = document.getElementById('toastUndo');
+  if (el) el.classList.remove('show');
+  if (undo) undo.hidden = true;
+  if (toastTimer){ clearTimeout(toastTimer); toastTimer = null; }
+}
+document.getElementById('toastClose').addEventListener('click', hideToast);
+let idCounter = 0;
+function genId(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now() + '-' + (idCounter++);
+}
+/* 저장 데이터 정제: 날짜 키(YYYY-MM-DD) + 배열 값 + {id,time,text} 항목만 유지.
+   additive 확장 필드(cat·dday 등)는 그대로 보존한다 (스키마 하위호환, rev.5 B-3) */
+function sanitizeStore(obj){
+  const clean = {};
+  let dropped = false;
+  for (const key of Object.keys(obj)){
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !Array.isArray(obj[key])){ dropped = true; continue; }
+    const list = [];
+    for (const it of obj[key]){
+      if (!it || typeof it !== 'object' || typeof it.text !== 'string'){ dropped = true; continue; }
+      const item = Object.assign({}, it);
+      item.id = (typeof it.id === 'string' && it.id) ? it.id : genId();
+      item.time = (typeof it.time === 'string') ? it.time : '';
+      item.text = it.text;
+      list.push(item);
+    }
+    if (list.length) clean[key] = list;
+  }
+  return { clean: clean, dropped: dropped };
+}
+/* 손상 원본을 <원래키>-corrupt-<타임스탬프ms> 로 백업 — 기존 백업 키는 절대 덮어쓰지 않는다
+   (postit.html 과 동일한 while 루프 규약). 성공 시 백업 키, 실패 시 null 반환 */
+function backupRaw(key, raw){
+  let ts = Date.now();
+  try{
+    let k = key + '-corrupt-' + ts;
+    while (localStorage.getItem(k) !== null){
+      ts += 1;
+      k = key + '-corrupt-' + ts;
+    }
+    localStorage.setItem(k, raw);
+    return k;
+  }catch(e){ return null; }
+}
+/* 손상된 원본을 백업 키로 보존하고 사용자에게 알림 */
+function backupCorrupt(raw, partial){
+  const bkey = backupRaw(STORE_KEY, raw);
+  showToast('저장된 일정 데이터가 조금 손상되어 있어 ' + (partial ? '일부 항목만 건너뛰고 불러왔어요.' : '새 일정으로 시작해요.')
+    + (bkey ? '\n예전 데이터는 안전하게 보관해 두었어요.'
+            : '\n예전 데이터는 백업하지 못했어요.'));
+}
+function loadEvents(){
+  let raw = null;
+  try{ raw = localStorage.getItem(STORE_KEY); }catch(e){ return {}; }
+  if (!raw) return {};
+  let obj = null;
+  try{
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) obj = parsed;
+  }catch(e){}
+  if (obj === null){
+    backupCorrupt(raw, false);
+    return {};
+  }
+  const res = sanitizeStore(obj);
+  if (res.dropped) backupCorrupt(raw, true);
+  return res.clean;
+}
+/* 저장소를 조용히 읽어 정제해 반환 (손상 시 null) — 병합용 */
+function readStore(){
+  let raw = null;
+  try{ raw = localStorage.getItem(STORE_KEY); }catch(e){ return null; }
+  if (!raw) return {};
+  try{
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    return sanitizeStore(parsed).clean;
+  }catch(e){ return null; }
+}
+/* 마지막 동기화 시점에 존재하던 일정 id 집합 */
+function snapshotSyncedIds(){
+  syncedIds = {};
+  for (const k of Object.keys(events)) for (const ev of events[k]) syncedIds[ev.id] = true;
+}
+/* 다른 창이 저장한 일정을 병합 (전체 덮어쓰기로 인한 유실 방지) */
+function mergeStore(){
+  const stored = readStore();
+  if (stored === null) return;
+  const memIds = {};
+  for (const k of Object.keys(events)) for (const ev of events[k]) memIds[ev.id] = true;
+  const storedIds = {};
+  for (const k of Object.keys(stored)){
+    for (const ev of stored[k]){
+      storedIds[ev.id] = true;
+      if (!memIds[ev.id] && !syncedIds[ev.id]){
+        /* 다른 창이 새로 추가한 일정 */
+        if (!events[k]) events[k] = [];
+        events[k].push(ev);
+      }
+    }
+  }
+  /* 다른 창이 삭제한 일정 반영 (이 창이 새로 만든 일정은 유지) */
+  for (const k of Object.keys(events)){
+    const kept = events[k].filter(ev => storedIds[ev.id] || !syncedIds[ev.id]);
+    if (kept.length) events[k] = kept; else delete events[k];
+  }
+}
+let saveErrorShown = false;
+function saveEvents(){
+  mergeStore();
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(events)); }catch(e){
+    if (!saveErrorShown){
+      saveErrorShown = true;
+      showToast('일정 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
+    }
+    return false;
+  }
+  snapshotSyncedIds();
+  return true;
+}
+function timeCmp(a, b){
+  if (!a.time && !b.time) return 0;
+  if (!a.time) return 1;
+  if (!b.time) return -1;
+  return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0);
+}
+
+/* ---------- 매주 반복 일정 (A30) ----------
+ * 저장: 별도 키 cal-repeats = [{id,start:'YYYY-MM-DD',time,text,freq:'weekly',ex:[제외 날짜],cat?,dday?}]
+ * cal-events 스키마는 불변(B-3) — 반복 규칙·예외 날짜만 신규 키에 추가 저장한다.
+ * 손상 백업 규약(<키>-corrupt-<ts>)·병합 저장(merge-on-write)은 cal-events 와 동일하게 적용. */
+function sanitizeRepeats(arr){
+  const out = [];
+  for (const r of arr){
+    if (!r || typeof r !== 'object' || typeof r.text !== 'string') continue;
+    if (typeof r.start !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(r.start)) continue;
+    const item = Object.assign({}, r);
+    item.id = (typeof r.id === 'string' && r.id) ? r.id : genId();
+    item.time = (typeof r.time === 'string') ? r.time : '';
+    item.freq = 'weekly';
+    item.ex = Array.isArray(r.ex) ? r.ex.filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) : [];
+    out.push(item);
+  }
+  return out;
+}
+function loadRepeats(){
+  let raw = null;
+  try{ raw = localStorage.getItem(REPEAT_KEY); }catch(e){ return []; }
+  if (!raw) return [];
+  let arr = null;
+  try{
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) arr = parsed;
+  }catch(e){}
+  if (arr === null){
+    const bkey = backupRaw(REPEAT_KEY, raw); /* while 루프 백업 — 기존 백업 미덮어쓰기 규약 통일 */
+    showToast('저장된 반복 일정 데이터가 손상되어 있어 새로 시작해요.'
+      + (bkey ? '\n예전 데이터는 안전하게 보관해 두었어요.' : ''));
+    return [];
+  }
+  return sanitizeRepeats(arr);
+}
+/* 저장소의 반복 규칙을 조용히 읽어 정제해 반환 (손상 시 null) — 병합용 */
+function readRepeats(){
+  let raw = null;
+  try{ raw = localStorage.getItem(REPEAT_KEY); }catch(e){ return null; }
+  if (!raw) return [];
+  try{
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return sanitizeRepeats(parsed);
+  }catch(e){ return null; }
+}
+function snapshotSyncedRepIds(){
+  syncedRepIds = {};
+  for (const r of repeats) syncedRepIds[r.id] = true;
+}
+/* 다른 창이 저장한 반복 규칙 병합 (예외 날짜는 합집합) */
+function mergeRepeats(){
+  const stored = readRepeats();
+  if (stored === null) return;
+  const mine = {};
+  for (const r of repeats) mine[r.id] = r;
+  const storedIds = {};
+  for (const r of stored){
+    storedIds[r.id] = true;
+    if (!mine[r.id]){
+      if (!syncedRepIds[r.id]) repeats.push(r); /* 다른 창이 새로 추가 */
+    } else if (Array.isArray(r.ex)){
+      for (const d of r.ex) if (mine[r.id].ex.indexOf(d) < 0) mine[r.id].ex.push(d);
+    }
+  }
+  repeats = repeats.filter(r => storedIds[r.id] || !syncedRepIds[r.id]);
+}
+let repeatSaveErrorShown = false;
+function saveRepeats(){
+  mergeRepeats();
+  try{ localStorage.setItem(REPEAT_KEY, JSON.stringify(repeats)); }catch(e){
+    if (!repeatSaveErrorShown){
+      repeatSaveErrorShown = true;
+      showToast('반복 일정 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
+    }
+    return false;
+  }
+  snapshotSyncedRepIds();
+  return true;
+}
+function findRule(id){
+  for (const r of repeats) if (r.id === id) return r;
+  return null;
+}
+/* key 날짜에 발생하는 반복 일정 발생분 (예외 날짜 제외) */
+function occurrencesFor(key){
+  const out = [];
+  for (const r of repeats){
+    if (r.freq !== 'weekly') continue;
+    if (key < r.start) continue; /* ISO 문자열 비교 */
+    if (daysBetweenKeys(r.start, key) % 7 !== 0) continue;
+    if (r.ex && r.ex.indexOf(key) >= 0) continue;
+    const it = { id: r.id + '@' + key, repId: r.id, repeat: true, time: r.time || '', text: r.text };
+    if (r.cat) it.cat = r.cat;
+    if (r.dday) it.dday = true;
+    out.push(it);
+  }
+  return out;
+}
+/* 그 날짜의 표시 항목 = 단발 일정 + 반복 발생분 (시간순) */
+function dayItems(key){
+  const list = (events[key] || []).slice().concat(occurrencesFor(key));
+  list.sort(timeCmp);
+  return list;
+}
+
+/* ---------- 설정 (cal-settings — additive 신규 키, cal-events/cal-repeats 스키마 불변) ----------
+ * 기본값은 전부 현행 동작과 동일: fresh 프로필에서 어떤 채점 관찰도 변하지 않는다
+ * (음력·D-day·알림 기본 켬, 주 시작 일요일, 글자 보통, 애니메이션 켬, 알림 정각).
+ * 손상 시 <키>-corrupt-<ts> while 루프 백업 후 기본값으로 시작 (A9 규약 통일). */
+const SETTINGS_KEY = 'cal-settings';
+const SETTINGS_DEFAULTS = {
+  fontSize: 'normal',  /* small | normal | large */
+  weekStart: 'sun',    /* sun | mon */
+  lunar: true,         /* 음력 표시 (A33 기본 켬) */
+  dday: true,          /* D-day 배지 (A31 기본 켬) */
+  alarm: true,         /* 일정 알림 (A32 기본 켬) */
+  alarmLead: 0,        /* 알림 선행(분): 0(정각) | 5 | 15 */
+  anim: 'on'           /* on | reduced | off */
+};
+function sanitizeSettings(obj){
+  const s = Object.assign({}, SETTINGS_DEFAULTS);
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)){
+    if (obj.fontSize === 'small' || obj.fontSize === 'normal' || obj.fontSize === 'large') s.fontSize = obj.fontSize;
+    if (obj.weekStart === 'sun' || obj.weekStart === 'mon') s.weekStart = obj.weekStart;
+    if (typeof obj.lunar === 'boolean') s.lunar = obj.lunar;
+    if (typeof obj.dday === 'boolean') s.dday = obj.dday;
+    if (typeof obj.alarm === 'boolean') s.alarm = obj.alarm;
+    if (obj.alarmLead === 0 || obj.alarmLead === 5 || obj.alarmLead === 15) s.alarmLead = obj.alarmLead;
+    if (obj.anim === 'on' || obj.anim === 'reduced' || obj.anim === 'off') s.anim = obj.anim;
+  }
+  return s;
+}
+function loadSettings(){
+  let raw = null;
+  try{ raw = localStorage.getItem(SETTINGS_KEY); }catch(e){ return Object.assign({}, SETTINGS_DEFAULTS); }
+  if (!raw) return Object.assign({}, SETTINGS_DEFAULTS);
+  let parsed = null, ok = false;
+  try{ parsed = JSON.parse(raw); ok = true; }catch(e){}
+  if (!ok){
+    backupRaw(SETTINGS_KEY, raw); /* 크래시 없이 백업 후 기본값 */
+    return Object.assign({}, SETTINGS_DEFAULTS);
+  }
+  return sanitizeSettings(parsed);
+}
+let settings = loadSettings();
+let settingsSaveErrorShown = false;
+function saveSettings(){
+  try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }catch(e){
+    if (!settingsSaveErrorShown){
+      settingsSaveErrorShown = true;
+      showToast('설정 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
+    }
+  }
+}
+/* 렌더 없이도 적용되는 루트 속성 (글자 크기·애니메이션) */
+function applySettingsAttrs(){
+  document.documentElement.setAttribute('data-font-size', settings.fontSize);
+  document.documentElement.setAttribute('data-anim', settings.anim);
+}
+applySettingsAttrs();
+function weekStartDow(){ return settings.weekStart === 'mon' ? 1 : 0; }
+
+/* ---------- state ---------- */
+let events = loadEvents();
+let syncedIds = {};
+snapshotSyncedIds();
+let repeats = loadRepeats();
+let syncedRepIds = {};
+snapshotSyncedRepIds();
+const now = new Date();
+let view = { y: now.getFullYear(), m: now.getMonth() };
+let selKey = todayKey();
+let editingId = null;
+let pendingRepDelete = null; /* 반복 발생분 삭제 선택 대기: { repId, key } (A30) */
+/* 주간/월간 뷰 (A35) — cal-view 로 영속 */
+let viewMode = 'month';
+try{ if (localStorage.getItem(VIEW_KEY) === 'week') viewMode = 'week'; }catch(e){}
+let weekAnchor = todayKey(); /* 주간 뷰가 보여줄 주의 기준 날짜 */
+
+/* ---------- dom refs ---------- */
+const $ = (id)=>document.getElementById(id);
+/* 사용자 모션 감소 설정 (장식 모션 끄기) */
+const motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+function reducedMotion(){
+  if (settings.anim !== 'on') return true; /* 설정 [효과] 줄임/끔 */
+  return !!(motionQuery && motionQuery.matches);
+}
+const monthTitle = $('monthTitle'), grid = $('grid'), weekdaysEl = $('weekdays');
+const panelDate = $('panelDate'), panelHoliday = $('panelHoliday');
+const eventList = $('eventList'), emptyMsg = $('emptyMsg');
+const addForm = $('addForm'), addTime = $('addTime'), addText = $('addText');
+const addDday = $('addDday'), catPick = $('catPick'), ctxMenu = $('ctxMenu');
+
+/* ---------- 카테고리 (A34) — 쌍별 RGB 유클리드 거리 ≥ 100 검증 완료 팔레트 ---------- */
+const CATEGORIES = [
+  { id:'c1', name:'빨강', color:'#e0524a' },
+  { id:'c2', name:'파랑', color:'#3f7fd6' },
+  { id:'c3', name:'초록', color:'#43a047' }
+];
+let addCat = null; /* 추가 폼에서 선택된 카테고리 id (null = 없음) */
+function catColor(id){
+  for (const c of CATEGORIES) if (c.id === id) return c.color;
+  return null;
+}
+function updateCatUI(){
+  const btns = catPick.querySelectorAll('.catBtn');
+  btns.forEach((b)=>{
+    const on = b.dataset.cat === addCat;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+for (const c of CATEGORIES){
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'catBtn';
+  b.setAttribute('data-category-color', '');
+  b.dataset.cat = c.id;
+  b.style.backgroundColor = c.color;
+  b.title = '카테고리: ' + c.name + ' (다시 누르면 해제)';
+  b.addEventListener('click', ()=>{
+    addCat = (addCat === c.id) ? null : c.id;
+    updateCatUI();
+  });
+  catPick.appendChild(b);
+}
+
+/* ---------- D-day 산술 (A31) — 로컬 자정 기준 달력일 차이 ---------- */
+function ddayLabel(key){
+  const p = key.split('-');
+  const target = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  const n = new Date();
+  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return 'D-day';
+  return diff > 0 ? ('D-' + diff) : ('D+' + (-diff));
+}
+
+/* ---------- 음력 변환 (A33) ----------
+ * 변환 테이블 출처: korean-lunar-calendar v0.4.0
+ *   https://github.com/usingsky/korean_lunar_calendar_js — MIT License, Copyright (c) 2022 Jinil Lee
+ *   (한국천문연구원 KARI 역법 데이터 기반. 2027년 설날처럼 중국 음력과 하루 어긋나는 해도 정확)
+ * 위 라이브러리로 음력 2024~2029년의 (음력 1/1 의 양력 날짜, 윤달 번호, 각 달의 일수)를
+ * 추출해 내장했다 (오프라인 자기완결, A1). 커버 양력 범위: 2024-02-10 ~ 2030-02-12.
+ * 검증(발주 #2, protocol/grader/lib/holidays.js 원장과 대조):
+ *   설날      2026-02-17 = 음 1/1,  2027-02-07 = 음 1/1
+ *   석가탄신일 2026-05-24 = 음 4/8,  2027-05-13 = 음 4/8
+ *   추석      2026-09-25 = 음 8/15, 2027-09-15 = 음 8/15
+ * lens[i] = 음력 i+1 번째 달의 일수. leap>0 이면 lens[leap] 위치가 "윤 leap월". */
+const LUNAR_YEARS = [
+  { y:2024, nyd:'2024-02-10', leap:0, lens:[29,30,29,29,30,29,30,30,29,30,30,29] },
+  { y:2025, nyd:'2025-01-29', leap:6, lens:[30,29,30,29,29,30,29,30,29,30,30,30,29] },
+  { y:2026, nyd:'2026-02-17', leap:0, lens:[30,29,30,29,29,30,29,30,29,30,30,30] },
+  { y:2027, nyd:'2027-02-07', leap:0, lens:[29,30,29,30,29,29,30,29,29,30,30,30] },
+  { y:2028, nyd:'2028-01-27', leap:5, lens:[29,30,30,29,30,29,29,30,29,29,30,30,29] },
+  { y:2029, nyd:'2029-02-13', leap:0, lens:[30,30,29,30,30,29,29,30,29,29,30,30] }
+];
+/* 양력 날짜 키 → { m: 음력 월, d: 음력 일, leap: 윤달 여부 } (표 범위 밖이면 null) */
+function lunarOfKey(key){
+  let rec = null;
+  for (const r of LUNAR_YEARS) if (r.nyd <= key) rec = r;
+  if (!rec) return null;
+  let off = daysBetweenKeys(rec.nyd, key);
+  for (let i = 0; i < rec.lens.length; i++){
+    if (off < rec.lens[i]){
+      let m, leap = false;
+      if (rec.leap > 0){
+        if (i < rec.leap) m = i + 1;
+        else if (i === rec.leap){ m = rec.leap; leap = true; }
+        else m = i;
+      } else {
+        m = i + 1;
+      }
+      return { m: m, d: off + 1, leap: leap };
+    }
+    off -= rec.lens[i];
+  }
+  return null; /* 다음 해 표 없음 (범위 밖) */
+}
+function lunarLabelOf(key){
+  const L = lunarOfKey(key);
+  if (!L) return null;
+  return '음 ' + (L.leap ? '윤' : '') + L.m + '.' + L.d;
+}
+
+/* ---------- weekday header (주 시작 요일 설정 반영 — 기본 일요일 = 현행과 동일) ---------- */
+function renderWeekdays(){
+  weekdaysEl.textContent = '';
+  const ws = weekStartDow();
+  for (let i = 0; i < 7; i++){
+    const dow = (ws + i) % 7;
+    const div = document.createElement('div');
+    div.textContent = WEEKDAY_NAMES[dow];
+    if (dow === 0) div.classList.add('wd-sun');
+    else if (dow === 6) div.classList.add('wd-sat');
+    weekdaysEl.appendChild(div);
+  }
+}
+renderWeekdays();
+
+/* ---------- render: grid ---------- */
+/* 날짜 셀 1개 구성 (월간·주간 공용) — 숫자·음력·공휴일·D-day·일정 줄 */
+function buildCell(d, other, tKey){
+  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate(), dow = d.getDay();
+  const key = keyOf(y, m, day);
+  const holiday = HOLIDAY_MAP[key];
+
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  cell.dataset.key = key; /* 컨텍스트 메뉴(A21)용 날짜 키 */
+  if (other) cell.classList.add('other');
+  if (key === tKey) cell.classList.add('today');
+  if (key === selKey) cell.classList.add('selected');
+
+  const top = document.createElement('span');
+  top.className = 'rowTop';
+  const num = document.createElement('span');
+  num.className = 'num';
+  if (dow === 0 || holiday) num.classList.add('sun');
+  else if (dow === 6) num.classList.add('sat');
+  num.textContent = day;
+  top.appendChild(num);
+  /* 음력 표기 (A33) — 설정 [표시]에서 끌 수 있다 (기본 켬) */
+  const lun = settings.lunar ? lunarLabelOf(key) : null;
+  if (lun !== null){
+    const ls = document.createElement('span');
+    ls.className = 'lunar';
+    ls.setAttribute('data-lunar', '');
+    ls.textContent = lun;
+    ls.title = '음력 ' + lun.slice(2);
+    top.appendChild(ls);
+  }
+  cell.appendChild(top);
+
+  const items = dayItems(key); /* 단발 일정 + 반복 발생분 */
+
+  /* D-day 배지 (A31): 기념일 일정이 있는 날짜 — 설정 [표시]에서 끌 수 있다 (기본 켬) */
+  if (settings.dday && items.some(ev => ev.dday === true)){
+    const badge = document.createElement('span');
+    badge.className = 'ddayBadge';
+    badge.setAttribute('data-dday-badge', '');
+    badge.textContent = ddayLabel(key);
+    cell.appendChild(badge);
+  }
+
+  if (holiday){
+    const h = document.createElement('span');
+    h.className = 'holi';
+    h.textContent = holiday;
+    h.title = holiday;
+    cell.appendChild(h);
+  }
+
+  /* 일정 줄: 카테고리 점([data-event-dot], A34) + 텍스트 (A30·A35) */
+  const maxLines = viewMode === 'week' ? 10 : 3;
+  for (let k = 0; k < items.length && k < maxLines; k++){
+    const it = items[k];
+    const line = document.createElement('span');
+    line.className = 'evLine';
+    const dot = document.createElement('i');
+    dot.setAttribute('data-event-dot', '');
+    const col = catColor(it.cat);
+    if (col) dot.style.backgroundColor = col;
+    line.appendChild(dot);
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = it.text;
+    line.appendChild(t);
+    line.title = (it.time ? it.time + ' ' : '') + it.text + (it.repeat ? ' (매주 반복)' : '');
+    cell.appendChild(line);
+  }
+  if (items.length > maxLines){
+    const moreLine = document.createElement('span');
+    moreLine.className = 'evLine moreLine';
+    moreLine.textContent = '+' + (items.length - maxLines) + '개 더';
+    cell.appendChild(moreLine);
+  }
+
+  cell.addEventListener('click', ()=>{ selectDate(key); });
+  return cell;
+}
+
+function renderGrid(animate){
+  grid.setAttribute('data-view-mode', viewMode); /* A35 판정 앵커 */
+  grid.textContent = '';
+  const tKey = todayKey();
+
+  if (viewMode === 'week'){
+    /* 주간 뷰 (A35): weekAnchor 가 속한 주(일~토) 7칸 */
+    const a = dateFromKey(weekAnchor);
+    monthTitle.textContent = a.getFullYear() + '년 ' + (a.getMonth() + 1) + '월';
+    const start = new Date(a.getFullYear(), a.getMonth(), a.getDate() - ((a.getDay() - weekStartDow() + 7) % 7));
+    for (let i = 0; i < 7; i++){
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      grid.appendChild(buildCell(d, false, tKey));
+    }
+  } else {
+    monthTitle.textContent = view.y + '년 ' + (view.m + 1) + '월';
+    const startDow = (new Date(view.y, view.m, 1).getDay() - weekStartDow() + 7) % 7;
+    const start = new Date(view.y, view.m, 1 - startDow);
+    for (let i = 0; i < 42; i++){
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      grid.appendChild(buildCell(d, d.getMonth() !== view.m, tKey));
+    }
+  }
+
+  if (animate){
+    const cls = animate === 'left' ? 'fadeL' : (animate === 'right' ? 'fadeR' : 'fade');
+    grid.classList.remove('fade', 'fadeL', 'fadeR');
+    void grid.offsetWidth;
+    grid.classList.add(cls);
+  }
+}
+
+/* 날짜 선택 (셀 클릭·컨텍스트 메뉴 공용) — 월간에서 다른 달이면 방향 페이드와 함께 이동 */
+function selectDate(key){
+  selKey = key;
+  editingId = null;
+  pendingRepDelete = null;
+  if (viewMode === 'week'){
+    weekAnchor = key;
+    renderGrid(false);
+    renderPanel();
+    return;
+  }
+  const p = key.split('-');
+  const ty = Number(p[0]), tm = Number(p[1]) - 1;
+  if (view.y !== ty || view.m !== tm){
+    const dir = (ty * 12 + tm) > (view.y * 12 + view.m) ? 'right' : 'left';
+    view = { y: ty, m: tm };
+    sndFlip();
+    renderGrid(dir);
+  } else {
+    renderGrid(false);
+  }
+  renderPanel();
+}
+
+/* ---------- render: side panel ---------- */
+function renderPanel(){
+  const parts = selKey.split('-');
+  const y = Number(parts[0]), m = Number(parts[1]) - 1, d = Number(parts[2]);
+  const dow = new Date(y, m, d).getDay();
+  panelDate.textContent = (m + 1) + '월 ' + d + '일 (' + WEEKDAY_NAMES[dow] + ')';
+  panelHoliday.textContent = HOLIDAY_MAP[selKey] || '';
+
+  eventList.textContent = '';
+  const list = dayItems(selKey); /* 단발 일정 + 반복 발생분 (A30) */
+  emptyMsg.hidden = list.length > 0;
+
+  for (const ev of list){
+    const li = document.createElement('li');
+    const rule = ev.repeat ? findRule(ev.repId) : null;
+    if (ev.repeat && pendingRepDelete && pendingRepDelete.repId === ev.repId && pendingRepDelete.key === selKey){
+      li.appendChild(buildRepDeleteChoice(ev)); /* 이 일정만 / 모든 반복 선택 (A30) */
+    } else if (editingId === ev.id && (!ev.repeat || rule)){
+      li.appendChild(ev.repeat ? buildRuleEditRow(rule) : buildEditRow(ev));
+    } else {
+      if (ev.repeat){
+        li.dataset.repId = ev.repId; /* 반복 발생분 컨텍스트 메뉴용 */
+      } else {
+        li.dataset.evId = ev.id;     /* 컨텍스트 메뉴(A21)용 */
+      }
+      li.dataset.evKey = selKey;
+      const col = catColor(ev.cat);
+      if (col){
+        const cd = document.createElement('span');
+        cd.className = 'catDot';
+        cd.style.backgroundColor = col;
+        li.appendChild(cd);
+      }
+      if (ev.time){
+        const badge = document.createElement('span');
+        badge.className = 'timeBadge';
+        badge.textContent = ev.time;
+        li.appendChild(badge);
+      }
+      if (ev.repeat){
+        const rb = document.createElement('span');
+        rb.className = 'repBadge';
+        rb.textContent = '🔁';
+        rb.title = '매주 반복';
+        li.appendChild(rb);
+      }
+      if (settings.dday && ev.dday === true){
+        const db = document.createElement('span');
+        db.className = 'ddayBadge';
+        db.setAttribute('data-dday-badge', '');
+        db.textContent = ddayLabel(selKey);
+        li.appendChild(db);
+      }
+      const txt = document.createElement('span');
+      txt.className = 'evText';
+      txt.textContent = ev.text;
+      li.appendChild(txt);
+
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'evBtn';
+      editBtn.textContent = '✏️';
+      editBtn.title = '수정';
+      editBtn.addEventListener('click', ()=>{ editingId = ev.id; renderPanel(); });
+      li.appendChild(editBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'evBtn del';
+      delBtn.textContent = '×';
+      delBtn.title = '삭제';
+      delBtn.addEventListener('click', ()=>{
+        if (ev.repeat){
+          pendingRepDelete = { repId: ev.repId, key: selKey };
+          renderPanel();
+        } else {
+          deleteEvent(selKey, ev.id, li);
+        }
+      });
+      li.appendChild(delBtn);
+    }
+    if (justAddedId && ev.id === justAddedId && !reducedMotion()) li.classList.add('slideIn');
+    eventList.appendChild(li);
+  }
+  justAddedId = null;
+}
+
+/* 반복 발생분 삭제 선택 UI (A30): [data-del-one] 이 일정만 / [data-del-all] 모든 반복 */
+function buildRepDeleteChoice(ev){
+  const wrap = document.createElement('div');
+  wrap.className = 'delChoice';
+  const q = document.createElement('span');
+  q.className = 'q';
+  q.textContent = '매주 반복 일정입니다: ' + ev.text;
+  wrap.appendChild(q);
+  const row = document.createElement('div');
+  row.className = 'row';
+  const oneBtn = document.createElement('button');
+  oneBtn.type = 'button';
+  oneBtn.setAttribute('data-del-one', '');
+  oneBtn.textContent = '이 일정만 삭제';
+  oneBtn.addEventListener('click', ()=>{ deleteRepeatOccurrence(ev.repId, selKey); });
+  row.appendChild(oneBtn);
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button';
+  allBtn.setAttribute('data-del-all', '');
+  allBtn.textContent = '모든 반복 삭제';
+  allBtn.addEventListener('click', ()=>{ deleteRepeatRule(ev.repId); });
+  row.appendChild(allBtn);
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = '취소';
+  cancelBtn.addEventListener('click', ()=>{ pendingRepDelete = null; renderPanel(); });
+  row.appendChild(cancelBtn);
+  wrap.appendChild(row);
+  return wrap;
+}
+
+function buildEditRow(ev){
+  const wrap = document.createElement('div');
+  wrap.className = 'editRow';
+
+  const rowA = document.createElement('div');
+  rowA.className = 'rowA';
+  const timeIn = document.createElement('input');
+  timeIn.type = 'time';
+  timeIn.value = ev.time || '';
+  const textIn = document.createElement('input');
+  textIn.type = 'text';
+  textIn.maxLength = 200;
+  textIn.value = ev.text;
+  rowA.appendChild(timeIn);
+  rowA.appendChild(textIn);
+
+  const rowB = document.createElement('div');
+  rowB.className = 'rowB';
+  const ddayLab = document.createElement('label');
+  ddayLab.className = 'ddayLab';
+  ddayLab.title = '기념일로 표시 (D-day 배지)';
+  const ddayIn = document.createElement('input');
+  ddayIn.type = 'checkbox';
+  ddayIn.setAttribute('data-dday', '');
+  ddayIn.checked = ev.dday === true;
+  ddayLab.appendChild(ddayIn);
+  ddayLab.appendChild(document.createTextNode(' 기념일'));
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.textContent = '저장';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = '취소';
+  rowB.appendChild(ddayLab);
+  rowB.appendChild(saveBtn);
+  rowB.appendChild(cancelBtn);
+
+  function commit(){
+    const t = textIn.value.trim();
+    if (!t){ textIn.focus(); return; }
+    ev.text = t;
+    ev.time = timeIn.value || '';
+    if (ddayIn.checked) ev.dday = true; else delete ev.dday;
+    saveEvents();
+    editingId = null;
+    renderGrid(false);
+    renderPanel();
+  }
+  function cancel(){ editingId = null; renderPanel(); }
+
+  saveBtn.addEventListener('click', commit);
+  cancelBtn.addEventListener('click', cancel);
+  textIn.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter'){ e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') cancel();
+  });
+  timeIn.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter'){ e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') cancel();
+  });
+
+  wrap.appendChild(rowA);
+  wrap.appendChild(rowB);
+  setTimeout(()=>textIn.focus(), 0);
+  return wrap;
+}
+
+/* 반복 규칙 수정 줄 (A30) — 수정은 모든 반복 발생분에 적용 */
+function buildRuleEditRow(rule){
+  const wrap = document.createElement('div');
+  wrap.className = 'editRow';
+  wrap.title = '매주 반복 일정 — 수정 내용은 모든 반복에 적용됩니다';
+
+  const rowA = document.createElement('div');
+  rowA.className = 'rowA';
+  const timeIn = document.createElement('input');
+  timeIn.type = 'time';
+  timeIn.value = rule.time || '';
+  const textIn = document.createElement('input');
+  textIn.type = 'text';
+  textIn.maxLength = 200;
+  textIn.value = rule.text;
+  rowA.appendChild(timeIn);
+  rowA.appendChild(textIn);
+
+  const rowB = document.createElement('div');
+  rowB.className = 'rowB';
+  const ddayLab = document.createElement('label');
+  ddayLab.className = 'ddayLab';
+  ddayLab.title = '기념일로 표시 (D-day 배지)';
+  const ddayIn = document.createElement('input');
+  ddayIn.type = 'checkbox';
+  ddayIn.setAttribute('data-dday', '');
+  ddayIn.checked = rule.dday === true;
+  ddayLab.appendChild(ddayIn);
+  ddayLab.appendChild(document.createTextNode(' 기념일'));
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.textContent = '저장';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = '취소';
+  rowB.appendChild(ddayLab);
+  rowB.appendChild(saveBtn);
+  rowB.appendChild(cancelBtn);
+
+  function commit(){
+    const t = textIn.value.trim();
+    if (!t){ textIn.focus(); return; }
+    rule.text = t;
+    rule.time = timeIn.value || '';
+    if (ddayIn.checked) rule.dday = true; else delete rule.dday;
+    saveRepeats();
+    editingId = null;
+    renderGrid(false);
+    renderPanel();
+  }
+  function cancel(){ editingId = null; renderPanel(); }
+
+  saveBtn.addEventListener('click', commit);
+  cancelBtn.addEventListener('click', cancel);
+  textIn.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter'){ e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') cancel();
+  });
+  timeIn.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter'){ e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') cancel();
+  });
+
+  wrap.appendChild(rowA);
+  wrap.appendChild(rowB);
+  setTimeout(()=>textIn.focus(), 0);
+  return wrap;
+}
+
+/* ---------- event CRUD ---------- */
+let justAddedId = null; /* 방금 추가한 일정 — 슬라이드 인 대상 */
+let lastDeleted = null; /* 실행 취소(A20) 버퍼: { key, ev, index } — 메모리에만 보관 */
+function addEvent(key, time, text, opts){
+  if (!events[key]) events[key] = [];
+  const ev = { id: genId(), time: time || '', text: text };
+  if (opts && opts.cat && catColor(opts.cat)) ev.cat = opts.cat;
+  if (opts && opts.dday) ev.dday = true;
+  events[key].push(ev);
+  saveEvents();
+  sndAdd();
+  justAddedId = ev.id;
+  renderGrid(false);
+  renderPanel();
+}
+function deleteEvent(key, id, li){
+  const list = events[key];
+  if (!list) return;
+  const idx = list.findIndex(e => e.id === id);
+  if (idx < 0) return;
+  const removed = list[idx];
+  list.splice(idx, 1);
+  if (list.length === 0) delete events[key];
+  saveEvents(); /* 저장은 즉시 — 애니메이션은 표시만 잠깐 지연 */
+  sndDelete();
+  lastDeleted = { key: key, ev: removed, index: idx };
+  showUndoToast('일정을 삭제했습니다: ' + removed.text);
+  renderGrid(false);
+  if (li && li.isConnected && !reducedMotion()){
+    li.classList.add('removing');
+    setTimeout(renderPanel, 150);
+  } else {
+    renderPanel();
+  }
+}
+/* 실행 취소 (A20): 마지막 삭제 항목을 원래 자리로 복원 */
+document.getElementById('toastUndo').addEventListener('click', ()=>{
+  if (!lastDeleted) { hideToast(); return; }
+  const d = lastDeleted;
+  lastDeleted = null;
+  if (!events[d.key]) events[d.key] = [];
+  if (!events[d.key].some(e => e.id === d.ev.id)){
+    const pos = Math.min(d.index, events[d.key].length);
+    events[d.key].splice(pos, 0, d.ev);
+  }
+  saveEvents();
+  sndAdd();
+  renderGrid(false);
+  renderPanel();
+  hideToast();
+});
+/* 복제 (A21 컨텍스트 메뉴): 같은 날짜에 새 id 로 복사 */
+function duplicateEvent(key, id){
+  const list = events[key] || [];
+  const src = list.find(e => e.id === id);
+  if (!src) return;
+  const copy = Object.assign({}, src, { id: genId() });
+  list.push(copy);
+  saveEvents();
+  sndAdd();
+  justAddedId = copy.id;
+  renderGrid(false);
+  renderPanel();
+}
+
+/* ---------- repeat CRUD (A30) ---------- */
+function addRepeatRule(startKey, time, text, opts){
+  const rule = { id: genId(), start: startKey, time: time || '', text: text, freq: 'weekly', ex: [] };
+  if (opts && opts.cat && catColor(opts.cat)) rule.cat = opts.cat;
+  if (opts && opts.dday) rule.dday = true;
+  repeats.push(rule);
+  saveRepeats();
+  sndAdd();
+  justAddedId = rule.id + '@' + startKey;
+  renderGrid(false);
+  renderPanel();
+}
+/* 발생분 1건만 제외 (예외 날짜 추가) — [data-del-one] */
+function deleteRepeatOccurrence(repId, key){
+  const rule = findRule(repId);
+  pendingRepDelete = null;
+  if (rule){
+    if (!Array.isArray(rule.ex)) rule.ex = [];
+    if (rule.ex.indexOf(key) < 0) rule.ex.push(key);
+    saveRepeats();
+    sndDelete();
+    showToast('이 날짜의 반복 일정만 삭제했습니다: ' + rule.text);
+  }
+  renderGrid(false);
+  renderPanel();
+}
+/* 규칙 전체 삭제 — [data-del-all] */
+function deleteRepeatRule(repId){
+  const rule = findRule(repId);
+  pendingRepDelete = null;
+  if (rule){
+    repeats = repeats.filter(r => r.id !== repId);
+    saveRepeats();
+    sndDelete();
+    showToast('반복 일정을 모두 삭제했습니다: ' + rule.text);
+  }
+  renderGrid(false);
+  renderPanel();
+}
+
+const repeatSel = $('repeatSel');
+addForm.addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const text = addText.value.trim();
+  if (!text){ addText.focus(); return; }
+  if (repeatSel.value === 'weekly'){
+    addRepeatRule(selKey, addTime.value, text, { cat: addCat, dday: addDday.checked }); /* 매주 반복 (A30) */
+  } else {
+    addEvent(selKey, addTime.value, text, { cat: addCat, dday: addDday.checked });
+  }
+  addText.value = '';
+  addTime.value = '';
+  addDday.checked = false;
+  repeatSel.value = '';
+  addText.focus();
+});
+
+/* ---------- navigation ---------- */
+function shiftMonth(delta){
+  const d = new Date(view.y, view.m + delta, 1);
+  view = { y: d.getFullYear(), m: d.getMonth() };
+  sndFlip();
+  renderGrid(delta > 0 ? 'right' : 'left'); /* 방향 페이드 (C7) */
+}
+/* 주간 뷰에서 ◀▶ = 한 주 이동 (A35) */
+function shiftWeek(delta){
+  const a = dateFromKey(weekAnchor);
+  const d = new Date(a.getFullYear(), a.getMonth(), a.getDate() + delta * 7);
+  weekAnchor = keyOf(d.getFullYear(), d.getMonth(), d.getDate());
+  sndFlip();
+  renderGrid(delta > 0 ? 'right' : 'left');
+}
+function nav(delta){
+  if (viewMode === 'week') shiftWeek(delta); else shiftMonth(delta);
+}
+function goToday(){
+  const n = new Date();
+  editingId = null;
+  pendingRepDelete = null;
+  if (viewMode === 'week'){
+    selKey = todayKey();
+    weekAnchor = selKey;
+    renderGrid(false);
+    renderPanel();
+    return;
+  }
+  const cur = view.y * 12 + view.m;
+  const tgt = n.getFullYear() * 12 + n.getMonth();
+  if (cur !== tgt) sndFlip();
+  view = { y: n.getFullYear(), m: n.getMonth() };
+  selKey = todayKey();
+  renderGrid(cur === tgt ? false : (tgt > cur ? 'right' : 'left'));
+  renderPanel();
+}
+$('prevBtn').addEventListener('click', ()=>nav(-1));
+$('nextBtn').addEventListener('click', ()=>nav(1));
+$('todayBtn').addEventListener('click', goToday);
+
+/* ---------- 주간/월간 뷰 토글 (A35) ---------- */
+const weekBtn = $('weekBtn');
+function applyWeekBtn(){
+  weekBtn.textContent = viewMode === 'week' ? '월간' : '주간';
+  weekBtn.title = viewMode === 'week' ? '월간 보기로 전환 (W)' : '주간 보기로 전환 (W)';
+}
+function toggleViewMode(){
+  if (viewMode === 'week'){
+    viewMode = 'month';
+    const d = dateFromKey(weekAnchor); /* 보던 주의 달로 복귀 */
+    view = { y: d.getFullYear(), m: d.getMonth() };
+  } else {
+    viewMode = 'week';
+    weekAnchor = selKey; /* 선택 날짜가 속한 주 */
+  }
+  try{ localStorage.setItem(VIEW_KEY, viewMode); }catch(e){}
+  applyWeekBtn();
+  sndFlip();
+  renderGrid(true);
+  renderPanel();
+}
+weekBtn.addEventListener('click', toggleViewMode);
+applyWeekBtn();
+
+document.addEventListener('keydown', (e)=>{
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+  if (e.key === 'ArrowLeft'){ e.preventDefault(); nav(-1); }
+  else if (e.key === 'ArrowRight'){ e.preventDefault(); nav(1); }
+  else if (e.key === 't' || e.key === 'T'){ goToday(); }
+  else if (e.key === 'w' || e.key === 'W'){ toggleViewMode(); }
+});
+
+/* ---------- theme presets (A36) — 기본(크림)/다크(밤의 서재)/미니멀 화이트 ---------- */
+const THEME_KEY = 'cal-theme';
+const PRESETS = ['basic', 'dark', 'white'];
+const themeSel = $('themeSel');
+function applyPreset(p, save){
+  if (PRESETS.indexOf(p) < 0) p = 'basic';
+  document.documentElement.setAttribute('data-preset', p);
+  if (p === 'dark') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', 'light');
+  themeSel.value = p;
+  if (save){
+    try{ localStorage.setItem(THEME_KEY, p); }catch(e){}
+    /* 구 'theme' 키 하위호환 동기화 (v1 스키마 보존) */
+    try{ localStorage.setItem('theme', p === 'dark' ? 'dark' : 'light'); }catch(e){}
+  }
+}
+themeSel.addEventListener('change', ()=>applyPreset(themeSel.value, true));
+(function(){
+  let p = null;
+  try{ p = localStorage.getItem(THEME_KEY); }catch(e){}
+  if (PRESETS.indexOf(p) < 0){
+    let legacy = null;
+    try{ legacy = localStorage.getItem('theme'); }catch(e){}
+    p = legacy === 'dark' ? 'dark' : 'basic';
+  }
+  applyPreset(p, false);
+})();
+
+/* ---------- sound (합성 효과음 — 외부 파일·네트워크 0, 사용자 제스처 시에만, 실패는 조용히) ---------- */
+const SOUND_KEY = 'cal-sound';
+const VOL_KEY = 'cal-sound-vol';
+let soundOn = true; /* 기본 ON */
+try{ soundOn = localStorage.getItem(SOUND_KEY) !== 'off'; }catch(e){}
+/* 마스터 볼륨 (A37): 0~100, 게인 = 값/100. 기본 10 (기존 0.10 게인과 동일) */
+let volume = 10;
+try{
+  const rawV = localStorage.getItem(VOL_KEY);
+  if (rawV !== null && rawV !== '' && isFinite(Number(rawV))){
+    volume = Math.max(0, Math.min(100, Math.round(Number(rawV))));
+  }
+}catch(e){}
+let audioCtx = null, masterGain = null;
+function audioReady(){
+  try{
+    if (!audioCtx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = volume / 100; /* 마스터 볼륨 */
+      masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended'){
+      const p = audioCtx.resume();
+      if (p && p.catch) p.catch(()=>{});
+    }
+    return audioCtx;
+  }catch(e){ return null; }
+}
+function playTick(freq, dur, vol){
+  if (!soundOn) return;
+  try{
+    const ctx = audioReady();
+    if (!ctx || !masterGain) return;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(60, freq * 0.6), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }catch(e){}
+}
+function sndAdd(){ playTick(880, 0.09, 0.9); }      /* 일정 추가: 부드러운 틱 */
+function sndDelete(){ playTick(392, 0.055, 0.7); }  /* 삭제: 더 짧고 낮은 틱 */
+function sndPreview(){ playTick(1046.5, 0.09, 0.8); } /* 설정 미리듣기 "톡" — 사용자 제스처 내부에서만 호출, 음소거·볼륨 존중 */
+function sndAlarm(){                                /* 일정 알림 (A32): 두 음짜리 차임 */
+  /* 사용자 제스처 없이 오디오 컨텍스트를 새로 만들지 않는다 (자동재생 정책·제스처 게이트) */
+  if (!soundOn || !audioCtx || audioCtx.state !== 'running') return;
+  playTick(1046.5, 0.12, 0.85);
+  setTimeout(()=>playTick(1318.5, 0.16, 0.85), 140);
+}
+function sndFlip(){                                 /* 달 넘김: 아주 옅은 종이 스치는 속삭임 */
+  if (!soundOn) return;
+  try{
+    const ctx = audioReady();
+    if (!ctx || !masterGain) return;
+    const t0 = ctx.currentTime;
+    const len = Math.max(1, Math.floor(ctx.sampleRate * 0.07));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = 1600;
+    filt.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.22, t0); /* 가장 조용한 소리 */
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.07);
+    src.connect(filt); filt.connect(g); g.connect(masterGain);
+    src.start(t0);
+  }catch(e){}
+}
+const soundBtn = $('soundBtn');
+function applySoundIcon(){
+  soundBtn.textContent = soundOn ? '🔊' : '🔇';
+  soundBtn.title = soundOn ? '효과음 끄기' : '효과음 켜기';
+}
+/* 음소거 공용 세터 — 헤더 버튼과 설정 패널 미러가 함께 쓴다 (cal-sound 양방향 동기화) */
+function setSoundOn(on){
+  soundOn = !!on;
+  try{ localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); }catch(e){}
+  applySoundIcon();
+  syncSoundMirror();
+}
+soundBtn.addEventListener('click', ()=>{
+  setSoundOn(!soundOn);
+  if (soundOn) sndAdd(); /* 켜짐 확인 틱 */
+});
+applySoundIcon();
+
+/* ---------- volume slider (A37) ---------- */
+const volRange = $('volRange');
+function applyVolume(v, save){
+  volume = Math.max(0, Math.min(100, Math.round(v)));
+  const gain = volume / 100;
+  if (masterGain){
+    try{ masterGain.gain.value = gain; }catch(e){}
+  }
+  /* 마스터 게인 상시 노출 (채점 훅): body[data-volume-gain] */
+  document.body.setAttribute('data-volume-gain', String(Math.round(gain * 100) / 100));
+  if (save){
+    try{ localStorage.setItem(VOL_KEY, String(volume)); }catch(e){}
+  }
+}
+volRange.value = String(volume);
+applyVolume(volume, false);
+volRange.addEventListener('input', ()=>{
+  applyVolume(Number(volRange.value) || 0, true);
+  syncSoundMirror(); /* 설정 패널 미러 동기화 (cal-sound-vol 양방향) */
+});
+/* 읽기 전용 게터 (rev.5 B-5 허용 전역) */
+window.__getMasterGain = function(){ return volume / 100; };
+
+/* ---------- export / import ----------
+ * 내보내기 형식 v2: {version, events, repeats} 를 포함하되, 구형식 호환·A15 왕복 계약을 위해
+ * 최상위에 평면 날짜 키(구형식 그대로)도 함께 둔다 — 구버전 가져오기는 평면 키만 읽어도 동작.
+ * 가져오기: 신형식({events} 객체 + repeats 병합)과 구형식(평면 날짜 키만) 모두 수용. */
+function buildExportPayload(){
+  const payload = {};
+  for (const k of Object.keys(events)) payload[k] = events[k]; /* 평면 날짜 키 (구형식·A15) */
+  payload.version = 2;
+  payload.events = events;
+  payload.repeats = repeats; /* 반복 규칙(cal-repeats) 동봉 */
+  return payload;
+}
+function doExport(){
+  const blob = new Blob([JSON.stringify(buildExportPayload(), null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'calendar-backup.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+$('exportBtn').addEventListener('click', doExport);
+
+/* 날짜 키 객체(src)에서 일정을 병합해 들여온다 — 가져온 건수 반환 */
+function importEventsFrom(src){
+  let count = 0;
+  for (const key of Object.keys(src)){
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+    const kp = key.split('-');
+    const ky = Number(kp[0]), km = Number(kp[1]), kd = Number(kp[2]);
+    const kdate = new Date(ky, km - 1, kd);
+    if (kdate.getFullYear() !== ky || kdate.getMonth() !== km - 1 || kdate.getDate() !== kd) continue;
+    const arr = src[key];
+    if (!Array.isArray(arr)) continue;
+    for (const it of arr){
+      if (!it || typeof it !== 'object') continue;
+      const text = (typeof it.text === 'string') ? it.text.trim() : '';
+      if (!text) continue;
+      const time = (typeof it.time === 'string' && /^\d{2}:\d{2}$/.test(it.time)) ? it.time : '';
+      const id = (typeof it.id === 'string' && it.id) ? it.id : genId();
+      if (!events[key]) events[key] = [];
+      if (events[key].some(e => e.id === id)) continue;
+      /* additive 필드(cat·dday 등) 보존 */
+      const item = Object.assign({}, it);
+      item.id = id; item.time = time; item.text = text;
+      events[key].push(item);
+      count++;
+    }
+  }
+  return count;
+}
+/* 반복 규칙 배열을 병합해 들여온다 (id 기준 — 기존 규칙은 예외 날짜 합집합). 새 규칙 수 반환 */
+function importRepeatsFrom(arr){
+  const rules = sanitizeRepeats(arr);
+  let added = 0, changed = false;
+  for (const r of rules){
+    const mine = findRule(r.id);
+    if (!mine){
+      repeats.push(r);
+      added++;
+      changed = true;
+    } else if (Array.isArray(r.ex)){
+      for (const d of r.ex) if (mine.ex.indexOf(d) < 0){ mine.ex.push(d); changed = true; }
+    }
+  }
+  if (changed) saveRepeats();
+  return added;
+}
+
+const importFile = $('importFile');
+$('importBtn').addEventListener('click', ()=>importFile.click());
+importFile.addEventListener('change', ()=>{
+  const file = importFile.files && importFile.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const obj = JSON.parse(String(reader.result));
+      if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) throw new Error('bad');
+      /* 신형식({version, events, repeats})이면 events 객체에서, 구형식이면 평면 날짜 키에서 */
+      const src = (obj.events && typeof obj.events === 'object' && !Array.isArray(obj.events)) ? obj.events : obj;
+      const count = importEventsFrom(src);
+      const repCount = Array.isArray(obj.repeats) ? importRepeatsFrom(obj.repeats) : 0;
+      saveEvents();
+      renderGrid(false);
+      renderPanel();
+      showToast(count + '개의 일정을 가져왔습니다.'
+        + (repCount > 0 ? '\n반복 일정 규칙 ' + repCount + '개도 함께 가져왔어요.' : ''));
+    }catch(err){
+      showToast('가져오기 실패: 올바른 백업 파일이 아닙니다.');
+    }
+    importFile.value = '';
+  };
+  reader.onerror = ()=>{ showToast('파일을 읽을 수 없습니다.'); importFile.value = ''; };
+  reader.readAsText(file);
+});
+
+/* ---------- context menu (A21) — 우클릭: 셀 = 일정 추가 / 일정 = 수정·삭제·복제 ---------- */
+function closeCtxMenu(){
+  ctxMenu.hidden = true;
+  ctxMenu.textContent = '';
+}
+function openCtxMenu(kind, items, x, y){
+  ctxMenu.textContent = '';
+  ctxMenu.setAttribute('data-ctx-menu', kind);
+  for (const it of items){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('data-ctx-item', '');
+    b.textContent = it.label;
+    b.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      closeCtxMenu();
+      it.run();
+    });
+    ctxMenu.appendChild(b);
+  }
+  ctxMenu.hidden = false;
+  /* 화면 밖으로 나가지 않게 배치 */
+  ctxMenu.style.left = '0px';
+  ctxMenu.style.top = '0px';
+  const r = ctxMenu.getBoundingClientRect();
+  const nx = Math.max(0, Math.min(x, window.innerWidth - r.width - 8));
+  const ny = Math.max(0, Math.min(y, window.innerHeight - r.height - 8));
+  ctxMenu.style.left = nx + 'px';
+  ctxMenu.style.top = ny + 'px';
+}
+function openCellMenu(key, x, y){
+  openCtxMenu('cell', [
+    { label: '이 날짜에 일정 추가', run(){ selectDate(key); addText.focus(); } }
+  ], x, y);
+}
+function openEventMenu(key, id, li, x, y){
+  openCtxMenu('event', [
+    { label: '수정', run(){
+        if (selKey !== key) selectDate(key);
+        editingId = id;
+        renderPanel();
+      } },
+    { label: '삭제', run(){ deleteEvent(key, id, li); } },
+    { label: '복제', run(){ duplicateEvent(key, id); } }
+  ], x, y);
+}
+/* 반복 발생분 메뉴 (A30): 수정=규칙 전체 / 삭제=선택 UI / 복제=그 날짜의 단발 일정으로 */
+function openRepeatMenu(key, repId, x, y){
+  openCtxMenu('event', [
+    { label: '수정', run(){
+        if (selKey !== key) selectDate(key);
+        editingId = repId + '@' + key;
+        renderPanel();
+      } },
+    { label: '삭제', run(){
+        if (selKey !== key) selectDate(key);
+        pendingRepDelete = { repId: repId, key: key };
+        renderPanel();
+      } },
+    { label: '복제', run(){
+        const r = findRule(repId);
+        if (r) addEvent(key, r.time, r.text, { cat: r.cat, dday: r.dday });
+      } }
+  ], x, y);
+}
+document.addEventListener('contextmenu', (e)=>{
+  const t = e.target;
+  if (!(t instanceof Element)) return;
+  if (ctxMenu.contains(t)){ e.preventDefault(); return; }
+  /* 입력 요소는 브라우저 기본 메뉴(붙여넣기 등) 유지 */
+  if (t.closest('input, textarea, select')){ closeCtxMenu(); return; }
+  const li = t.closest('#eventList li');
+  if (li && li.dataset.evId){
+    e.preventDefault();
+    openEventMenu(li.dataset.evKey, li.dataset.evId, li, e.clientX, e.clientY);
+    return;
+  }
+  if (li && li.dataset.repId){
+    e.preventDefault();
+    openRepeatMenu(li.dataset.evKey, li.dataset.repId, e.clientX, e.clientY);
+    return;
+  }
+  const cell = t.closest('#grid .cell');
+  if (cell && cell.dataset.key){
+    e.preventDefault();
+    openCellMenu(cell.dataset.key, e.clientX, e.clientY);
+    return;
+  }
+  closeCtxMenu();
+});
+document.addEventListener('click', (e)=>{
+  if (ctxMenu.hidden) return;
+  const t = e.target;
+  if (t instanceof Element && ctxMenu.contains(t)) return;
+  closeCtxMenu();
+});
+document.addEventListener('keydown', (e)=>{
+  if (e.key === 'Escape' && !ctxMenu.hidden) closeCtxMenu();
+});
+
+/* ---------- 설정 패널 (⚙️ — 비모달 슬라이드, ESC/바깥 클릭 닫기) ----------
+ * 기존 헤더·푸터 훅([data-theme-preset]·[data-volume]·내보내기/가져오기)은 원본 그대로 두고
+ * 여기에는 미러만 둔다. 설정 값은 cal-settings (additive 신규 키), 변경 즉시 저장. */
+const settingsBtn = $('settingsBtn');
+const settingsPanel = $('settingsPanel');
+const setLunar = $('setLunar'), setDday = $('setDday');
+const setAlarm = $('setAlarm'), setAlarmLead = $('setAlarmLead');
+const setMute = $('setMute'), setVol = $('setVol');
+const setGaugeFill = $('setGaugeFill'), setGaugeText = $('setGaugeText');
+const setCorruptList = $('setCorruptList'), setCorruptClear = $('setCorruptClear');
+const setCorruptCount = $('setCorruptCount');
+
+/* 사운드 미러 동기화 (요소를 매번 조회 — 로드 순서 무관하게 안전) */
+function syncSoundMirror(){
+  const m = document.getElementById('setMute');
+  const v = document.getElementById('setVol');
+  if (m) m.checked = !soundOn;
+  if (v) v.value = String(volume);
+}
+/* 세그먼트 버튼 칠하기/바인딩 — 포스트잇 월 설정 패널과 같은 관용구 (paintSeg / bindSeg) */
+function paintSeg(el, val){
+  if (!el) return;
+  el.querySelectorAll('button[data-val]').forEach((b)=>{
+    b.classList.toggle('sel', b.dataset.val === val);
+  });
+}
+function bindSeg(id, onPick){
+  const el = $(id);
+  if (!el) return;
+  el.querySelectorAll('button[data-val]').forEach((b)=>{
+    b.addEventListener('click', ()=>onPick(b.dataset.val));
+  });
+}
+function syncSettingsUI(){
+  paintSeg($('setFontSeg'), settings.fontSize);
+  paintSeg($('setWeekStartSeg'), settings.weekStart);
+  paintSeg($('setAnimSeg'), settings.anim);
+  setLunar.checked = settings.lunar;
+  setDday.checked = settings.dday;
+  setAlarm.checked = settings.alarm;
+  setAlarmLead.value = String(settings.alarmLead);
+  syncDecorUI();
+  syncSoundMirror();
+}
+
+/* [데이터] 저장 용량 게이지 + 손상 백업(-corrupt-) 키 목록 */
+const QUOTA_BYTES = 5 * 1024 * 1024; /* localStorage 통상 한도 근사 (UTF-16 문자당 2바이트) */
+function fmtBytes(b){
+  if (b >= 1048576) return (Math.round(b / 104857.6) / 10) + ' MB';
+  if (b >= 1024) return Math.round(b / 1024) + ' KB';
+  return b + ' B';
+}
+function corruptKeys(){
+  const out = [];
+  try{
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.indexOf('-corrupt-') >= 0) out.push(k);
+    }
+  }catch(e){}
+  out.sort();
+  return out;
+}
+function refreshDataSection(){
+  let bytes = 0;
+  try{
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      bytes += ((k ? k.length : 0) + (localStorage.getItem(k) || '').length) * 2;
+    }
+  }catch(e){}
+  const pct = Math.min(100, Math.round((bytes / QUOTA_BYTES) * 1000) / 10);
+  setGaugeFill.style.width = pct + '%';
+  /* 문구 형식 통일 (포스트잇 월과 동일): "사용량 N.N MB / 5 MB" */
+  setGaugeText.textContent = '사용량 ' + (bytes / 1048576).toFixed(1) + ' MB / 5 MB';
+  setGaugeText.title = '정확히 ' + fmtBytes(bytes) + ' (' + pct + '% · file:// 오리진 추정치)';
+
+  const keys = corruptKeys();
+  setCorruptCount.textContent = String(keys.length);
+  setCorruptList.textContent = '';
+  if (keys.length === 0){
+    const li = document.createElement('li');
+    const s = document.createElement('span');
+    s.className = 'k spSmall';
+    s.textContent = '손상 백업이 없어요.';
+    li.appendChild(s);
+    setCorruptList.appendChild(li);
+  }
+  for (const k of keys){
+    let size = 0;
+    try{ size = (k.length + (localStorage.getItem(k) || '').length) * 2; }catch(e){}
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.className = 'k';
+    name.textContent = k + ' (' + fmtBytes(size) + ')';
+    name.title = k;
+    li.appendChild(name);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '삭제';
+    del.title = '이 손상 백업 삭제';
+    del.addEventListener('click', ()=>{
+      try{ localStorage.removeItem(k); }catch(e){}
+      showToast('손상 백업 1개를 정리했어요: ' + k);
+      refreshDataSection();
+    });
+    li.appendChild(del);
+    setCorruptList.appendChild(li);
+  }
+  setCorruptClear.hidden = keys.length === 0;
+}
+setCorruptClear.addEventListener('click', ()=>{
+  const keys = corruptKeys();
+  for (const k of keys){ try{ localStorage.removeItem(k); }catch(e){} }
+  showToast('손상 백업 ' + keys.length + '개를 모두 정리했어요.');
+  refreshDataSection();
+});
+
+function isSettingsOpen(){ return settingsPanel.classList.contains('open'); }
+function openSettings(){
+  syncSettingsUI();
+  refreshDataSection();
+  settingsPanel.classList.add('open');
+  settingsPanel.setAttribute('aria-hidden', 'false');
+}
+function closeSettings(){
+  /* 패널 안 요소가 포커스를 쥔 채 aria-hidden 이 되면 접근성 경고 — 토글 버튼으로 되돌린다 */
+  try{ if (settingsPanel.contains(document.activeElement)) settingsBtn.focus({preventScroll:true}); }catch(e){}
+  settingsPanel.classList.remove('open');
+  settingsPanel.setAttribute('aria-hidden', 'true');
+}
+settingsBtn.addEventListener('click', ()=>{
+  if (isSettingsOpen()) closeSettings(); else openSettings();
+});
+$('settingsClose').addEventListener('click', closeSettings);
+/* ESC 닫기 — 캡처 단계라 컨텍스트 메뉴가 열려 있으면 그쪽이 먼저 닫히도록 양보 */
+document.addEventListener('keydown', (e)=>{
+  if (e.key !== 'Escape' || !isSettingsOpen()) return;
+  if (!ctxMenu.hidden) return;
+  closeSettings();
+}, true);
+/* 바깥 클릭 닫기 (비모달 — 클릭 자체는 그대로 진행). 프로그램적 click(내보내기 앵커·파일 입력)은 무시 */
+document.addEventListener('click', (e)=>{
+  if (!isSettingsOpen() || !e.isTrusted) return;
+  const t = e.target;
+  if (!(t instanceof Element)) return;
+  if (settingsPanel.contains(t) || settingsBtn.contains(t)) return;
+  closeSettings();
+});
+
+/* [표시] — 세그먼트 버튼 (포스트잇 월과 같은 관용구) */
+bindSeg('setFontSeg', (v)=>{
+  settings.fontSize = (v === 'small' || v === 'large') ? v : 'normal';
+  saveSettings();
+  applySettingsAttrs();
+  paintSeg($('setFontSeg'), settings.fontSize);
+});
+bindSeg('setWeekStartSeg', (v)=>{
+  settings.weekStart = (v === 'mon') ? 'mon' : 'sun';
+  saveSettings();
+  paintSeg($('setWeekStartSeg'), settings.weekStart);
+  renderWeekdays();
+  renderGrid(false); /* 월간 그리드·주간 뷰 모두 즉시 반영 */
+  renderPanel();
+});
+setLunar.addEventListener('change', ()=>{
+  settings.lunar = setLunar.checked;
+  saveSettings();
+  renderGrid(false);
+});
+setDday.addEventListener('change', ()=>{
+  settings.dday = setDday.checked;
+  saveSettings();
+  renderGrid(false);
+  renderPanel();
+});
+/* [알림] — 변경 시 미리듣기 "톡" (사용자 제스처 내부, 음소거·볼륨 존중) */
+setAlarm.addEventListener('change', ()=>{
+  settings.alarm = setAlarm.checked;
+  saveSettings();
+  if (settings.alarm) sndPreview(); /* 켤 때만 — 알림음이 어떤 느낌인지 바로 들려준다 */
+});
+setAlarmLead.addEventListener('change', ()=>{
+  const v = Number(setAlarmLead.value);
+  settings.alarmLead = (v === 5 || v === 15) ? v : 0;
+  saveSettings();
+  sndPreview();
+});
+/* [효과] — 세그먼트 버튼 */
+bindSeg('setAnimSeg', (v)=>{
+  settings.anim = (v === 'reduced' || v === 'off') ? v : 'on';
+  saveSettings();
+  applySettingsAttrs();
+  paintSeg($('setAnimSeg'), settings.anim);
+});
+/* [사운드] 미러 — 헤더 원본과 양방향 동기화 (cal-sound / cal-sound-vol) */
+setMute.addEventListener('change', ()=>{
+  setSoundOn(!setMute.checked);
+  if (soundOn) sndAdd(); /* 켜짐 확인 틱 (사용자 제스처) */
+});
+setVol.addEventListener('input', ()=>{
+  applyVolume(Number(setVol.value) || 0, true);
+  volRange.value = String(volume); /* 헤더 슬라이더 동기화 */
+});
+/* [데이터] 미러 */
+$('setExport').addEventListener('click', doExport);
+$('setImport').addEventListener('click', ()=>importFile.click());
+
+/* ---------- [꾸미기] 배경 커스텀 (cal-decor) ----------
+ * 설정(모드·강도)은 localStorage cal-decor (additive 신규 키 — 기존 스키마 불변),
+ * 큰 이미지 데이터는 IndexedDB(디비명 cal-decor, 스토어 img, 키 'bg')에만 둔다 — localStorage 잠식 금지.
+ * 기본값 mode:'none' 이면 #bgDecor 가 display:none — fresh 프로필의 기본 렌더 완전 불변 (A1·A7·A36 회귀 없음).
+ * 손상 시 <키>-corrupt-<ts> while 루프 백업 후 기본값 (A9 규약 통일).
+ * IndexedDB 실패는 토스트 안내 + 기능 저하만 — 크래시·콘솔 에러 없음. */
+const DECOR_KEY = 'cal-decor';
+const DECOR_DEFAULTS = { mode:'none', alpha:18, hasImg:false }; /* alpha: 12~25 (%) = 오버레이 opacity 0.12~0.25 */
+const DATA_IMG_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+function sanitizeDecor(obj){
+  const d = Object.assign({}, DECOR_DEFAULTS);
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)){
+    if (obj.mode === 'paper' || obj.mode === 'linen' || obj.mode === 'image') d.mode = obj.mode;
+    const a = Number(obj.alpha);
+    if (isFinite(a)) d.alpha = Math.max(12, Math.min(25, Math.round(a)));
+    if (obj.hasImg === true) d.hasImg = true;
+  }
+  if (d.mode === 'image' && !d.hasImg) d.mode = 'none'; /* 이미지 없이 이미지 모드 금지 */
+  return d;
+}
+function loadDecor(){
+  let raw = null;
+  try{ raw = localStorage.getItem(DECOR_KEY); }catch(e){ return Object.assign({}, DECOR_DEFAULTS); }
+  if (!raw) return Object.assign({}, DECOR_DEFAULTS);
+  let parsed = null, ok = false;
+  try{ parsed = JSON.parse(raw); ok = true; }catch(e){}
+  if (!ok){
+    backupRaw(DECOR_KEY, raw); /* 크래시 없이 백업 후 기본값 (A9 규약) */
+    return Object.assign({}, DECOR_DEFAULTS);
+  }
+  return sanitizeDecor(parsed);
+}
+let decor = loadDecor();
+let decorSaveErrorShown = false;
+function saveDecor(){
+  try{ localStorage.setItem(DECOR_KEY, JSON.stringify(decor)); }catch(e){
+    if (!decorSaveErrorShown){
+      decorSaveErrorShown = true;
+      showToast('꾸미기 설정 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
+    }
+  }
+}
+/* IndexedDB 헬퍼 — 전 구간 try/catch + 에러 이벤트 preventDefault (콘솔 에러 0 유지) */
+function decorDb(ok, fail){
+  try{
+    if (!window.indexedDB){ fail(); return; }
+    const req = indexedDB.open('cal-decor', 1);
+    req.onupgradeneeded = ()=>{ try{ req.result.createObjectStore('img'); }catch(e){} };
+    req.onsuccess = ()=>ok(req.result);
+    req.onerror = (e)=>{ if (e && e.preventDefault) e.preventDefault(); fail(); };
+    req.onblocked = ()=>fail();
+  }catch(e){ fail(); }
+}
+function decorIdbPut(dataUrl, ok, fail){
+  decorDb((db)=>{
+    try{
+      const tx = db.transaction('img', 'readwrite');
+      tx.objectStore('img').put(dataUrl, 'bg');
+      tx.oncomplete = ()=>{ try{ db.close(); }catch(e){} ok(); };
+      tx.onerror = (e)=>{ if (e && e.preventDefault) e.preventDefault(); try{ db.close(); }catch(e2){} fail(); };
+      tx.onabort = ()=>{ try{ db.close(); }catch(e){} fail(); };
+    }catch(e){ try{ db.close(); }catch(e2){} fail(); }
+  }, fail);
+}
+function decorIdbGet(ok, fail){
+  decorDb((db)=>{
+    try{
+      const tx = db.transaction('img', 'readonly');
+      const rq = tx.objectStore('img').get('bg');
+      rq.onsuccess = ()=>{ const v = rq.result; try{ db.close(); }catch(e){} ok(typeof v === 'string' ? v : null); };
+      rq.onerror = (e)=>{ if (e && e.preventDefault) e.preventDefault(); try{ db.close(); }catch(e2){} fail(); };
+    }catch(e){ try{ db.close(); }catch(e2){} fail(); }
+  }, fail);
+}
+function decorIdbDel(done){
+  decorDb((db)=>{
+    try{
+      const tx = db.transaction('img', 'readwrite');
+      tx.objectStore('img').delete('bg');
+      tx.oncomplete = ()=>{ try{ db.close(); }catch(e){} done(); };
+      tx.onerror = (e)=>{ if (e && e.preventDefault) e.preventDefault(); try{ db.close(); }catch(e2){} done(); };
+      tx.onabort = ()=>{ try{ db.close(); }catch(e){} done(); };
+    }catch(e){ try{ db.close(); }catch(e2){} done(); }
+  }, done);
+}
+const bgDecor = $('bgDecor');
+const setDecorAlpha = $('setDecorAlpha'), setDecorAlphaVal = $('setDecorAlphaVal');
+const setDecorImgSeg = $('setDecorImgSeg'), setDecorImgDel = $('setDecorImgDel');
+const setDecorImgFile = $('setDecorImgFile');
+let decorImgData = null;      /* 검증된 data:image URI 캐시 (IndexedDB 원본) */
+let decorImgLoading = false;
+let decorImgMissShown = false;
+function applyDecor(){
+  bgDecor.classList.remove('on', 'paper', 'linen');
+  bgDecor.textContent = ''; /* 이미지 노드 제거 */
+  /* 종이·리넨 프리셋은 은은한 그라디언트라 같은 %여도 사진보다 훨씬 옅게 보인다 —
+     기본 강도(18%)에서도 식별되도록 최소 가시 강도를 보정한다 (이미지 배경은 원래 매핑 그대로) */
+  const presetBoost = (decor.mode === 'paper' || decor.mode === 'linen');
+  bgDecor.style.opacity = String(presetBoost ? Math.min(0.5, (decor.alpha / 100) * 1.5 + 0.05) : decor.alpha / 100);
+  if (decor.mode === 'paper' || decor.mode === 'linen'){
+    bgDecor.classList.add('on', decor.mode);
+  } else if (decor.mode === 'image'){
+    if (decorImgData){
+      /* 검증된 data:image URI 를 createElement img 의 src 에만 넣는다 (허용 예외 경로) */
+      const im = document.createElement('img');
+      im.alt = '';
+      im.src = decorImgData;
+      bgDecor.appendChild(im);
+      bgDecor.classList.add('on');
+    } else {
+      loadDecorImage(); /* IndexedDB 에서 읽은 뒤 성공 시 applyDecor 재호출 */
+    }
+  }
+}
+function loadDecorImage(){
+  if (decorImgLoading) return;
+  decorImgLoading = true;
+  decorIdbGet((v)=>{
+    decorImgLoading = false;
+    if (v && DATA_IMG_RE.test(v)){
+      decorImgData = v;
+      if (decor.mode === 'image') applyDecor();
+    } else if (decor.mode === 'image' && !decorImgMissShown){
+      decorImgMissShown = true;
+      showToast('저장된 배경 이미지를 찾지 못해 기본 배경으로 보여드려요.');
+    }
+  }, ()=>{
+    decorImgLoading = false;
+    if (decor.mode === 'image' && !decorImgMissShown){
+      decorImgMissShown = true;
+      showToast('배경 이미지 저장소(IndexedDB)를 열지 못했어요.\n기본 배경으로 보여드려요.');
+    }
+  });
+}
+function syncDecorUI(){
+  paintSeg($('setDecorSeg'), decor.mode);
+  const hasImg = !!(decor.hasImg || decorImgData);
+  setDecorImgSeg.hidden = !hasImg;
+  setDecorImgDel.hidden = !hasImg;
+  setDecorAlpha.value = String(decor.alpha);
+  setDecorAlphaVal.textContent = decor.alpha + '%';
+}
+bindSeg('setDecorSeg', (v)=>{
+  if (v === 'image' && !(decor.hasImg || decorImgData)) return; /* 이미지 없으면 무시 */
+  decor.mode = (v === 'paper' || v === 'linen' || v === 'image') ? v : 'none';
+  saveDecor();
+  applyDecor();
+  syncDecorUI();
+});
+$('setDecorImgBtn').addEventListener('click', ()=>setDecorImgFile.click());
+setDecorImgFile.addEventListener('change', ()=>{
+  const f = setDecorImgFile.files && setDecorImgFile.files[0];
+  setDecorImgFile.value = '';
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const src = String(reader.result || '');
+    if (!DATA_IMG_RE.test(src)){ showToast('이미지 파일이 아니거나 읽을 수 없는 형식이에요.'); return; }
+    const im = new Image();
+    im.onload = ()=>{
+      let out = null;
+      try{
+        const maxEdge = 1600; /* 다운스케일: 긴 변 1600px 이하로 재인코딩 */
+        const scale = Math.min(1, maxEdge / Math.max(im.naturalWidth || 1, im.naturalHeight || 1));
+        const w = Math.max(1, Math.round((im.naturalWidth || 1) * scale));
+        const h = Math.max(1, Math.round((im.naturalHeight || 1) * scale));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(im, 0, 0, w, h);
+        out = cv.toDataURL('image/jpeg', 0.85);
+      }catch(e){ out = null; }
+      if (!out || !DATA_IMG_RE.test(out)){ showToast('이미지를 처리하지 못했어요.'); return; }
+      decorImgData = out;
+      decor.mode = 'image';
+      decor.hasImg = true;
+      saveDecor();
+      applyDecor();
+      syncDecorUI();
+      decorIdbPut(out, ()=>{
+        showToast('배경 이미지를 적용했어요.\n강도 슬라이더로 진하기를 조절할 수 있어요.');
+      }, ()=>{
+        decor.hasImg = false; /* 재실행 시 복원 불가 — 이번 실행에서만 표시 (기능 저하) */
+        saveDecor();
+        showToast('배경 이미지를 저장하지 못했어요 (IndexedDB 사용 불가).\n이번 실행에서만 보여드릴게요.');
+      });
+    };
+    im.onerror = ()=>showToast('이미지를 열지 못했어요.');
+    im.src = src; /* 검증된 data:image URI */
+  };
+  reader.onerror = ()=>showToast('파일을 읽을 수 없습니다.');
+  reader.readAsDataURL(f);
+});
+setDecorImgDel.addEventListener('click', ()=>{
+  decorImgData = null;
+  decor.hasImg = false;
+  if (decor.mode === 'image') decor.mode = 'none';
+  saveDecor();
+  applyDecor();
+  syncDecorUI();
+  decorIdbDel(()=>{});
+  showToast('배경 이미지를 제거했어요.');
+});
+setDecorAlpha.addEventListener('input', ()=>{
+  const v = Math.max(12, Math.min(25, Math.round(Number(setDecorAlpha.value) || 18)));
+  decor.alpha = v;
+  saveDecor();
+  bgDecor.style.opacity = String(v / 100); /* 즉시 반영 (opacity 전용) */
+  setDecorAlphaVal.textContent = v + '%';
+});
+applyDecor();
+syncSettingsUI();
+
+/* ---------- multi-window sync ---------- */
+window.addEventListener('storage', (e)=>{
+  const k = e.key;
+  let dirty = false;
+  if (k === null || k === STORE_KEY){
+    const stored = readStore();
+    if (stored !== null){ /* 손상된 원격 쓰기는 무시 */
+      events = stored;
+      snapshotSyncedIds();
+      dirty = true;
+    }
+  }
+  if (k === null || k === REPEAT_KEY){
+    const rs = readRepeats();
+    if (rs !== null){
+      repeats = rs;
+      snapshotSyncedRepIds();
+      dirty = true;
+    }
+  }
+  if (k === null || k === SETTINGS_KEY){
+    /* 다른 창의 설정 변경 반영 */
+    settings = loadSettings();
+    applySettingsAttrs();
+    renderWeekdays();
+    syncSettingsUI();
+    dirty = true;
+  }
+  if (k === null || k === DECOR_KEY){
+    /* 다른 창의 꾸미기 변경 반영 — 이미지 캐시는 무효화 후 필요 시 IndexedDB 재조회 */
+    decor = loadDecor();
+    decorImgData = null;
+    applyDecor();
+    syncDecorUI();
+  }
+  if (dirty){
+    renderGrid(false);
+    renderPanel();
+  }
+});
+
+/* ---------- 일정 시간 알림 (A32) ----------
+ * 15초 이하 주기(10초)로 오늘 일정(단발 + 반복 발생분)의 시각 도래를 검사해
+ * 비모달 토스트([data-toast][data-toast-kind="alarm"])로 알린다. OS 알림 API 미사용(오프라인·file://).
+ * 소리는 사용자 제스처로 이미 열린 오디오 컨텍스트가 있을 때만 (자동재생 정책 준수, 음소거·볼륨 존중) */
+const ALARM_POLL_MS = 10000;
+const ALARM_GRACE_MS = 120000; /* 도래 후 이 시간 안이면 알림 (지난 일정 소급 알림 방지) */
+const alarmFired = {};
+function checkAlarms(){
+  if (!settings.alarm) return; /* 설정 [알림] 끔 (기본 켬 — A32 관찰 불변) */
+  const lead = (settings.alarmLead === 5 || settings.alarmLead === 15) ? settings.alarmLead : 0;
+  const n = new Date();
+  const key = todayKey();
+  for (const it of dayItems(key)){
+    if (!it.time || !/^\d{1,2}:\d{2}$/.test(it.time)) continue;
+    const hm = it.time.split(':');
+    const t = new Date(n.getFullYear(), n.getMonth(), n.getDate(), Number(hm[0]), Number(hm[1]), 0, 0);
+    const diff = n.getTime() - (t.getTime() - lead * 60000); /* 선행 시간(정각/5분 전/15분 전) */
+    if (diff < 0 || diff > ALARM_GRACE_MS) continue;
+    const fk = key + '|' + it.time + '|' + it.id;
+    if (alarmFired[fk]) continue;
+    alarmFired[fk] = true;
+    showAlarmToast(lead > 0
+      ? ('⏰ ' + lead + '분 뒤 일정입니다 (' + it.time + ')\n' + it.text)
+      : ('⏰ 일정 시간입니다 (' + it.time + ')\n' + it.text));
+    sndAlarm();
+  }
+}
+setInterval(checkAlarms, ALARM_POLL_MS);
+
+/* ---------- init ---------- */
+renderGrid(true);
+renderPanel();
+checkAlarms();
+</script>
+</body>
+</html>

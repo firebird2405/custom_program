@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메모장</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📝</text></svg>">
+<script>
+try{if(localStorage.getItem('theme')==='light'){document.documentElement.setAttribute('data-theme','light');}}catch(e){}
+</script>
+<style>
+:root{
+  --bg:#14161d; --surface:#1d212b; --surface2:#252a37; --text:#e8eaf2;
+  --muted:#9aa1b5; --accent:#7c9aff; --red:#ff6b6e; --blue:#6ea8ff; --border:#2e3444;
+  --on-accent:#14161d;
+  --shadow:0 1px 3px rgba(0,0,0,.25);
+}
+[data-theme="light"]{
+  --bg:#f4f5f9; --surface:#ffffff; --surface2:#eef0f6; --text:#23262f;
+  --muted:#6b7180; --accent:#4c6fff; --red:#e04b50; --blue:#2f6fd6; --border:#e2e5ee;
+  --on-accent:#ffffff;
+  --shadow:0 1px 3px rgba(30,40,90,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{
+  font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif;
+  background:var(--bg); color:var(--text);
+  min-width:600px; overflow:hidden;
+}
+::selection{background:var(--accent);color:var(--on-accent)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--muted);border:2px solid transparent;background-clip:padding-box}
+
+.app{display:flex;height:100vh}
+
+/* ── 사이드바 ── */
+.sidebar{width:240px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg);border-right:1px solid var(--border)}
+.side-top{padding:14px 12px 12px}
+.search-wrap{display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px;transition:border-color .15s;box-shadow:var(--shadow)}
+.search-wrap:focus-within{border-color:var(--accent)}
+.search-wrap .icon{font-size:12px;opacity:.8;flex-shrink:0}
+.search-wrap input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--text);font:inherit;font-size:13px}
+.search-wrap input::placeholder{color:var(--muted)}
+.new-btn{width:100%;margin-top:10px;padding:9px 0;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;transition:filter .15s;box-shadow:var(--shadow)}
+.new-btn:hover{filter:brightness(1.12)}
+.new-btn:active{filter:brightness(.95)}
+
+.note-list{flex:1;overflow-y:auto;padding:2px 12px 12px;display:flex;flex-direction:column;gap:7px}
+.note-item{padding:10px 13px;border-radius:14px;background:var(--surface);border:1px solid transparent;cursor:pointer;transition:background .15s,border-color .15s;box-shadow:var(--shadow)}
+.note-item:hover{background:var(--surface2)}
+.note-item.active{border-color:var(--accent);background:var(--surface2)}
+.note-row{display:flex;align-items:baseline;gap:8px}
+.note-title{flex:1;min-width:0;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.note-date{font-size:11px;color:var(--muted);flex-shrink:0}
+.note-preview{margin-top:3px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-empty{padding:26px 8px;text-align:center;color:var(--muted);font-size:13px}
+
+.side-bottom{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border)}
+.side-bottom button{flex:1;padding:8px 0;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:12.5px;cursor:pointer;transition:background .15s,border-color .15s}
+.side-bottom button:hover{background:var(--surface2);border-color:var(--accent)}
+
+/* ── 메인 ── */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border)}
+.topbar-left{display:flex;gap:4px}
+.topbar-left.hide{visibility:hidden}
+.icon-btn{border:none;background:transparent;font-size:16px;line-height:1;padding:7px 9px;border-radius:8px;cursor:pointer;color:var(--text);transition:background .15s,box-shadow .15s}
+.icon-btn:hover{background:var(--surface2)}
+.icon-btn.on{background:var(--surface2);box-shadow:inset 0 0 0 1px var(--accent)}
+#deleteBtn:hover{background:var(--surface2);color:var(--red)}
+
+#editor{flex:1;width:100%;border:none;outline:none;resize:none;background:var(--surface);color:var(--text);caret-color:var(--accent);padding:22px 28px;font-family:inherit;font-size:15px;line-height:1.7}
+#editor::placeholder{color:var(--muted)}
+
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--muted)}
+.empty-emoji{font-size:46px}
+.empty-state p{font-size:14px}
+.empty-state button{padding:10px 24px;border:none;border-radius:8px;background:var(--accent);color:var(--on-accent);font:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:filter .15s;box-shadow:var(--shadow)}
+.empty-state button:hover{filter:brightness(1.12)}
+
+.statusbar{display:flex;align-items:center;gap:14px;padding:8px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+.statusbar.hide{visibility:hidden}
+#modTime{margin-left:auto}
+.saved-flash{color:var(--accent);font-weight:600;opacity:0;transition:opacity .3s}
+.saved-flash.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="side-top">
+      <div class="search-wrap">
+        <span class="icon">🔍</span>
+        <input id="search" type="text" placeholder="메모 검색" autocomplete="off">
+      </div>
+      <button id="newBtn" class="new-btn">+ 새 메모</button>
+    </div>
+    <div id="noteList" class="note-list"></div>
+    <div class="side-bottom">
+      <button id="exportBtn" title="모든 메모를 JSON 파일로 백업">내보내기</button>
+      <button id="importBtn" title="백업 JSON 파일 불러오기">가져오기</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-left" id="noteActions">
+        <button id="pinBtn" class="icon-btn" title="상단 고정">📌</button>
+        <button id="downloadBtn" class="icon-btn" title="TXT 파일로 저장">💾</button>
+        <button id="deleteBtn" class="icon-btn" title="메모 삭제">🗑</button>
+      </div>
+      <button id="themeBtn" class="icon-btn" title="테마 전환">☀️</button>
+    </div>
+    <textarea id="editor" placeholder="내용을 입력하세요…" spellcheck="false"></textarea>
+    <div id="emptyState" class="empty-state" hidden>
+      <div class="empty-emoji">📝</div>
+      <p>메모가 없습니다. 새 메모를 작성해 보세요.</p>
+      <button id="emptyNewBtn">+ 새 메모</button>
+    </div>
+    <div id="statusbar" class="statusbar">
+      <span id="charCount">0자</span>
+      <span id="savedFlash" class="saved-flash">저장됨 ✓</span>
+      <span id="modTime"></span>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+'use strict';
+var LS_NOTES='memo-notes', LS_ACTIVE='memo-active';
+function $(id){return document.getElementById(id);}
+var listEl=$('noteList'), editor=$('editor'), searchEl=$('search');
+var pinBtn=$('pinBtn'), downloadBtn=$('downloadBtn'), deleteBtn=$('deleteBtn'), themeBtn=$('themeBtn');
+var charCount=$('charCount'), modTime=$('modTime'), savedFlash=$('savedFlash');
+var emptyState=$('emptyState'), noteActions=$('noteActions'), statusbar=$('statusbar');
+var importFile=$('importFile');
+
+var notes=[], activeId=null, saveTimer=null, flashTimer=null, pending=null;
+var lastSynced={}, saveErrorShown=false;
+
+function pad(n){return (n<10?'0':'')+n;}
+function nowId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+/* 마지막으로 저장소와 동기화된 시점의 id→updatedAt 스냅샷 */
+function snapshotSync(){
+  lastSynced={};
+  for(var i=0;i<notes.length;i++)lastSynced[notes[i].id]=notes[i].updatedAt;
+}
+/* 다른 창이 저장한 내용을 id/updatedAt 기준으로 병합 (덮어쓰기 방지) */
+function mergeFromStorage(){
+  var raw=null;
+  try{raw=localStorage.getItem(LS_NOTES);}catch(e){return false;}
+  if(raw===null)return false;
+  var parsed=null;
+  try{parsed=JSON.parse(raw);}catch(e){return false;}
+  if(!Array.isArray(parsed))return false;
+  var changed=false, storedIds={}, storedSnap={};
+  for(var i=0;i<parsed.length;i++){
+    var s=parsed[i];
+    if(!s||typeof s.text!=='string'||typeof s.id!=='string'||!s.id)continue;
+    var up=typeof s.updatedAt==='number'?s.updatedAt:0;
+    storedIds[s.id]=true;
+    storedSnap[s.id]=up;
+    var mine=findNote(s.id);
+    if(mine){
+      if(up>mine.updatedAt){mine.text=s.text;mine.pinned=!!s.pinned;mine.updatedAt=up;changed=true;}
+    }else if(!Object.prototype.hasOwnProperty.call(lastSynced,s.id)||up>lastSynced[s.id]){
+      /* 다른 창이 새로 만든(또는 삭제 후 다시 수정한) 메모 */
+      notes.push({id:s.id,text:s.text,pinned:!!s.pinned,updatedAt:up});
+      changed=true;
+    }
+  }
+  /* 다른 창이 삭제한 메모 반영 (내가 그 뒤에 수정한 메모는 유지) */
+  var kept=notes.filter(function(n){
+    if(storedIds[n.id])return true;
+    if(!Object.prototype.hasOwnProperty.call(lastSynced,n.id))return true;
+    return n.updatedAt>lastSynced[n.id];
+  });
+  if(kept.length!==notes.length){notes=kept;changed=true;}
+  lastSynced=storedSnap;
+  return changed;
+}
+function persist(){
+  mergeFromStorage();
+  try{localStorage.setItem(LS_NOTES,JSON.stringify(notes));}catch(e){return false;}
+  snapshotSync();
+  return true;
+}
+/* 손상된 저장 데이터를 백업 키로 보존하고 사용자에게 알림 */
+function recoverCorrupt(raw){
+  notes=[];
+  var bkey=LS_NOTES+'-corrupt-'+Date.now();
+  try{localStorage.setItem(bkey,raw);}catch(e){bkey=null;}
+  alert('저장된 메모 데이터가 손상되어 불러올 수 없습니다.'
+    +(bkey?'\n원본 데이터를 브라우저 저장소의 "'+bkey+'" 키에 백업해 두었습니다.'
+          :'\n원본 데이터를 백업하지 못했습니다.'));
+}
+function persistActive(){try{if(activeId===null)localStorage.removeItem(LS_ACTIVE);else localStorage.setItem(LS_ACTIVE,activeId);}catch(e){}}
+function sorted(){return notes.slice().sort(function(a,b){return (b.pinned?1:0)-(a.pinned?1:0)||b.updatedAt-a.updatedAt;});}
+function findNote(id){for(var i=0;i<notes.length;i++){if(notes[i].id===id)return notes[i];}return null;}
+
+function titleOf(text){
+  var lines=text.split('\n');
+  for(var i=0;i<lines.length;i++){var t=lines[i].trim();if(t)return t;}
+  return '제목 없음';
+}
+function previewOf(text){
+  var lines=text.split('\n'), seen=false, rest=[];
+  for(var i=0;i<lines.length;i++){
+    var t=lines[i].trim();
+    if(!seen){if(t)seen=true;continue;}
+    if(t)rest.push(t);
+  }
+  return rest.join(' ').slice(0,80);
+}
+function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function fmtRelative(ts){
+  var now=new Date(), d=new Date(ts), diff=now.getTime()-ts;
+  if(diff<60000)return '방금 전';
+  if(diff<3600000)return Math.floor(diff/60000)+'분 전';
+  if(sameDay(d,now))return pad(d.getHours())+':'+pad(d.getMinutes());
+  var yest=new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
+  if(sameDay(d,yest))return '어제';
+  if(d.getFullYear()===now.getFullYear())return (d.getMonth()+1)+'.'+d.getDate();
+  return d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate();
+}
+function fmtDateTime(ts){
+  var d=new Date(ts);
+  return d.getFullYear()+'.'+pad(d.getMonth()+1)+'.'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+
+function welcomeNote(){
+  var text='메모장에 오신 것을 환영합니다! 📝\n\n'
+    +'이 앱의 주요 기능을 소개합니다.\n\n'
+    +'• 자동 저장 — 입력을 멈추면 곧바로 자동으로 저장됩니다.\n'
+    +'• 고정 — 상단의 📌 버튼으로 중요한 메모를 목록 맨 위에 고정할 수 있어요.\n'
+    +'• 검색 — 왼쪽 🔍 검색창에 입력하면 메모 내용을 실시간으로 찾아줍니다.\n'
+    +'• 내보내기 — 💾 버튼으로 현재 메모를 .txt 파일로 저장하고,\n'
+    +'  사이드바 하단의 내보내기/가져오기로 전체 메모를 백업·복원할 수 있어요.\n\n'
+    +'이 앱은 하나의 HTML 파일로 만들어진 로컬 앱입니다.\n'
+    +'모든 데이터는 내 컴퓨터에만 저장되며, 파일을 직접 열어 자유롭게 수정하고 꾸밀 수 있습니다.';
+  return {id:nowId(),text:text,pinned:false,updatedAt:Date.now()};
+}
+
+function load(){
+  var raw=null;
+  try{raw=localStorage.getItem(LS_NOTES);}catch(e){}
+  if(raw===null){
+    notes=[welcomeNote()];
+    persist();
+    activeId=notes[0].id;
+    persistActive();
+    return;
+  }
+  var parsed=null;
+  try{parsed=JSON.parse(raw);}catch(e){}
+  if(Array.isArray(parsed)){
+    notes=[];
+    for(var i=0;i<parsed.length;i++){
+      var n=parsed[i];
+      if(!n||typeof n.text!=='string')continue;
+      notes.push({
+        id:(typeof n.id==='string'&&n.id)?n.id:nowId(),
+        text:n.text,
+        pinned:!!n.pinned,
+        updatedAt:typeof n.updatedAt==='number'?n.updatedAt:Date.now()
+      });
+    }
+  }else{
+    recoverCorrupt(raw);
+  }
+  snapshotSync();
+  try{activeId=localStorage.getItem(LS_ACTIVE);}catch(e){activeId=null;}
+  if(!findNote(activeId)){
+    activeId=notes.length?sorted()[0].id:null;
+    persistActive();
+  }
+}
+
+/* ── 렌더링 ── */
+function renderList(){
+  listEl.textContent='';
+  var q=searchEl.value.trim().toLowerCase();
+  var items=sorted().filter(function(n){return !q||n.text.toLowerCase().indexOf(q)!==-1;});
+  if(!items.length){
+    var d=document.createElement('div');
+    d.className='list-empty';
+    d.textContent=q?'검색 결과 없음':'메모가 없습니다';
+    listEl.appendChild(d);
+    return;
+  }
+  items.forEach(function(n){
+    var item=document.createElement('div');
+    item.className='note-item'+(n.id===activeId?' active':'');
+    var row=document.createElement('div'); row.className='note-row';
+    var t=document.createElement('span'); t.className='note-title';
+    t.textContent=(n.pinned?'📌 ':'')+titleOf(n.text);
+    var dt=document.createElement('span'); dt.className='note-date';
+    dt.textContent=fmtRelative(n.updatedAt);
+    row.appendChild(t); row.appendChild(dt);
+    var p=document.createElement('div'); p.className='note-preview';
+    p.textContent=previewOf(n.text)||'추가 내용 없음';
+    item.appendChild(row); item.appendChild(p);
+    item.addEventListener('click',function(){selectNote(n.id);});
+    listEl.appendChild(item);
+  });
+}
+
+function updateStatus(n){
+  charCount.textContent=n.text.length+'자';
+  modTime.textContent='마지막 수정: '+fmtDateTime(n.updatedAt);
+}
+
+function renderEditor(){
+  var n=findNote(activeId);
+  if(!n){
+    editor.hidden=true;
+    emptyState.hidden=false;
+    noteActions.classList.add('hide');
+    statusbar.classList.add('hide');
+    return;
+  }
+  editor.hidden=false;
+  emptyState.hidden=true;
+  noteActions.classList.remove('hide');
+  statusbar.classList.remove('hide');
+  if(editor.value!==n.text)editor.value=n.text;
+  pinBtn.classList.toggle('on',n.pinned);
+  updateStatus(n);
+}
+
+/* ── 저장 (300ms 디바운스) ── */
+function flushSave(){
+  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
+  if(!pending)return;
+  var id=pending.id, val=pending.val;
+  pending=null;
+  var n=findNote(id);
+  if(!n||n.text===val)return;
+  n.text=val;
+  n.updatedAt=Date.now();
+  var ok=persist();
+  renderList();
+  if(id===activeId)updateStatus(n);
+  if(ok){showFlash();}
+  else if(!saveErrorShown){
+    saveErrorShown=true;
+    alert('메모 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
+  }
+}
+function showFlash(){
+  savedFlash.classList.add('show');
+  if(flashTimer)clearTimeout(flashTimer);
+  flashTimer=setTimeout(function(){savedFlash.classList.remove('show');},1200);
+}
+editor.addEventListener('input',function(){
+  charCount.textContent=editor.value.length+'자';
+  pending={id:activeId,val:editor.value};
+  if(saveTimer)clearTimeout(saveTimer);
+  saveTimer=setTimeout(flushSave,300);
+});
+window.addEventListener('beforeunload',flushSave);
+/* 다른 창의 저장 내용을 반영 (두 창이 서로 덮어쓰는 것 방지) */
+window.addEventListener('storage',function(e){
+  if(e.key!==null&&e.key!==LS_NOTES)return;
+  var changed=mergeFromStorage();
+  if(!findNote(activeId)){
+    activeId=notes.length?sorted()[0].id:null;
+    persistActive();
+    changed=true;
+  }
+  if(!changed)return;
+  renderList();
+  if(!pending||pending.id!==activeId){renderEditor();}
+  else{var a=findNote(activeId);if(a)updateStatus(a);}
+});
+
+/* ── 동작 ── */
+function selectNote(id){
+  if(id===activeId)return;
+  flushSave();
+  activeId=id;
+  persistActive();
+  renderList();
+  renderEditor();
+  editor.focus();
+}
+function newNote(){
+  flushSave();
+  var n={id:nowId(),text:'',pinned:false,updatedAt:Date.now()};
+  notes.push(n);
+  activeId=n.id;
+  persist();
+  persistActive();
+  searchEl.value='';
+  renderList();
+  renderEditor();
+  editor.focus();
+}
+$('newBtn').addEventListener('click',newNote);
+$('emptyNewBtn').addEventListener('click',newNote);
+
+pinBtn.addEventListener('click',function(){
+  var n=findNote(activeId); if(!n)return;
+  flushSave();
+  n.pinned=!n.pinned;
+  persist();
+  renderList();
+  pinBtn.classList.toggle('on',n.pinned);
+});
+
+deleteBtn.addEventListener('click',function(){
+  var n=findNote(activeId); if(!n)return;
+  flushSave();
+  if(!confirm('"'+titleOf(n.text)+'" 메모를 삭제할까요?'))return;
+  notes=notes.filter(function(x){return x.id!==n.id;});
+  activeId=notes.length?sorted()[0].id:null;
+  persist();
+  persistActive();
+  renderList();
+  renderEditor();
+});
+
+function downloadFile(blob,name){
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+downloadBtn.addEventListener('click',function(){
+  flushSave();
+  var n=findNote(activeId); if(!n)return;
+  var name=titleOf(n.text).replace(/[\\/:*?"<>|]/g,'').trim().slice(0,50)||'메모';
+  downloadFile(new Blob([n.text],{type:'text/plain;charset=utf-8'}),name+'.txt');
+});
+
+/* ── 백업 / 복원 ── */
+$('exportBtn').addEventListener('click',function(){
+  flushSave();
+  downloadFile(new Blob([JSON.stringify(notes,null,2)],{type:'application/json'}),'memo-backup.json');
+});
+$('importBtn').addEventListener('click',function(){importFile.click();});
+importFile.addEventListener('change',function(){
+  var f=importFile.files[0];
+  if(!f)return;
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      var data=JSON.parse(r.result);
+      if(!Array.isArray(data))throw new Error('invalid');
+      var count=0;
+      data.forEach(function(item){
+        if(!item||typeof item.text!=='string')return;
+        var id=(typeof item.id==='string'&&item.id)?item.id:nowId();
+        var up=typeof item.updatedAt==='number'?item.updatedAt:Date.now();
+        var ex=findNote(id);
+        if(ex){
+          if(up>ex.updatedAt){ex.text=item.text;ex.pinned=!!item.pinned;ex.updatedAt=up;count++;}
+        }else{
+          notes.push({id:id,text:item.text,pinned:!!item.pinned,updatedAt:up});
+          count++;
+        }
+      });
+      persist();
+      if(!findNote(activeId)&&notes.length){activeId=sorted()[0].id;persistActive();}
+      renderList();
+      renderEditor();
+      alert(count+'개의 메모를 가져왔습니다.');
+    }catch(e){
+      alert('가져오기에 실패했습니다.\n올바른 백업 파일(memo-backup.json)인지 확인해 주세요.');
+    }
+    importFile.value='';
+  };
+  r.onerror=function(){alert('파일을 읽을 수 없습니다.');importFile.value='';};
+  r.readAsText(f,'utf-8');
+});
+
+/* ── 검색 ── */
+searchEl.addEventListener('input',renderList);
+
+/* ── 테마 ── */
+function updateThemeBtn(){
+  var light=document.documentElement.getAttribute('data-theme')==='light';
+  themeBtn.textContent=light?'🌙':'☀️';
+  themeBtn.title=light?'다크 모드로 전환':'라이트 모드로 전환';
+}
+themeBtn.addEventListener('click',function(){
+  var light=document.documentElement.getAttribute('data-theme')==='light';
+  if(light){
+    document.documentElement.removeAttribute('data-theme');
+    try{localStorage.setItem('theme','dark');}catch(e){}
+  }else{
+    document.documentElement.setAttribute('data-theme','light');
+    try{localStorage.setItem('theme','light');}catch(e){}
+  }
+  updateThemeBtn();
+});
+
+/* ── 초기화 ── */
+load();
+updateThemeBtn();
+renderList();
+renderEditor();
+})();
+</script>
+</body>
+</html>

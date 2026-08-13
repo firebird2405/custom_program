@@ -6,9 +6,11 @@
 ## 현재 상태 (2026-08-13)
 
 - 발주 #1(v1 가동)·발주 #2(백로그 27건 전체) 완료. `postit.html`·`calendar.html` 모두 구현·확장 완료.
-- 채점표 **rev.5 (A1~A41)** 가동 중 — 최종 전체 채점 55/55 전 항목 PASS (2026-08-13).
+- 발주 #3(⚙️ 설정 패널 양앱 + 자동 배치 5모드 + 점검 후속 수정 4건)·#3b(보드 삭제+실행 취소)·#4(🎨 꾸미기 — 배경 프리셋/사용자 이미지 업로드·이모지/사진 스티커·테이프/프레임, 폴리시 포함) 완료 — 상세는 `protocol/STATUS.md`.
+- 채점표 **rev.5 (A1~A41)** 가동 중 — 최종 전체 채점 55/55 전 항목 PASS (2026-08-13, 발주 #4 폴리시 이후 게이트).
 - 채점기 SHA256 기대값 `32f23f0e…` SCORECARD 하단에 동결 기재, A12 green. 잠금(deny) 복원 상태.
-- 대기 게이트: 사용자 시사 #2 (`protocol/REVIEWS.md`).
+- git: main 브랜치 첫 커밋 `2984736`(88파일), 원격 origin `github.com/firebird2405/custom_program` 등록 — push는 사용자 액션.
+- 대기 게이트: ① 사용자 push, ② 사용자 시사 #2 (`protocol/REVIEWS.md`).
 
 ## 목적 (확정문 요약)
 
@@ -22,7 +24,7 @@
 ## 스택
 
 - **단일 파일 HTML** — `calendar.html`, `postit.html` (둘 다 구현 완료 — 발주 #1 신규, 발주 #2 확장). 프레임워크·번들러·빌드 단계 없음.
-- **저장**: `localStorage` (file:// 오리진). 기본 키 `cal-events`·`postit-notes`, 신규 기능은 `cal-*`/`postit-*` 접두 키로만 확장 (SCORECARD B rev.5 단서).
+- **저장**: `localStorage` (file:// 오리진). 기본 키 `cal-events`·`postit-notes`, 신규 기능은 `cal-*`/`postit-*` 접두 키로만 확장 (SCORECARD B rev.5 단서). 설정·꾸미기 additive 키: `cal-settings`·`postit-settings`·`postit-decor-layout`·`cal-decor`. 대용량 이미지(보드/캘린더 배경·사진 스티커)는 **IndexedDB**(DB명 `postit-decor`·`cal-decor`)에만 저장.
 - **실행**: Microsoft Edge 앱 모드(`--app=file:///…` + 고정 `--user-data-dir` `.edge\calendar`·`.edge\postit`), `launch_calendar.vbs`·`launch_postit.vbs`·`launch_all.vbs` + `make_shortcuts.ps1`. 시스템 스크립트: `install_startup.ps1`/`uninstall_startup.ps1`(자동 시작), `backup_snapshot.ps1`(→ `backups\`), `pin_top.ps1`/`unpin.ps1`(항상 위).
 - **채점**: `protocol/grader/` — @playwright/test(JavaScript), Edge channel `"msedge"` 헤드리스, workers 1.
 
@@ -35,6 +37,7 @@
 5. **JSON은 항상 try/catch** — 저장 데이터 파싱 실패 시 크래시 없이 `<원래키>-corrupt-<타임스탬프>` 키로 손상 원본을 백업(기존 백업 미덮어쓰기)하고 새로 시작 (A9).
 6. **변경 즉시 저장** — 위치·색·텍스트 변경이 2초 내 localStorage에 반영되어야 한다. 종료 시점 일괄 저장 금지 (A5).
 7. **에러 은폐 금지** — `window.onerror`/`onunhandledrejection`/`console.*` 재정의 금지 (정적 검사 대상).
+8. **대용량은 IndexedDB** — 배경 사진·사진 스티커 등 큰 이미지는 IndexedDB(`postit-decor`/`cal-decor`)에만 두고 localStorage(5MB 공유 한도)를 잠식하지 않는다. IDB 실패 시에도 크래시 없이 기본 동작으로 강등(graceful fallback). 신규 저장 키는 additive(`cal-*`/`postit-*` 접두)로만 추가하고, 기본값은 항상 현행 동작과 동일해야 한다 (채점기 55개 테스트가 fresh 프로필 기본값 기준 — 회귀 보호).
 
 ## 금지 조항 (SCORECARD B 전문)
 

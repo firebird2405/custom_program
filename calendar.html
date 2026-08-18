@@ -325,6 +325,17 @@ footer .hint{font-size:12px; color:var(--muted); margin-left:auto;}
 }
 #ctxMenu button:hover{background:var(--surface2); border-color:transparent;}
 
+/* ---------- 삭제 전 확인 팝오버 (설정 [안전] 켬일 때만 — 기본 끔이라 평소 렌더 완전 불변) ---------- */
+.confirmPop{
+  position:fixed; z-index:1200;
+  display:flex; align-items:center; gap:8px;
+  background:var(--surface); border:1px solid var(--red); border-radius:10px;
+  box-shadow:var(--shadow); padding:8px 10px; font-size:13px;
+}
+.confirmPop .q{color:var(--text); white-space:nowrap;}
+.confirmPop button{flex:none; padding:3px 10px; font-size:13px;}
+.confirmPop button.yes{color:var(--red); border-color:var(--red); font-weight:600;}
+
 /* ---------- settings panel (⚙️ — 비모달 슬라이드, transform/opacity 전용) ---------- */
 #settingsBtn{font-size:16px; width:40px; padding:5px 0; text-align:center;}
 #settingsPanel{
@@ -584,6 +595,16 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
       <div class="spRow"><span class="spLab">볼륨</span>
         <input type="range" id="setVol" min="0" max="100" step="1" title="효과음 볼륨 (헤더 슬라이더와 동기화)">
       </div>
+    </section>
+    <section class="spSec">
+      <h3>안전</h3>
+      <div class="spRow"><span class="spLab">삭제 전 확인</span>
+        <span class="seg" id="setConfirmDelSeg" title="삭제 버튼을 누르면 한 번 더 물어보기">
+          <button type="button" data-val="off">끔</button>
+          <button type="button" data-val="on">켬</button>
+        </span>
+      </div>
+      <p class="spSmall">켜면 일정·배경 이미지·손상 백업을 지우기 전에 한 번 더 물어봐요.</p>
     </section>
     <section class="spSec">
       <h3>데이터</h3>
@@ -917,7 +938,8 @@ const SETTINGS_DEFAULTS = {
   dday: true,          /* D-day 배지 (A31 기본 켬) */
   alarm: true,         /* 일정 알림 (A32 기본 켬) */
   alarmLead: 0,        /* 알림 선행(분): 0(정각) | 5 | 15 */
-  anim: 'on'           /* on | reduced | off */
+  anim: 'on',          /* on | reduced | off */
+  confirmDelete: false /* 삭제 전 확인 (기본 끔 — fresh 기본 삭제 흐름 완전 불변) */
 };
 function sanitizeSettings(obj){
   const s = Object.assign({}, SETTINGS_DEFAULTS);
@@ -929,6 +951,7 @@ function sanitizeSettings(obj){
     if (typeof obj.alarm === 'boolean') s.alarm = obj.alarm;
     if (obj.alarmLead === 0 || obj.alarmLead === 5 || obj.alarmLead === 15) s.alarmLead = obj.alarmLead;
     if (obj.anim === 'on' || obj.anim === 'reduced' || obj.anim === 'off') s.anim = obj.anim;
+    if (typeof obj.confirmDelete === 'boolean') s.confirmDelete = obj.confirmDelete;
   }
   return s;
 }
@@ -1314,7 +1337,8 @@ function renderPanel(){
           pendingRepDelete = { repId: ev.repId, key: selKey };
           renderPanel();
         } else {
-          deleteEvent(selKey, ev.id, li);
+          /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시 삭제, 현행과 동일) */
+          confirmThenRun(delBtn, ()=>deleteEvent(selKey, ev.id, li));
         }
       });
       li.appendChild(delBtn);
@@ -1339,13 +1363,13 @@ function buildRepDeleteChoice(ev){
   oneBtn.type = 'button';
   oneBtn.setAttribute('data-del-one', '');
   oneBtn.textContent = '이 일정만 삭제';
-  oneBtn.addEventListener('click', ()=>{ deleteRepeatOccurrence(ev.repId, selKey); });
+  oneBtn.addEventListener('click', ()=>{ confirmThenRun(oneBtn, ()=>deleteRepeatOccurrence(ev.repId, selKey)); });
   row.appendChild(oneBtn);
   const allBtn = document.createElement('button');
   allBtn.type = 'button';
   allBtn.setAttribute('data-del-all', '');
   allBtn.textContent = '모든 반복 삭제';
-  allBtn.addEventListener('click', ()=>{ deleteRepeatRule(ev.repId); });
+  allBtn.addEventListener('click', ()=>{ confirmThenRun(allBtn, ()=>deleteRepeatRule(ev.repId)); });
   row.appendChild(allBtn);
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
@@ -1491,6 +1515,71 @@ function buildRuleEditRow(rule){
   setTimeout(()=>textIn.focus(), 0);
   return wrap;
 }
+
+/* ---------- 삭제 전 확인 (설정 [안전] — 기본 끔) ----------
+ * 켬이면 파괴적 동작(일정·반복 발생분/규칙·배경 이미지·손상 백업 삭제) 앞에
+ * 앵커 요소 곁에 작은 앱 내 팝오버("정말 삭제할까요? [삭제] [취소]")를 띄운다.
+ * window.confirm 등 브라우저 다이얼로그는 금지 조항(B) — createElement/textContent 로만 구성.
+ * 기본 끔에서는 onConfirm 을 즉시 실행해 현행 흐름과 완전히 동일 (fresh 채점 관찰 불변).
+ * Escape·바깥 클릭 = 취소. 확인 후에는 기존 실행 취소 토스트(A20)가 그대로 이어진다. */
+let confirmPop = null;
+let confirmPopGuard = false; /* 팝오버를 연 클릭이 곧바로 "바깥 클릭 취소"로 처리되는 것 방지 */
+function closeConfirmPop(){
+  if (confirmPop){
+    confirmPop.remove();
+    confirmPop = null;
+  }
+}
+function confirmThenRun(anchor, onConfirm){
+  if (!settings.confirmDelete){ onConfirm(); return; } /* 기본 끔: 즉시 실행 (현행과 동일) */
+  closeConfirmPop();
+  const pop = document.createElement('div');
+  pop.className = 'confirmPop';
+  pop.setAttribute('data-confirm-pop', '');
+  const q = document.createElement('span');
+  q.className = 'q';
+  q.textContent = '정말 삭제할까요?';
+  pop.appendChild(q);
+  const yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'yes';
+  yes.textContent = '삭제';
+  yes.addEventListener('click', (e)=>{ e.stopPropagation(); closeConfirmPop(); onConfirm(); });
+  pop.appendChild(yes);
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.textContent = '취소';
+  no.addEventListener('click', (e)=>{ e.stopPropagation(); closeConfirmPop(); });
+  pop.appendChild(no);
+  document.body.appendChild(pop);
+  /* 앵커 요소 근처 배치 — 화면 밖으로 나가지 않게 클램프 (ctxMenu 와 같은 방식) */
+  pop.style.left = '0px';
+  pop.style.top = '0px';
+  const pr = pop.getBoundingClientRect();
+  const ar = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect() : null;
+  let x = ar ? (ar.left + ar.width / 2 - pr.width / 2) : (window.innerWidth - pr.width) / 2;
+  let y = ar ? (ar.bottom + 6) : (window.innerHeight - pr.height) / 2;
+  if (ar && y + pr.height > window.innerHeight - 8) y = ar.top - pr.height - 6;
+  x = Math.max(8, Math.min(x, window.innerWidth - pr.width - 8));
+  y = Math.max(8, Math.min(y, window.innerHeight - pr.height - 8));
+  pop.style.left = x + 'px';
+  pop.style.top = y + 'px';
+  confirmPop = pop;
+  confirmPopGuard = true;
+  setTimeout(()=>{ confirmPopGuard = false; }, 0);
+  try{ no.focus({ preventScroll: true }); }catch(e){} /* Enter 오입력이 파괴적이지 않게 취소에 포커스 */
+}
+/* 바깥 클릭 = 취소 (팝오버를 연 클릭 자체는 guard 로 무시) */
+document.addEventListener('click', (e)=>{
+  if (!confirmPop || confirmPopGuard) return;
+  const t = e.target;
+  if (t instanceof Element && confirmPop.contains(t)) return;
+  closeConfirmPop();
+});
+/* Escape = 취소 (설정 패널 위에서는 캡처 단계 ESC 핸들러가 팝오버를 먼저 닫는다) */
+document.addEventListener('keydown', (e)=>{
+  if (e.key === 'Escape' && confirmPop) closeConfirmPop();
+});
 
 /* ---------- event CRUD ---------- */
 let justAddedId = null; /* 방금 추가한 일정 — 슬라이드 인 대상 */
@@ -1943,6 +2032,7 @@ function closeCtxMenu(){
   ctxMenu.textContent = '';
 }
 function openCtxMenu(kind, items, x, y){
+  closeConfirmPop(); /* 열려 있던 삭제 확인 팝오버는 취소 */
   ctxMenu.textContent = '';
   ctxMenu.setAttribute('data-ctx-menu', kind);
   for (const it of items){
@@ -1979,7 +2069,7 @@ function openEventMenu(key, id, li, x, y){
         editingId = id;
         renderPanel();
       } },
-    { label: '삭제', run(){ deleteEvent(key, id, li); } },
+    { label: '삭제', run(){ confirmThenRun(li, ()=>deleteEvent(key, id, li)); } }, /* 삭제 전 확인 (기본 끔 = 즉시) */
     { label: '복제', run(){ duplicateEvent(key, id); } }
   ], x, y);
 }
@@ -2074,6 +2164,7 @@ function syncSettingsUI(){
   paintSeg($('setFontSeg'), settings.fontSize);
   paintSeg($('setWeekStartSeg'), settings.weekStart);
   paintSeg($('setAnimSeg'), settings.anim);
+  paintSeg($('setConfirmDelSeg'), settings.confirmDelete ? 'on' : 'off');
   setLunar.checked = settings.lunar;
   setDday.checked = settings.dday;
   setAlarm.checked = settings.alarm;
@@ -2139,9 +2230,12 @@ function refreshDataSection(){
     del.textContent = '삭제';
     del.title = '이 손상 백업 삭제';
     del.addEventListener('click', ()=>{
-      try{ localStorage.removeItem(k); }catch(e){}
-      showToast('손상 백업 1개를 정리했어요: ' + k);
-      refreshDataSection();
+      /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시 정리) */
+      confirmThenRun(del, ()=>{
+        try{ localStorage.removeItem(k); }catch(e){}
+        showToast('손상 백업 1개를 정리했어요: ' + k);
+        refreshDataSection();
+      });
     });
     li.appendChild(del);
     setCorruptList.appendChild(li);
@@ -2149,10 +2243,13 @@ function refreshDataSection(){
   setCorruptClear.hidden = keys.length === 0;
 }
 setCorruptClear.addEventListener('click', ()=>{
-  const keys = corruptKeys();
-  for (const k of keys){ try{ localStorage.removeItem(k); }catch(e){} }
-  showToast('손상 백업 ' + keys.length + '개를 모두 정리했어요.');
-  refreshDataSection();
+  /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시 정리) */
+  confirmThenRun(setCorruptClear, ()=>{
+    const keys = corruptKeys();
+    for (const k of keys){ try{ localStorage.removeItem(k); }catch(e){} }
+    showToast('손상 백업 ' + keys.length + '개를 모두 정리했어요.');
+    refreshDataSection();
+  });
 });
 
 function isSettingsOpen(){ return settingsPanel.classList.contains('open'); }
@@ -2163,6 +2260,7 @@ function openSettings(){
   settingsPanel.setAttribute('aria-hidden', 'false');
 }
 function closeSettings(){
+  closeConfirmPop(); /* 패널 안 컨트롤에 붙은 삭제 확인 팝오버도 함께 닫는다 */
   /* 패널 안 요소가 포커스를 쥔 채 aria-hidden 이 되면 접근성 경고 — 토글 버튼으로 되돌린다 */
   try{ if (settingsPanel.contains(document.activeElement)) settingsBtn.focus({preventScroll:true}); }catch(e){}
   settingsPanel.classList.remove('open');
@@ -2176,6 +2274,7 @@ $('settingsClose').addEventListener('click', closeSettings);
 document.addEventListener('keydown', (e)=>{
   if (e.key !== 'Escape' || !isSettingsOpen()) return;
   if (!ctxMenu.hidden) return;
+  if (confirmPop){ closeConfirmPop(); return; } /* 삭제 확인 팝오버가 먼저 닫힌다 (패널 유지) */
   closeSettings();
 }, true);
 /* 바깥 클릭 닫기 (비모달 — 클릭 자체는 그대로 진행). 프로그램적 click(내보내기 앵커·파일 입력)은 무시 */
@@ -2231,6 +2330,12 @@ bindSeg('setAnimSeg', (v)=>{
   saveSettings();
   applySettingsAttrs();
   paintSeg($('setAnimSeg'), settings.anim);
+});
+/* [안전] — 삭제 전 확인 세그 (기본 끔: 끔이면 현행 즉시 삭제 흐름 그대로) */
+bindSeg('setConfirmDelSeg', (v)=>{
+  settings.confirmDelete = (v === 'on');
+  saveSettings();
+  paintSeg($('setConfirmDelSeg'), settings.confirmDelete ? 'on' : 'off');
 });
 /* [사운드] 미러 — 헤더 원본과 양방향 동기화 (cal-sound / cal-sound-vol) */
 setMute.addEventListener('change', ()=>{
@@ -2438,14 +2543,17 @@ setDecorImgFile.addEventListener('change', ()=>{
   reader.readAsDataURL(f);
 });
 setDecorImgDel.addEventListener('click', ()=>{
-  decorImgData = null;
-  decor.hasImg = false;
-  if (decor.mode === 'image') decor.mode = 'none';
-  saveDecor();
-  applyDecor();
-  syncDecorUI();
-  decorIdbDel(()=>{});
-  showToast('배경 이미지를 제거했어요.');
+  /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시 제거, 현행과 동일) */
+  confirmThenRun(setDecorImgDel, ()=>{
+    decorImgData = null;
+    decor.hasImg = false;
+    if (decor.mode === 'image') decor.mode = 'none';
+    saveDecor();
+    applyDecor();
+    syncDecorUI();
+    decorIdbDel(()=>{});
+    showToast('배경 이미지를 제거했어요.');
+  });
 });
 setDecorAlpha.addEventListener('input', ()=>{
   const v = Math.max(12, Math.min(25, Math.round(Number(setDecorAlpha.value) || 18)));

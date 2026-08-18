@@ -201,6 +201,19 @@ body {
 .board-tab-del:focus-visible { opacity: 1; }
 .board-tab-del:disabled { cursor: not-allowed; background: #9a938a; }
 .board-tab-wrap:hover .board-tab-del:disabled { opacity: 0.55; }
+/* 보드 이름 인라인 편집 (더블클릭·메뉴) — 편집 중에만 존재, 기본 화면은 현행과 동일 */
+.tab-rename {
+  width: 108px;
+  padding: 3px 8px 4px;
+  border: 1px solid rgba(94,62,24,0.45);
+  border-radius: 8px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  color: #43301f;
+  outline: none;
+  user-select: text;
+}
 
 /* ── 테마 선택·볼륨 (A36·A37) ── */
 .theme-sel {
@@ -634,6 +647,21 @@ html[data-theme-preset="dark"] .board-tab[data-active="true"],
 html[data-theme-preset="dark"] .seg button.sel,
 html[data-theme-preset="dark"] .sp-sw-auto.sel { background: #FFD966; color: #4a3421; }
 html[data-theme-preset="dark"] .sp-sw.sel { outline-color: #FFD966; }
+html[data-theme-preset="dark"] .tab-rename {
+  color: #e8e4f4;
+  background: rgba(30,28,42,0.85);
+  border-color: rgba(160,150,200,0.5);
+}
+html[data-theme-preset="dark"] .confirm-pop {
+  background: linear-gradient(180deg, rgba(60,56,80,0.98), rgba(44,41,60,0.98));
+  color: #e8e4f4;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(150,140,195,0.32);
+}
+html[data-theme-preset="dark"] .confirm-no {
+  color: #e8e4f4;
+  background: rgba(172,162,215,0.16);
+}
+html[data-theme-preset="dark"] .confirm-no:hover { background: rgba(172,162,215,0.3); }
 
 /* ── 첫 화면 안내 카드 (메모가 하나도 없을 때만) ── */
 .welcome-card {
@@ -726,6 +754,49 @@ html[data-theme-preset="dark"] .sp-sw.sel { outline-color: #FFD966; }
 }
 .notice-undo:hover { filter: brightness(1.05); }
 .notice-undo[hidden] { display: none; }
+
+/* ── 삭제 전 확인 팝오버 (설정 [안전] 켬일 때만 존재 — 기본 끔 = 현행 그대로) ── */
+.confirm-pop {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100vw - 16px);
+  padding: 8px 12px;
+  background: linear-gradient(180deg, rgba(255,251,240,0.98), rgba(246,236,214,0.98));
+  color: #4a3421;
+  font-family: "Gaegu", "Malgun Gothic", sans-serif;
+  font-size: 16px;
+  border-radius: 11px;
+  box-shadow: 0 8px 22px rgba(30,15,5,0.45), inset 0 0 0 1px rgba(255,255,255,0.65);
+  z-index: 100003;
+}
+.confirm-yes {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 3px 12px 4px;
+  background: #c25048;
+  color: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(90,25,20,0.5);
+}
+.confirm-yes:hover { filter: brightness(1.08); }
+.confirm-no {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 3px 12px 4px;
+  background: #e9dcc2;
+  color: #4a3421;
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.confirm-no:hover { background: #ddcda9; }
 
 /* ── 우클릭 메뉴 (브라우저 기본 메뉴 대체 — A21) ── */
 .ctxmenu {
@@ -1030,6 +1101,17 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   </div>
 
   <div class="sp-sec">
+    <h3>안전</h3>
+    <div class="sp-row"><span class="sp-lab">삭제 전 확인</span>
+      <span class="seg" id="spConfirmDelete">
+        <button type="button" data-val="off">끔</button>
+        <button type="button" data-val="on">켬</button>
+      </span>
+    </div>
+    <p class="sp-small">켜면 포스트잇·보드·스티커·배경·손상 백업을 지우기 전에 한 번 더 물어봐요. 지운 뒤의 실행 취소는 그대로 돼요.</p>
+  </div>
+
+  <div class="sp-sec">
     <h3>사운드</h3>
     <div class="sp-row">
       <label class="sp-lab" for="spMute">음소거</label>
@@ -1220,7 +1302,8 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     anim: 'on',           /* on(현행) | reduced | off */
     tapeColor: 'default', /* default(현행 반투명 흰 테이프) | sun | rose | mint | sky — 꾸미기 */
     tapePattern: 'default', /* default(무지) | stripe | dot — 꾸미기 */
-    frameColor: 'default'   /* default(현행 월넛) | green | navy | rose — 꾸미기 */
+    frameColor: 'default',  /* default(현행 월넛) | green | navy | rose — 꾸미기 */
+    confirmDelete: 'off'    /* off(현행 — 즉시 삭제+실행 취소) | on(삭제 전 앱 내 확인) — [안전] */
   };
   var SETTINGS = loadSettings();
   applySettings();
@@ -1247,6 +1330,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     if (v.tapeColor === 'sun' || v.tapeColor === 'rose' || v.tapeColor === 'mint' || v.tapeColor === 'sky') s.tapeColor = v.tapeColor;
     if (v.tapePattern === 'stripe' || v.tapePattern === 'dot') s.tapePattern = v.tapePattern;
     if (v.frameColor === 'green' || v.frameColor === 'navy' || v.frameColor === 'rose') s.frameColor = v.frameColor;
+    if (v.confirmDelete === 'on' || v.confirmDelete === 'off') s.confirmDelete = v.confirmDelete;
     return s;
   }
 
@@ -1313,6 +1397,75 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     undoHandler = null;
     if (h) h();
     else undoLastDelete();
+  });
+
+  /* ── 삭제 전 확인 (설정 [안전] — 기본 끔): 끔이면 즉시 실행(현행 경로 그대로),
+     켬이면 누른 자리 옆에 앱 내 확인 팝오버를 띄운다. Esc·바깥 클릭 = 취소 (A20 실행 취소와 별개·병존) ── */
+  var confirmPopEl = null;
+  var lastGestureXY = null;   /* 메뉴 항목처럼 확인 시점에 이미 사라진 앵커의 대체 좌표 */
+  document.addEventListener('pointerdown', function (e) {
+    lastGestureXY = { x: e.clientX, y: e.clientY };
+  }, true);
+
+  function closeConfirmPop() {
+    if (confirmPopEl && confirmPopEl.parentNode) confirmPopEl.parentNode.removeChild(confirmPopEl);
+    confirmPopEl = null;
+  }
+
+  function confirmThen(anchorEl, onConfirm) {
+    if (SETTINGS.confirmDelete !== 'on') { onConfirm(); return; }   /* 끔 = 현행과 동일 경로 */
+    closeConfirmPop();
+    var pop = document.createElement('div');
+    pop.className = 'confirm-pop';
+    pop.setAttribute('data-confirm-pop', '');
+    var msg = document.createElement('span');
+    msg.textContent = '정말 삭제할까요?';
+    var yes = document.createElement('button');
+    yes.type = 'button';
+    yes.className = 'confirm-yes';
+    yes.setAttribute('data-confirm-yes', '');
+    yes.textContent = '삭제';
+    var no = document.createElement('button');
+    no.type = 'button';
+    no.className = 'confirm-no';
+    no.setAttribute('data-confirm-no', '');
+    no.textContent = '취소';
+    yes.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeConfirmPop();
+      onConfirm();   /* 확인 후에는 기존 삭제 경로를 그대로 탄다 (실행 취소 토스트 포함) */
+    });
+    no.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeConfirmPop();
+    });
+    pop.appendChild(msg);
+    pop.appendChild(yes);
+    pop.appendChild(no);
+    document.body.appendChild(pop);
+    /* 위치: 앵커(누른 컨트롤) 아래 가운데 — 없으면 마지막 제스처 좌표, 화면 밖으로 나가지 않게 보정 */
+    var ax = window.innerWidth / 2;
+    var ay = window.innerHeight / 2;
+    var r = null;
+    try {
+      if (anchorEl && anchorEl.isConnected && anchorEl.getBoundingClientRect) r = anchorEl.getBoundingClientRect();
+    } catch (err) { r = null; }
+    if (r && (r.width || r.height)) { ax = r.left + r.width / 2; ay = r.bottom + 6; }
+    else if (lastGestureXY) { ax = lastGestureXY.x; ay = lastGestureXY.y + 10; }
+    var pw = pop.offsetWidth;
+    var ph = pop.offsetHeight;
+    pop.style.left = Math.max(6, Math.min(ax - pw / 2, window.innerWidth - pw - 6)) + 'px';
+    pop.style.top = Math.max(6, Math.min(ay, window.innerHeight - ph - 6)) + 'px';
+    confirmPopEl = pop;
+    try { no.focus({ preventScroll: true }); } catch (err) { /* 무시 */ }
+  }
+
+  /* 바깥 클릭 = 취소 (팝오버 안 클릭은 그대로) */
+  document.addEventListener('pointerdown', function (e) {
+    if (!confirmPopEl) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('.confirm-pop')) return;
+    closeConfirmPop();
   });
 
   function prefersReducedMotion() {
@@ -2353,8 +2506,10 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     del.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     del.addEventListener('click', function (e) {
       e.stopPropagation();
-      playDelete();          /* 직접 제스처(클릭) 내부 */
-      removeNote(n.id);
+      confirmThen(del, function () {   /* [안전] 끔(기본) = 즉시, 켬 = 확인 후 동일 경로 */
+        playDelete();        /* 직접 제스처(클릭) 내부 */
+        removeNote(n.id);
+      });
     });
 
     ta.addEventListener('input', function () {
@@ -3579,8 +3734,10 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     }
     ctxMenuEl.appendChild(ctxSep());
     ctxMenuEl.appendChild(ctxItem('삭제', function () {
-      playDelete();   /* 직접 제스처(메뉴 클릭) 내부 */
-      removeNote(id);
+      confirmThen(null, function () {   /* 메뉴는 이미 닫혀 앵커가 없다 — 마지막 제스처 좌표 사용 */
+        playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
+        removeNote(id);
+      });
     }));
   }
 
@@ -3608,10 +3765,16 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     memoItem.setAttribute('data-import-memo', '');   /* A29 진입점 — 보드 컨텍스트 메뉴 */
     ctxMenuEl.appendChild(memoItem);
     ctxMenuEl.appendChild(ctxItem('새 보드 만들기', function () { addBoard(); }));
+    /* 보드 이름 바꾸기 — 탭 더블클릭과 같은 인라인 편집기 (활성 보드 몫) */
+    var renItem = ctxItem('보드 이름 바꾸기', function () { startTabRename(boardId); });
+    renItem.title = '탭을 더블클릭해도 바꿀 수 있어요 (빈 이름 = 기본 이름)';
+    ctxMenuEl.appendChild(renItem);
     /* 보드 삭제 — 기본 보드·마지막 보드는 비활성 + 안내(title) (실행은 즉시, 취소는 토스트) */
     var delItem = ctxItem('보드 삭제', function () {
-      playDelete();   /* 직접 제스처(메뉴 클릭) 내부 */
-      deleteBoard(boardId);
+      confirmThen(null, function () {
+        playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
+        deleteBoard(boardId);
+      });
     });
     if (boardId === 'b1' || boards.length <= 1) {
       delItem.disabled = true;
@@ -3631,8 +3794,10 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     }));
     ctxMenuEl.appendChild(ctxSep());
     var del = ctxItem('삭제', function () {
-      playDelete();   /* 직접 제스처(메뉴 클릭) 내부 */
-      deleteStickerById(id);
+      confirmThen(null, function () {
+        playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
+        deleteStickerById(id);
+      });
     });
     del.title = '스티커를 떼어내요 (토스트의 실행 취소로 되돌릴 수 있어요)';
     ctxMenuEl.appendChild(del);
@@ -3696,6 +3861,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
+      if (confirmPopEl) { closeConfirmPop(); return; }   /* 확인 팝오버만 먼저 닫는다 */
       closeCtxMenu();
       closeSettings();
       closeDecorPanel();
@@ -3720,7 +3886,87 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     });
   }
 
+  /* ── 보드 이름 (postit-board-names — additive 신규 키, {boardId: 이름}):
+     이름이 없으면 기본 라벨("보드N") 그대로 — fresh 프로필 표시가 현행과 동일하다 ── */
+  var NAMES_KEY = 'postit-board-names';
+  var boardNames = {};
+
+  function readBoardNames() {
+    var raw = null;
+    try { raw = localStorage.getItem(NAMES_KEY); } catch (err) { return {}; }
+    if (raw === null) return {};
+    var v = null;
+    try { v = JSON.parse(raw); } catch (err) { v = null; }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) {
+      backupCorrupt(NAMES_KEY, raw);   /* 손상 원본은 A9 규약대로 백업(미덮어쓰기) 후 기본값 */
+      try { localStorage.setItem(NAMES_KEY, '{}'); } catch (err) { /* 무시 */ }
+      return {};
+    }
+    var out = {};
+    Object.keys(v).forEach(function (k) {
+      if (/^b\d+$/.test(k) && typeof v[k] === 'string' && v[k].trim()) out[k] = v[k].trim().slice(0, 20);
+    });
+    return out;
+  }
+
+  /* 쓰기 전에 저장분을 다시 읽어 병합 — 두 창이 서로의 이름을 덮어쓰지 않게 (A8 관용구) */
+  function writeBoardName(id, name) {
+    var m = readBoardNames();
+    if (name) m[id] = name;
+    else delete m[id];
+    boardNames = m;
+    try { localStorage.setItem(NAMES_KEY, JSON.stringify(m)); } catch (err) {
+      showNotice('보드 이름을 저장하지 못했어요. 저장 공간이 부족할 수 있어요.');
+    }
+  }
+
+  function boardLabel(id, i) {
+    return boardNames[id] || ('보드' + (i + 1));
+  }
+
+  /* 보드 탭 인라인 이름 편집: 더블클릭·메뉴 공용 — Enter/blur 확정, Esc 취소, 빈 값 = 기본 이름 복귀 */
+  function startTabRename(id) {
+    renderTabs();   /* 열려 있던 편집기가 있으면 정리하고 최신 이름으로 다시 그린다 */
+    var btn = boardTabsEl.querySelector('[data-board-tab][data-bid="' + id + '"]');
+    if (!btn) return;
+    var wrap = btn.parentNode;
+    var delBtn = wrap ? wrap.querySelector('.board-tab-del') : null;
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'tab-rename';
+    inp.setAttribute('data-board-rename', '');
+    inp.maxLength = 20;
+    inp.value = boardNames[id] || '';
+    inp.placeholder = btn.textContent;
+    inp.setAttribute('aria-label', '보드 이름');
+    btn.hidden = true;
+    if (delBtn) delBtn.hidden = true;
+    wrap.insertBefore(inp, btn);
+    var done = false;
+    function finish(commit) {
+      if (done) return;
+      done = true;
+      if (commit) {
+        var val = inp.value.trim().slice(0, 20);
+        writeBoardName(id, val);   /* 빈 값 → 항목 제거 → 기본 이름("보드N")으로 복귀 */
+      }
+      renderTabs();
+    }
+    inp.addEventListener('keydown', function (e) {
+      e.stopPropagation();   /* Esc 가 패널·메뉴 닫기로 번지지 않게 */
+      if (e.key === 'Enter') finish(true);
+      else if (e.key === 'Escape') finish(false);
+    });
+    inp.addEventListener('blur', function () { finish(true); });
+    inp.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    try {
+      inp.focus({ preventScroll: true });
+      inp.select();
+    } catch (err) { /* 무시 */ }
+  }
+
   function renderTabs() {
+    boardNames = readBoardNames();   /* 다른 창의 이름 변경도 다시 그릴 때 반영 */
     while (boardTabsEl.firstChild) boardTabsEl.removeChild(boardTabsEl.firstChild);
     boards.forEach(function (id, i) {
       var wrap = document.createElement('span');
@@ -3729,10 +3975,15 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
       b.type = 'button';
       b.className = 'board-tab';
       b.setAttribute('data-board-tab', '');
+      b.setAttribute('data-bid', id);
       b.setAttribute('data-active', id === boardId ? 'true' : 'false');
-      b.textContent = '보드' + (i + 1);
-      b.title = '보드 ' + (i + 1) + ' 열기';
+      b.textContent = boardLabel(id, i);
+      b.title = boardNames[id] ? boardNames[id] + ' 열기' : '보드 ' + (i + 1) + ' 열기';
       b.addEventListener('click', function () { switchBoard(id); });
+      b.addEventListener('dblclick', function (e) {
+        e.preventDefault();
+        startTabRename(id);
+      });
       wrap.appendChild(b);
       /* 탭 삭제 단추 (hover 시 표시) — 기본 보드·마지막 보드는 비활성 + 안내(title) */
       var del = document.createElement('button');
@@ -3753,8 +4004,10 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
       del.addEventListener('click', function (e) {
         e.stopPropagation();
         if (del.disabled) return;
-        playDelete();   /* 직접 제스처(클릭) 내부 */
-        deleteBoard(id);
+        confirmThen(del, function () {
+          playDelete();   /* 직접 제스처(클릭) 내부 */
+          deleteBoard(id);
+        });
       });
       wrap.appendChild(del);
       boardTabsEl.appendChild(wrap);
@@ -3781,6 +4034,8 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
       ? (allDecor.boards[id] || null) : null;
     try { localStorage.removeItem(sk); } catch (err) { /* 무시 */ }
     writeDecorEntry(id, null);
+    var snapName = readBoardNames()[id] || null;   /* 이름도 스냅샷 — undo 때 되살린다 */
+    if (snapName) writeBoardName(id, null);
     boards = boards.filter(function (b) { return b !== id; });
     delete deletedIdsCache[id];
     delete undoStacks[id];
@@ -3803,7 +4058,8 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
       loadBoard();   /* 꾸미기 포함 기본 보드 복원 */
     }
     renderTabs();
-    showUndoNotice('보드를 삭제했어요. (메모 ' + snapNotes.length + '개 포함)', function () {
+    showUndoNotice((snapName ? '"' + snapName + '" 보드를 삭제했어요.' : '보드를 삭제했어요.') +
+      ' (메모 ' + snapNotes.length + '개 포함)', function () {
       try {
         localStorage.setItem(sk, JSON.stringify(snapNotes));
       } catch (err) {
@@ -3811,6 +4067,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
         return;
       }
       if (snapDecor) writeDecorEntry(id, snapDecor);
+      if (snapName) writeBoardName(id, snapName);
       if (boards.indexOf(id) === -1) {
         boards.push(id);
         boards.sort(function (a, b) { return parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10); });
@@ -3927,7 +4184,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   document.addEventListener('pointerdown', function (e) {
     if (!settingsOpen()) return;
     var t = e.target;
-    if (t && t.closest && (t.closest('.spanel') || t.closest('#settingsBtn'))) return;
+    if (t && t.closest && (t.closest('.spanel') || t.closest('#settingsBtn') || t.closest('.confirm-pop'))) return;
     closeSettings();
   });
 
@@ -3969,7 +4226,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   document.addEventListener('pointerdown', function (e) {
     if (!decorPanelOpen()) return;
     var t = e.target;
-    if (t && t.closest && (t.closest('.dpanel') || t.closest('#decorBtn'))) return;
+    if (t && t.closest && (t.closest('.dpanel') || t.closest('#decorBtn') || t.closest('.confirm-pop'))) return;
     closeDecorPanel();
   });
 
@@ -4081,19 +4338,23 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
      사진 원본(IndexedDB)은 토스트 소멸 후에야 지운다 — 복원되었으면 그대로 남긴다 */
   document.getElementById('dpBgRemove').addEventListener('click', function () {
     if (!decor.bg) { showNotice('이미 기본 코르크 배경이에요.'); return; }
-    var bid = boardId;
-    var prevBg = decor.bg;
-    decor.bg = null;
-    applyDecorBg();
-    saveDecorNow();
-    syncDecorUI();
-    showUndoNotice('배경을 기본 코르크로 되돌렸어요.', function () {
-      restoreDecorBg(bid, prevBg);
-      playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
-      showNotice('배경을 다시 붙였어요.');
+    var btn = this;
+    confirmThen(btn, function () {
+      var bid = boardId;
+      var prevBg = decor.bg;
+      if (!prevBg) return;   /* 확인 대기 중 다른 경로로 이미 제거된 경우 */
+      decor.bg = null;
+      applyDecorBg();
+      saveDecorNow();
+      syncDecorUI();
+      showUndoNotice('배경을 기본 코르크로 되돌렸어요.', function () {
+        restoreDecorBg(bid, prevBg);
+        playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
+        showNotice('배경을 다시 붙였어요.');
+      });
+      if (prevBg.type === 'image') scheduleBgImageSweep(bid);
+      playTick();   /* 직접 제스처 내부 */
     });
-    if (prevBg.type === 'image') scheduleBgImageSweep(bid);
-    playTick();   /* 직접 제스처 내부 */
   });
 
   /* 제거한 배경 복원 — 같은 보드면 화면까지, 다른 보드로 넘어갔으면 저장분만 병합 복원 */
@@ -4222,6 +4483,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
     paintSeg(document.getElementById('spDefSize'), SETTINGS.defSize);
     paintSeg(document.getElementById('spTilt'), SETTINGS.tilt);
     paintSeg(document.getElementById('spAnim'), SETTINGS.anim);
+    paintSeg(document.getElementById('spConfirmDelete'), SETTINGS.confirmDelete);
     var colWrap = document.getElementById('spDefColor');
     if (colWrap) {
       Array.prototype.forEach.call(colWrap.querySelectorAll('button[data-cval]'), function (b) {
@@ -4250,6 +4512,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   bindSeg('spDefSize', 'defSize');
   bindSeg('spTilt', 'tilt');
   bindSeg('spAnim', 'anim');
+  bindSeg('spConfirmDelete', 'confirmDelete');
 
   Array.prototype.forEach.call(document.getElementById('spDefColor').querySelectorAll('button[data-cval]'), function (b) {
     b.addEventListener('click', function () {
@@ -4359,8 +4622,10 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
       del.textContent = '삭제';
       del.title = '이 백업 키를 삭제';
       del.addEventListener('click', function () {
-        try { localStorage.removeItem(c.key); } catch (err) { /* 무시 */ }
-        refreshDataPanel();
+        confirmThen(del, function () {
+          try { localStorage.removeItem(c.key); } catch (err) { /* 무시 */ }
+          refreshDataPanel();
+        });
       });
       row.appendChild(name);
       row.appendChild(del);
@@ -4369,18 +4634,21 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   }
 
   document.getElementById('spCorruptClear').addEventListener('click', function () {
-    var keys = [];
-    try {
-      for (var i = 0; i < localStorage.length; i++) {
-        var k = localStorage.key(i);
-        if (k && k.indexOf('-corrupt-') !== -1) keys.push(k);
-      }
-    } catch (err) { /* 무시 */ }
-    keys.forEach(function (k) {
-      try { localStorage.removeItem(k); } catch (err) { /* 무시 */ }
+    var btn = this;
+    confirmThen(btn, function () {
+      var keys = [];
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('-corrupt-') !== -1) keys.push(k);
+        }
+      } catch (err) { /* 무시 */ }
+      keys.forEach(function (k) {
+        try { localStorage.removeItem(k); } catch (err) { /* 무시 */ }
+      });
+      showNotice(keys.length + '개의 손상 백업 키를 정리했습니다.');
+      refreshDataPanel();
     });
-    showNotice(keys.length + '개의 손상 백업 키를 정리했습니다.');
-    refreshDataPanel();
   });
 
   /* ── 기동: 보드 목록 발견 → 활성 보드 복원 → 렌더 ── */

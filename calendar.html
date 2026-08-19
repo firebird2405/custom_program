@@ -2640,5 +2640,66 @@ renderGrid(true);
 renderPanel();
 checkAlarms();
 </script>
+<script>
+/* 창 위치·크기 기억 — 재실행 시 마지막 상태로 복원 (발주 #8) */
+(function () {
+  var KEY = 'cal-window';
+  function rect() {
+    return { x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight };
+  }
+  /* 복원: 저장값이 있고 상식적 범위일 때 — fresh 프로필에서는 no-op.
+     Edge가 로드 직후 자체 기본 배치를 늦게 적용해 덮어쓰는 경우가 있어
+     목표 값이 될 때까지 최대 6회(250ms 간격) 재적용한다. */
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (saved && typeof saved.w === 'number' && saved.w >= 400 && saved.h >= 300) {
+      var aw = (screen.availWidth || 1280), ah = (screen.availHeight || 800);
+      var w = Math.min(Math.round(saved.w), aw), h = Math.min(Math.round(saved.h), ah);
+      var x = Math.max((screen.availLeft || 0), Math.min(Math.round(saved.x), aw - 160));
+      var y = Math.max((screen.availTop || 0), Math.min(Math.round(saved.y), ah - 120));
+      var applyBounds = function () {
+        try { window.resizeTo(w, h); window.moveTo(x, y); } catch (e) {}
+      };
+      var applied = function () {
+        var r = rect();
+        return Math.abs(r.w - w) <= 8 && Math.abs(r.h - h) <= 8 &&
+               Math.abs(r.x - x) <= 8 && Math.abs(r.y - y) <= 8;
+      };
+      applyBounds();
+      var tries = 0;
+      var iv = setInterval(function () {
+        tries++;
+        if (applied() || tries >= 6) { clearInterval(iv); return; }
+        applyBounds();
+      }, 250);
+    }
+  } catch (e) { /* 복원 실패는 침묵 — 기본 크기로 열림 */ }
+  /* 기록: 실제 변경이 있을 때만 (0.4s 디바운스 + 1.5s 이동 감지 폴링) */
+  var last = '', t = null;
+  function record() {
+    clearTimeout(t);
+    t = setTimeout(function () {
+      try {
+        var r = rect();
+        if (r.w < 200 || r.h < 200) return;
+        var s = JSON.stringify(r);
+        if (s !== last) { last = s; localStorage.setItem(KEY, s); }
+      } catch (e) {}
+    }, 400);
+  }
+  window.addEventListener('resize', record);
+  setInterval(function () {
+    try { if (JSON.stringify(rect()) !== last) record(); } catch (e) {}
+  }, 1500);
+  try { last = JSON.stringify(rect()); } catch (e) {}
+  /* 종료 시 즉시 기록 — 디바운스 유실 방지 (창 상태 키 한정, 일정 저장은 여전히 즉시 저장 규약) */
+  window.addEventListener('pagehide', function () {
+    try {
+      var r = rect();
+      if (r.w >= 200 && r.h >= 200) localStorage.setItem(KEY, JSON.stringify(r));
+    } catch (e) {}
+  });
+})();
+</script>
 </body>
 </html>

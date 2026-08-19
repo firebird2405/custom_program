@@ -23,13 +23,20 @@ If Not fso.FileExists(edgePath) Then
     WScript.Quit 1
 End If
 
-cmd = """" & edgePath & """" _
-    & " --app=file:///D:/custom_program/postit.html" _
+Dim args
+args = " --app=file:///D:/custom_program/postit.html" _
     & " --user-data-dir=""D:\custom_program\.edge\postit""" _
-    & " --window-size=900,780" _
-    & " --window-position=1010,70" _
     & " --no-first-run" _
     & " --no-default-browser-check"
+
+' First run only: seed a sensible default size/position.
+' On later runs the flags are omitted so Edge restores the last
+' window bounds it remembered for this app profile.
+If Not fso.FolderExists("D:\custom_program\.edge\postit") Then
+    args = args & " --window-size=900,780 --window-position=1010,70"
+End If
+
+cmd = """" & edgePath & """" & args
 
 sh.Run cmd, 1, False
 

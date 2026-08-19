@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 시안 A(코르크 실사 감성) — 소형 사이즈(16~50px) 전용 판독성 변형 (자체 제작, 외부 에셋 없음).
+       feTurbulence 질감·낙서 디테일이 소형에서 뭉개지므로 평탄한 코르크 톤 + 포스트잇·압정·하트
+       실루엣 위주로 정리. 색(코르크 #c69a63 / 종이 옐로 / 하트·압정 레드)·구도(기울인 포스트잇 +
+       상단 압정)는 정본 icon-a-cork.svg 와 동일하게 유지한다. -->
+  <defs>
+    <clipPath id="sClip"><rect width="512" height="512" rx="100"/></clipPath>
+    <radialGradient id="sVig" cx="50%" cy="40%" r="78%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="62%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#2f1d0b" stop-opacity="0.45"/>
+    </radialGradient>
+    <linearGradient id="sPaper" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0" stop-color="#fff3a6"/>
+      <stop offset="0.65" stop-color="#ffe25e"/>
+      <stop offset="1" stop-color="#f8cf3e"/>
+    </linearGradient>
+    <linearGradient id="sCurl" x1="1" y1="1" x2="0.2" y2="0.2">
+      <stop offset="0" stop-color="#fff9d6"/>
+      <stop offset="0.55" stop-color="#f3d049"/>
+      <stop offset="1" stop-color="#d8ab22"/>
+    </linearGradient>
+    <radialGradient id="sPin" cx="0.35" cy="0.3" r="0.9">
+      <stop offset="0" stop-color="#ff9d8a"/>
+      <stop offset="0.45" stop-color="#ee4d38"/>
+      <stop offset="1" stop-color="#a81f10"/>
+    </radialGradient>
+  </defs>
+
+  <g clip-path="url(#sClip)">
+    <!-- 평탄한 코르크 톤 (노이즈 필터 없음 — 큰 반점 몇 개로만 톤 변화) -->
+    <rect width="512" height="512" fill="#c69a63"/>
+    <g opacity="0.16" fill="#8a5f2e">
+      <ellipse cx="88" cy="112" rx="54" ry="40" transform="rotate(-18 88 112)"/>
+      <ellipse cx="430" cy="90" rx="46" ry="34" transform="rotate(24 430 90)"/>
+      <ellipse cx="70" cy="420" rx="50" ry="38" transform="rotate(12 70 420)"/>
+      <ellipse cx="440" cy="430" rx="58" ry="42" transform="rotate(-14 440 430)"/>
+    </g>
+    <g opacity="0.14" fill="#ecc98f">
+      <ellipse cx="256" cy="60" rx="70" ry="30" transform="rotate(-6 256 60)"/>
+      <ellipse cx="470" cy="260" rx="40" ry="52" transform="rotate(16 470 260)"/>
+      <ellipse cx="48" cy="262" rx="36" ry="48" transform="rotate(-10 48 262)"/>
+    </g>
+    <rect width="512" height="512" fill="url(#sVig)"/>
+
+    <!-- 포스트잇 그림자 (블러 없이 단순 오프셋 — 소형에서 또렷) -->
+    <g transform="translate(266 284) rotate(-5)">
+      <rect x="-160" y="-160" width="320" height="320" fill="#26160a" opacity="0.35"/>
+    </g>
+
+    <!-- 포스트잇 본체 -->
+    <g transform="translate(252 268) rotate(-5)">
+      <rect x="-160" y="-160" width="320" height="320" fill="url(#sPaper)"/>
+      <rect x="-160" y="-160" width="320" height="40" fill="#5c3f10" opacity="0.07"/>
+      <!-- 말린 모서리 (단순화) -->
+      <path d="M160,160 L160,58 C144,110 110,144 58,160 Z" fill="url(#sCurl)"/>
+      <!-- 마커 하트 — 굵고 크게 (소형 판독성) -->
+      <g transform="translate(0 6) scale(1.45)">
+        <path d="M0,64 C-12,42 -52,34 -52,2 C-52,-24 -24,-32 0,-8 C24,-32 52,-24 52,2 C52,34 12,42 0,64 Z"
+              fill="none" stroke="#e0463a" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- 압정 — 정본보다 크게 -->
+    <g transform="translate(252 116)">
+      <ellipse cx="8" cy="22" rx="30" ry="11" fill="#1f1206" opacity="0.3"/>
+      <circle r="30" fill="url(#sPin)"/>
+      <ellipse cx="-9" cy="-10" rx="10" ry="7" fill="#ffffff" opacity="0.75" transform="rotate(-28)"/>
+    </g>
+  </g>
+</svg>

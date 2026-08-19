@@ -14,13 +14,14 @@
 //
 // A43 배선: preload.js(브리지·셸 UI) + migrate.js(마이그레이션 엔진·IPC 종단) —
 // 소스 프로필 인자는 --source-cal=/--source-postit= 또는 PETIT_SOURCE_CAL/POSTIT env.
+// 공용 유틸(경로·안전 JSON IO·창 식별·IPC 방어)은 lib-shared.js 가 단일 정의처다.
 // ============================================================================
 
 'use strict';
 
 const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
-const fs = require('fs');
+const { REPO_ROOT, readJsonFile, writeJsonFile } = require('./lib-shared');
 const { registerMigrateIpc } = require('./migrate');
 const { registerBackupIpc, startBackupScheduler } = require('./backup');
 
@@ -56,22 +57,13 @@ function stateFilePath() {
 
 // 저장 파일을 읽는다 — 손상되어 있어도 크래시 없이 기본값으로 강등 (아키텍처 원칙 5 준용)
 function loadWindowState() {
-  try {
-    const raw = fs.readFileSync(stateFilePath(), 'utf8');
-    const data = JSON.parse(raw);
-    return data && typeof data === 'object' ? data : {};
-  } catch (_err) {
-    return {};
-  }
+  const data = readJsonFile(stateFilePath());
+  return data && typeof data === 'object' ? data : {};
 }
 
+// 저장 실패는 치명적이지 않다 — 다음 실행은 기본 크기로 열린다.
 function saveWindowState(state) {
-  try {
-    fs.mkdirSync(app.getPath('userData'), { recursive: true });
-    fs.writeFileSync(stateFilePath(), JSON.stringify(state, null, 2), 'utf8');
-  } catch (_err) {
-    // 저장 실패는 치명적이지 않다 — 다음 실행은 기본 크기로 열린다.
-  }
+  writeJsonFile(stateFilePath(), state);
 }
 
 // 저장된 bounds가 유효한 숫자이고 현재 어느 디스플레이와든 겹치는지 검증.
@@ -96,6 +88,9 @@ function sanitizeBounds(saved) {
 // ============================================================================
 // 창 생성
 // ============================================================================
+
+// 이동·리사이즈 연타를 묶어 저장하는 디바운스 간격 (창 상태 기억 전용 — 앱 데이터 무관)
+const WINDOW_STATE_SAVE_DEBOUNCE_MS = 400;
 
 // A49 ② 정적 검사 대상 — 아래 보안 기본선은 절대 완화 금지.
 // preload: A49③ 화이트리스트 브리지(window.petit) + 셸 전용 UI 레이어(A43 카드·A47 온보딩).
@@ -186,7 +181,7 @@ function createAppWindow(state, key, htmlFile, windowTitle, defaults) {
     saveTimer = setTimeout(() => {
       captureBounds();
       saveWindowState(state);
-    }, 400);
+    }, WINDOW_STATE_SAVE_DEBOUNCE_MS);
   };
   win.on('resize', scheduleSave);
   win.on('move', scheduleSave);
@@ -238,13 +233,12 @@ function main() {
       app.on('session-created', killSpell);
     } catch (e) { /* 세션 API 부재 시에도 창 생성은 계속 */ }
 
-    const repoRoot = path.resolve(__dirname, '..');
     const state = loadWindowState();
 
     createAppWindow(
       state,
       'calendar',
-      path.join(repoRoot, 'calendar.html'),
+      path.join(REPO_ROOT, 'calendar.html'),
       '쁘띠캘린더 — 캘린더',
       { width: 1024, height: 740 }
     );
@@ -252,7 +246,7 @@ function main() {
     createAppWindow(
       state,
       'postit',
-      path.join(repoRoot, 'postit.html'),
+      path.join(REPO_ROOT, 'postit.html'),
       '쁘띠캘린더 — 포스트잇 월',
       { width: 1024, height: 740 }
     );

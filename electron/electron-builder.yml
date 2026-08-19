@@ -45,10 +45,12 @@ electronLanguages:
 
 # ── A46 화이트리스트 ①: 앱 번들(asar)에는 셸 코드만 ─────────────────────────
 # main.js 가 require 하는 셸 모듈 전부를 명시 동봉해야 패키지가 기동한다:
-# preload.js(A43/A47/백업 UI)·migrate.js+migrate-dump.ps1(A43)·backup.js(백업 엔진)
+# preload.js(A43/A47/백업 UI)·migrate.js+migrate-dump.ps1(A43)·backup.js(백업 엔진)·
+# lib-shared.js(main 프로세스 공용 유틸 — main/migrate/backup 이 require)
 files:
   - main.js
   - preload.js
+  - lib-shared.js
   - migrate.js
   - migrate-dump.ps1
   - backup.js

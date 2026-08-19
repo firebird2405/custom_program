@@ -45,16 +45,20 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
+const {
+  REPO_ROOT,
+  POWERSHELL_EXE, // PATH 섀도잉 차단 — 항상 System32 절대 경로 (backup/a39 관례와 동일)
+  cleanChildEnv,
+  windowAppKind,
+  appWindows,
+  assertTrustedSender,
+} = require('./lib-shared');
 
-const REPO_ROOT = path.resolve(__dirname, '..');
 const DUMP_PS1 = path.join(__dirname, 'migrate-dump.ps1');
-// PATH 섀도잉 차단 — powershell 은 항상 System32 절대 경로 (backup/a39 관례와 동일)
-const POWERSHELL_EXE = path.join(
-  process.env.SystemRoot || 'C:\\Windows',
-  'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
-);
 
 // ── 소스 프로필 경로 결정 (A43 채점 계약: argv > env > 기본 .edge) ──────────
+
+/** `--이름=값` 형태의 실행 인자 값 판독 — 없으면 null. */
 function argvValue(name) {
   const pfx = name + '=';
   for (const a of process.argv) {
@@ -88,14 +92,14 @@ function detect() {
 }
 
 // ── 덤프 실행 (읽기 전용) ────────────────────────────────────────────────────
-// 부모 환경 오염 방어: ELECTRON_RUN_AS_NODE·NODE_OPTIONS 제거 후 자식 실행
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.NODE_OPTIONS;
-  return env;
-}
 
+/**
+ * migrate-dump.ps1 을 정돈된 환경(cleanChildEnv)으로 실행해 프로필 1개를 JSON 덤프한다.
+ * @param {string} ps1Path 임시 폴더로 복사된 스크립트 경로 (asar 패키지 대응)
+ * @param {string} profileDir 읽기 전용으로 덤프할 Edge 프로필 경로
+ * @param {string} outFile 덤프 JSON 출력 경로
+ * @returns {Promise<string>} stdout (실패 시 한국어 사유로 reject)
+ */
 function runDump(ps1Path, profileDir, outFile) {
   return new Promise((resolve, reject) => {
     execFile(
@@ -280,17 +284,11 @@ function buildMergeScript(payload) {
     '})()';
 }
 
-// ── 창 식별 (URL 기준 — main.js 창 생성과 결합도 없음) ──────────────────────
-function windowAppKind(win) {
-  let u = '';
-  try { u = String(win.webContents.getURL()).toLowerCase(); } catch (_err) { return null; }
-  if (u.endsWith('/calendar.html') || u.endsWith('\\calendar.html')) return 'calendar';
-  if (u.endsWith('/postit.html') || u.endsWith('\\postit.html')) return 'postit';
-  return null;
-}
+// ── 창 선택 (창 식별은 lib-shared windowAppKind — URL 기준) ─────────────────
 
+/** 병합 주입 창의 폴백 선택 — 캘린더 창 우선 (호출 창이 없거나 이미 닫힌 경우). */
 function pickTargetWindow() {
-  const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && windowAppKind(w));
+  const wins = appWindows(null);
   wins.sort((a, b) => (windowAppKind(a) === 'calendar' ? -1 : 1) - (windowAppKind(b) === 'calendar' ? -1 : 1));
   return wins[0] || null;
 }
@@ -298,6 +296,7 @@ function pickTargetWindow() {
 // ── 실행 상태 (status 계약 + 중복 실행 차단) ────────────────────────────────
 const migState = { running: false, last: null };
 
+/** 병합 리포트를 사용자용 한국어 한 줄 요약으로 만든다. */
 function summarize(rep, warnings) {
   let items = 0;
   for (const k of Object.keys(rep.added || {})) items += rep.added[k];
@@ -312,6 +311,11 @@ function summarize(rep, warnings) {
   return s;
 }
 
+/**
+ * 마이그레이션 본체: ① 프로필 덤프(읽기 전용) → ② 앱 창에 병합 스크립트 주입 → 결과 요약.
+ * @param {Electron.WebContents|null} invokerWebContents 호출한 창 (병합 주입 창 우선 후보)
+ * @returns {Promise<{ok:boolean, summary?:string, reason?:string, report?:object, warnings?:string[]}>}
+ */
 async function runMigration(invokerWebContents) {
   if (migState.running) {
     return { ok: false, reason: '이미 가져오기가 진행 중이에요.' };
@@ -400,15 +404,9 @@ async function runMigration(invokerWebContents) {
 }
 
 // ── IPC 등록 (preload 화이트리스트 채널의 main 측 종단) ─────────────────────
-// 호출자 검증: 우리 앱 창(file://)의 요청만 처리한다.
-function assertTrustedSender(event) {
-  const frameUrl = String((event.senderFrame && event.senderFrame.url) || '');
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || !frameUrl.startsWith('file://')) {
-    throw new Error('허용되지 않은 호출자입니다.');
-  }
-}
+// 호출자 검증(assertTrustedSender)은 lib-shared — 우리 앱 창(file://)의 요청만 처리한다.
 
+/** 'petit:migrate:detect' / ':run' / ':status' 채널 종단 등록. */
 function registerMigrateIpc() {
   ipcMain.handle('petit:migrate:detect', (event) => {
     assertTrustedSender(event);

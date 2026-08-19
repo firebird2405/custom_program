@@ -92,6 +92,39 @@ function el(tag, styles, text) {
   return node;
 }
 
+/** el() + type="button" — 셸이 만드는 모든 버튼의 공통 생성기 (폼 submit 오동작 방지) */
+function btnEl(styles, text) {
+  const b = el('button', styles, text);
+  b.type = 'button';
+  return b;
+}
+
+// ── 셸 공통 스킨 (마이그레이션 카드·온보딩 카드·버튼이 같은 시각 언어를 쓴다) ──
+
+// 오버레이 카드 공통 스킨
+const CARD_SKIN = {
+  boxSizing: 'border-box',
+  background: '#fffdf5',
+  border: '1px solid #e6d9bf',
+  borderRadius: '14px',
+  boxShadow: '0 8px 24px rgba(80, 60, 20, 0.22)',
+  color: '#4a3f33',
+  fontSize: '14px',
+  lineHeight: '1.5',
+  fontFamily: 'inherit'
+};
+
+// 담백한(고스트) 보조 버튼 공통 스킨 — "나중에"·"건너뛰기" 류 (padding 은 자리별 지정)
+const GHOST_BTN = {
+  font: 'inherit',
+  fontSize: '13px',
+  borderRadius: '10px',
+  border: '1px solid #d8cbb0',
+  background: 'transparent',
+  color: '#6b5d49',
+  cursor: 'pointer'
+};
+
 function lsGet(key) {
   try { return localStorage.getItem(key); } catch (_err) { return null; }
 }
@@ -113,21 +146,13 @@ let migCardEl = null;
 let migChipEl = null;
 
 const CARD_BASE = {
+  ...CARD_SKIN,
   position: 'fixed',
   right: '16px',
   bottom: '64px',
   zIndex: '2147483600',
   width: '272px',
-  boxSizing: 'border-box',
-  padding: '14px 16px',
-  background: '#fffdf5',
-  border: '1px solid #e6d9bf',
-  borderRadius: '14px',
-  boxShadow: '0 8px 24px rgba(80, 60, 20, 0.22)',
-  color: '#4a3f33',
-  fontSize: '14px',
-  lineHeight: '1.5',
-  fontFamily: 'inherit'
+  padding: '14px 16px'
 };
 
 function removeMigCard() {
@@ -156,18 +181,12 @@ function buildMigCard() {
   card.appendChild(statusLine);
 
   const row = el('div', { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
-  const btnBase = {
-    font: 'inherit',
-    fontSize: '13px',
-    padding: '6px 12px',
-    borderRadius: '10px',
-    cursor: 'pointer'
-  };
-  const btnLater = el('button', { ...btnBase, background: 'transparent', border: '1px solid #d8cbb0', color: '#6b5d49' }, '나중에');
-  btnLater.type = 'button';
+  const btnLater = btnEl({ ...GHOST_BTN, padding: '6px 12px' }, '나중에');
   btnLater.setAttribute('data-migrate-later', '');
-  const btnGo = el('button', { ...btnBase, background: '#f4a9b8', border: '1px solid #e690a4', color: '#4a2530', fontWeight: '700' }, '가져오기');
-  btnGo.type = 'button';
+  const btnGo = btnEl(
+    { ...GHOST_BTN, padding: '6px 12px', background: '#f4a9b8', border: '1px solid #e690a4', color: '#4a2530', fontWeight: '700' },
+    '가져오기'
+  );
   btnGo.setAttribute('data-migrate-run', '');    // A43 실행 훅 (정본 명칭)
   btnGo.setAttribute('data-migrate-accept', ''); // 동의어 별칭 병기
   row.appendChild(btnLater);
@@ -220,7 +239,7 @@ function buildMigCard() {
 
 function buildMigChip() {
   if (migChipEl && migChipEl.isConnected) return;
-  const chip = el('button', {
+  const chip = btnEl({
     position: 'fixed',
     right: '16px',
     bottom: '16px',
@@ -236,7 +255,6 @@ function buildMigChip() {
     cursor: 'pointer',
     padding: '0'
   }, '📦');
-  chip.type = 'button';
   chip.title = '기존 Edge 데이터 가져오기';
   chip.setAttribute('aria-label', '기존 Edge 데이터 가져오기');
   chip.setAttribute('data-migrate-open', '');   // A43 재진입 훅 (정본 명칭)
@@ -320,21 +338,13 @@ function startOnboarding() {
   root.setAttribute('data-onboarding', '');
 
   const card = el('div', {
+    ...CARD_SKIN,
     position: 'fixed',
     left: '50%',
     bottom: '24px',
     transform: 'translateX(-50%)',
     maxWidth: '420px',
-    boxSizing: 'border-box',
     padding: '14px 18px',
-    background: '#fffdf5',
-    border: '1px solid #e6d9bf',
-    borderRadius: '14px',
-    boxShadow: '0 8px 24px rgba(80, 60, 20, 0.22)',
-    color: '#4a3f33',
-    fontSize: '14px',
-    lineHeight: '1.5',
-    fontFamily: 'inherit',
     pointerEvents: 'auto',
     textAlign: 'center'
   });
@@ -342,17 +352,7 @@ function startOnboarding() {
   const counter = el('div', { fontSize: '11px', color: '#a89a82', marginBottom: '4px' }, '');
   const textLine = el('div', { marginBottom: '10px' }, '');
   textLine.setAttribute('data-onboarding-text', '');
-  const btnSkip = el('button', {
-    font: 'inherit',
-    fontSize: '13px',
-    padding: '5px 14px',
-    borderRadius: '10px',
-    border: '1px solid #d8cbb0',
-    background: 'transparent',
-    color: '#6b5d49',
-    cursor: 'pointer'
-  }, '건너뛰기');
-  btnSkip.type = 'button';
+  const btnSkip = btnEl({ ...GHOST_BTN, padding: '5px 14px' }, '건너뛰기');
   btnSkip.setAttribute('data-onboarding-skip', '');   // 항상 보임 (A47 — 언제든 건너뛰기)
   card.appendChild(counter);
   card.appendChild(textLine);
@@ -526,8 +526,7 @@ function injectOnboardingReplay() {
   const head = el('h3', undefined, '처음 안내');
   const row = el('div');
   row.className = 'sp-row';
-  const btn = el('button', undefined, '🌱 처음 안내 다시 보기');
-  btn.type = 'button';
+  const btn = btnEl(undefined, '🌱 처음 안내 다시 보기');
   btn.className = 'tool-btn';
   btn.setAttribute('data-onboarding-replay', '');
   btn.addEventListener('click', function () {
@@ -570,6 +569,7 @@ function injectBackupSection() {
   if (!panel || panel.querySelector('[data-backup-section]')) return;
   const isCal = PAGE === 'calendar';
   const host = isCal ? (panel.querySelector('.spBody') || panel) : panel;
+  const smallCls = isCal ? 'spSmall' : 'sp-small'; // 앱별 안내문 관용 클래스
 
   const sec = el(isCal ? 'section' : 'div');
   sec.className = isCal ? 'spSec' : 'sp-sec';
@@ -587,8 +587,7 @@ function injectBackupSection() {
   // 버튼 행 (폴더 변경 · 지금 백업)
   const btnRow = el('div', { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '6px 0' });
   const mkBtn = function (label) {
-    const b = el('button', undefined, label);
-    b.type = 'button';
+    const b = btnEl(undefined, label);
     if (!isCal) b.className = 'tool-btn'; // 포스트잇 패널 관용 버튼 스타일
     return b;
   };
@@ -620,7 +619,7 @@ function injectBackupSection() {
   autoLabel.appendChild(autoChk);
   autoLabel.appendChild(el('span', undefined, '매일 자동 백업 (앱이 켜져 있는 동안 하루 1번)'));
   autoRow.appendChild(autoLabel);
-  const lockMark = el('button', {
+  const lockMark = btnEl({
     font: 'inherit',
     fontSize: '12px',
     padding: '2px 8px',
@@ -630,7 +629,6 @@ function injectBackupSection() {
     color: '#a4653c',
     cursor: 'pointer'
   }, '🔒 프리미엄');
-  lockMark.type = 'button';
   lockMark.title = '예약 자동 백업은 프리미엄(Pro) 기능이에요';
   lockMark.setAttribute('data-pro-lock', ''); // 포스트잇: 앱 A45 규약과 결합 (pro-ok 시 CSS 숨김 + 클릭 시 라이선스 팝업)
   autoRow.appendChild(lockMark);
@@ -639,11 +637,10 @@ function injectBackupSection() {
   // 안내문 (클라우드 백업 안내 + 상태 줄)
   const hint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '5px 0 0' },
     '저장 폴더를 OneDrive·구글 드라이브 같은 동기화 폴더로 지정하면, 백업이 자동으로 클라우드에도 올라가요.');
-  if (isCal) hint.className = 'spSmall';
-  else hint.className = 'sp-small';
+  hint.className = smallCls;
   sec.appendChild(hint);
   const statusLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '5px 0 0', minHeight: '0' }, '');
-  statusLine.className = isCal ? 'spSmall' : 'sp-small';
+  statusLine.className = smallCls;
   statusLine.setAttribute('data-backup-status', '');
   sec.appendChild(statusLine);
 

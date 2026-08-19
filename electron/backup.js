@@ -33,8 +33,14 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const {
+  REPO_ROOT,
+  readJsonFile,
+  writeJsonFile,
+  appWindows,
+  assertTrustedSender,
+} = require('./lib-shared');
 
-const REPO_ROOT = path.resolve(__dirname, '..');
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ── 주기 (테스트 훅: PETIT_BACKUP_INTERVAL_MS — 양수 정수일 때만 단축) ───────
@@ -68,22 +74,13 @@ function sanitizeConfig(v) {
 }
 
 function loadConfig() {
-  try {
-    const raw = fs.readFileSync(configPath(), 'utf8');
-    return sanitizeConfig(JSON.parse(raw));
-  } catch (_err) {
-    return sanitizeConfig(null); // 부재·손상 모두 기본값 강등 (크래시 없음)
-  }
+  // 부재·손상 모두 기본값 강등 (크래시 없음 — lib-shared readJsonFile)
+  return sanitizeConfig(readJsonFile(configPath()));
 }
 
 function saveConfig(cfg) {
-  try {
-    fs.mkdirSync(app.getPath('userData'), { recursive: true });
-    fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), 'utf8');
-    return true;
-  } catch (_err) {
-    return false; // 저장 실패는 치명적이지 않다 — 이번 세션 메모리 값으로 계속
-  }
+  // 저장 실패는 치명적이지 않다 — 이번 세션 메모리 값으로 계속 (lib-shared writeJsonFile)
+  return writeJsonFile(configPath(), cfg);
 }
 
 let config = null;
@@ -148,22 +145,7 @@ async function verifyLicenseText(text) {
   }
 }
 
-// ── 창 식별 (migrate.js 동형 — 결합도 없는 URL 판별) ────────────────────────
-function windowAppKind(win) {
-  let u = '';
-  try { u = String(win.webContents.getURL()).toLowerCase(); } catch (_err) { return null; }
-  if (u.endsWith('/calendar.html') || u.endsWith('\\calendar.html')) return 'calendar';
-  if (u.endsWith('/postit.html') || u.endsWith('\\postit.html')) return 'postit';
-  return null;
-}
-
-function appWindows(preferred) {
-  const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && windowAppKind(w));
-  if (preferred) {
-    wins.sort((a, b) => (a === preferred ? -1 : 0) - (b === preferred ? -1 : 0));
-  }
-  return wins;
-}
+// ── 창 열거는 lib-shared appWindows (URL 기준 창 식별 — 결합도 없음) ────────
 
 // 두 창은 같은 file:// 오리진 저장소를 공유한다 — 아무 창에서나 읽으면 전체가 보인다.
 async function readLicenseText(preferredWin) {
@@ -312,6 +294,10 @@ function fileStamp(d) {
     '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
 }
 
+/**
+ * 기존 파일을 절대 덮지 않는 기록 — 'wx' 플래그 + 이름 충돌 시 -2·-3… 접미.
+ * @returns {string} 실제 기록된 전체 경로 (99회 충돌 시 한국어 오류 throw)
+ */
 function writeNoClobber(dir, base, text) {
   for (let n = 1; n <= 99; n++) {
     const name = n === 1 ? base + '.json' : base + '-' + n + '.json';
@@ -330,6 +316,12 @@ function writeNoClobber(dir, base, text) {
 // ── 백업 실행 ────────────────────────────────────────────────────────────────
 const bkState = { running: false, last: null };
 
+/**
+ * 백업 본체: 앱 창에서 저장 데이터 수집 → 지정 폴더에 캘린더/포스트잇 v2 파일 기록.
+ * @param {'manual'|'auto'} kind 실행 종류 (상태 표기용)
+ * @param {Electron.BrowserWindow|null} preferredWin 수집을 먼저 시도할 창
+ * @returns {Promise<{ok:boolean, summary?:string, reason?:string}>} 한국어 요약/사유
+ */
 async function runBackup(kind, preferredWin) {
   if (bkState.running) {
     return { ok: false, reason: '이미 백업이 진행 중이에요.' };
@@ -404,14 +396,9 @@ function stopBackupScheduler() {
 }
 
 // ── IPC (preload 화이트리스트 채널의 main 측 종단) ──────────────────────────
-function assertTrustedSender(event) {
-  const frameUrl = String((event.senderFrame && event.senderFrame.url) || '');
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || !frameUrl.startsWith('file://')) {
-    throw new Error('허용되지 않은 호출자입니다.');
-  }
-}
+// 호출자 검증(assertTrustedSender)은 lib-shared — 우리 앱 창(file://)의 요청만 처리한다.
 
+/** 'petit:backup:status' 응답 본문 — 설정·Pro 여부·실행 상태를 한 번에 담는다. */
 function statusPayload(pro) {
   const cfg = getConfig();
   return {

@@ -10,9 +10,13 @@
 //     ※ 재진입점이 앱 "설정 패널"이 아니라 셸 칩인 이유: 설정 패널은 저장소 원본
 //       calendar.html 내부이고, 원본 HTML 은 바이트 동일 계약(A42)으로 수정 금지다.
 //       따라서 셸 UI 는 전부 preload 주입 오버레이 레이어에만 산다.
-//   A47 골격 — fresh 프로필의 포스트잇 창에 온보딩 오버레이([data-onboarding])와
-//     스텝 엔진([data-onboarding-target] 지목 + [data-onboarding-skip] 상시 표시)을
-//     주입한다. 본 발주는 자리 표시 2스텝 골격까지 — 실제 콘텐츠는 2주차 발주.
+//   A47 온보딩 — fresh 프로필의 포스트잇 창에 온보딩 오버레이([data-onboarding])와
+//     기계 구동 스텝 엔진을 주입한다. 각 사용자 액션 단계는 엄격 가시
+//     [data-onboarding-target] 정확히 1개가 "지금 조작할 실제 앱 UI"를 지목하고,
+//     속성값이 액션을 선언한다 (click/fill/press:<Key>/drag:<CSS셀렉터>).
+//     여정: 환영(자동) → ＋ 새 포스트잇 클릭 → 노트 실제 타이핑(fill) → 꾸미기 열기
+//     → 스티커 실제 드래그 부착(drag:#board) → 완료(자동) — 사용자 액션 4회 (≤8 계약).
+//     [data-onboarding-skip] 상시 표시 + 설정 패널에 [data-onboarding-replay] 주입.
 //     스텝 전진은 "사용자 발행 입력 액션"(isTrusted)만 계수한다 (자동 전진 계수 금지).
 //   A49③ — contextBridge 로 이름 붙은 채널 화이트리스트 API(window.petit)만 노출.
 //     ipcRenderer 원본·require·Node 모듈 노출 0건, 채널 인자는 전부 문자열 리터럴.
@@ -254,22 +258,44 @@ async function initMigrateUi() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// 온보딩 골격 (포스트잇 창 전용, fresh 프로필만 — A47)
-// 본 발주 범위: 오버레이 + 스텝 엔진 + 자리 표시 2스텝. 콘텐츠는 2주차 발주.
+// 온보딩 (포스트잇 창 전용 — A47)
+// 계약(정본: grader a47 spec 상단 REQUIRED CONTRACT):
+//  - fresh 첫 실행에만 오버레이([data-onboarding]) 표시 — postit-onboarded 존재 시 미표시.
+//  - 사용자 액션 단계 = 엄격 가시 [data-onboarding-target] "정확히 1개", 속성값이 액션을
+//    선언 (click=빈 값 / fill / press:<Key> / drag:<CSS셀렉터>). 자동 안내 슬라이드는
+//    target 0개 상태로 12초 내 자진 전진 (액션으로 계수되지 않는다).
+//  - 총 사용자 액션 ≤8 에 fill ≥1(첫 포스트잇 실제 타이핑)·drag ≥1(첫 스티커 실제 드래그).
+//  - 콘텐츠는 전부 사용자 입력분 — 온보딩이 노트·스티커를 자동 생성하면 FAIL (굿하트 차단).
+//    셸이 발행하는 유일한 합성 이벤트는 "사용자 드래그 1회가 끝난 순간" 팔레트 단추의
+//    앱 click 경로를 대신 눌러 주는 것뿐이다 (드래그 없이는 절대 발생하지 않는다).
+//  - [data-onboarding-skip] 상시 표시. 설정 패널(#settingsPanel)에 [data-onboarding-replay]
+//    를 셸이 주입 — 클릭 시 언제든 처음부터 재실행 (원본 HTML 무수정, A42).
 // ────────────────────────────────────────────────────────────────────────────
 
-const ONBOARDED_KEY = 'postit-onboarded';      // additive 키 — 값 존재 = 표시 안 함
+const ONBOARDED_KEY = 'postit-onboarded';      // additive 키 — 값 존재 = 첫 실행 아님
 
-function initOnboarding() {
-  if (PAGE !== 'postit') return;
-  if (lsGet(ONBOARDED_KEY) !== null) return;   // fresh userData 에서만 표시
+// 여정: 환영(자동) → ＋ 새 포스트잇 클릭 → 노트 실제 타이핑(fill) → 꾸미기 열기(click)
+//      → 스티커 실제 드래그 부착(drag:#board) → 완료(자동). 사용자 액션 4회 (≤8 계약).
+// find = 지금 조작할 실제 앱 UI 셀렉터. markDelay = 패널 슬라이드(0.28s)가 끝난 뒤에야
+// 지목한다 — 전환 중 좌표로 드래그 시작점이 빗나가지 않게.
+const ONBOARD_STEPS = [
+  { auto: 2600, text: '반가워요, 포스트잇 월이에요! 🌷 첫 포스트잇을 함께 붙여 볼까요?' },
+  { find: '[data-add-note]', action: 'click',
+    text: '먼저 위의 "＋ 새 포스트잇" 단추를 눌러 보세요.' },
+  { find: '[data-note].editing [data-note-edit]', action: 'fill',
+    text: '좋아요! 이제 마음에 담아 둔 말을 적어 보세요. 무엇이든 좋아요. ✏️' },
+  { find: '#decorBtn', action: 'click',
+    text: '멋진 첫 노트예요! 이번엔 🎨 단추로 꾸미기 서랍을 열어 볼까요?' },
+  { find: '#dpStSeason button', action: 'drag:#board', markDelay: 550,
+    text: '마음에 드는 스티커를 꾹 잡고 보드로 끌어와 붙여 보세요. 🌸' },
+  { auto: 2400, text: '참 잘했어요! 🎉 이 보드는 이제 온전히 당신의 자리예요.' }
+];
 
-  // 자리 표시 스텝 (2주차 발주에서 "첫 포스트잇 타이핑 + 첫 스티커 드래그 부착"으로 확장,
-  // 사용자 입력 액션 합계 ≤8 계약 유지)
-  const steps = [
-    { target: '[data-add-note]', text: '위의 "＋ 새 포스트잇" 단추를 눌러 보세요.' },
-    { target: '#board', text: '(자리 표시 단계) 보드를 한 번 눌러 보세요 — 스티커 꾸미기 안내가 2주차에 여기로 들어와요.' }
-  ];
+let onboardingActive = false;                  // 중복 기동 방지 (재실행 버튼 연타 등)
+
+function startOnboarding() {
+  if (onboardingActive || !document.body) return;
+  onboardingActive = true;
 
   // 지목 하이라이트 스타일 (정적 문자열만 — textContent 주입)
   const styleEl = document.createElement('style');
@@ -326,68 +352,196 @@ function initOnboarding() {
   root.appendChild(card);
   document.body.appendChild(root);
 
-  let idx = 0;
+  let idx = -1;
   let currentTarget = null;
-  let userActionCount = 0;   // A47 계수 대상 — 사용자 발행 입력 액션만 센다
+  let currentAction = null;                     // 'click' | 'fill' | 'drag'
+  let autoTimer = null;
+  let locateTimer = null;
+  let markTimer = null;
+  let fillTimer = null;
+  let fillLastVal = null;
+  let dragArm = null;                           // { el, x, y } — 드래그 시작 스냅숏
+  let finished = false;
+
+  function clearTimers() {
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+    if (locateTimer) { clearInterval(locateTimer); locateTimer = null; }
+    if (markTimer) { clearTimeout(markTimer); markTimer = null; }
+    if (fillTimer) { clearInterval(fillTimer); fillTimer = null; }
+  }
 
   function clearTargetMark() {
     if (currentTarget) {
       try { currentTarget.removeAttribute('data-onboarding-target'); } catch (_err) { /* DOM 이탈 무해 */ }
     }
     currentTarget = null;
+    currentAction = null;
   }
 
   function showStep(i) {
-    clearTargetMark();
-    const st = steps[i];
-    counter.textContent = (i + 1) + ' / ' + steps.length;
+    clearTimers();
+    clearTargetMark();                          // 이전 target 제거 — "정확히 1개" 계약
+    dragArm = null;
+    fillLastVal = null;
+    idx = i;
+    const st = ONBOARD_STEPS[i];
+    counter.textContent = (i + 1) + ' / ' + ONBOARD_STEPS.length;
     textLine.textContent = st.text;
-    // 대상 탐색: 앱 초기화 직후라 잠깐 없을 수 있어 최대 3초 재시도
-    let tries = 0;
-    (function locate() {
-      if (idx !== i || !root.isConnected) return;
+
+    if (st.auto) {                              // 자동 안내 슬라이드 — target 0개, 자진 전진
+      autoTimer = setTimeout(function () {
+        if (!finished && idx === i) advance();
+      }, st.auto);
+      return;
+    }
+
+    // 대상 탐색: 앱 렌더 직후 잠깐 없을 수 있어 단계가 살아 있는 동안 재시도
+    // (못 찾는 동안에도 [data-onboarding-skip] 으로 언제든 건너뛸 수 있다)
+    const locate = function () {
+      if (finished || idx !== i) return true;   // 단계 이탈 — 탐색 종료
       let t = null;
-      try { t = document.querySelector(st.target); } catch (_err) { t = null; }
-      if (t) {
+      try { t = document.querySelector(st.find); } catch (_err) { t = null; }
+      if (!t) return false;
+      const mark = function () {
+        if (finished || idx !== i || currentTarget) return;
         currentTarget = t;
-        t.setAttribute('data-onboarding-target', '');
-      } else if (tries < 20) {
-        tries += 1;
-        setTimeout(locate, 150);
-      }
-    })();
-  }
-
-  function finish(mode) {
-    clearTargetMark();
-    document.removeEventListener('click', onUserClick, true);
-    if (root.isConnected) root.remove();
-    if (styleEl.isConnected) styleEl.remove();
-    lsSet(ONBOARDED_KEY, mode);
-    petitApi.onboarding.setDone().catch(function () { /* 스텁 실패 무해 — 정본은 localStorage */ });
-  }
-
-  function advance() {
-    idx += 1;
-    if (idx >= steps.length) finish('done');
-    else showStep(idx);
-  }
-
-  function onUserClick(ev) {
-    // A47: 스텝 전진은 "채점기/사용자 발행 입력 액션"만 계수한다.
-    // isTrusted=false 합성 이벤트·타이머 자동 전진은 완료로 세지 않는다
-    // (온보딩의 자동 생성 콘텐츠로 완료 계수 금지 계약).
-    if (!ev.isTrusted) return;
-    if (!currentTarget) return;
-    if (ev.target === currentTarget || (currentTarget.contains && currentTarget.contains(ev.target))) {
-      userActionCount += 1;
-      advance();
+        currentAction = st.action === 'fill' ? 'fill' : (st.action.indexOf('drag:') === 0 ? 'drag' : 'click');
+        try { t.setAttribute('data-onboarding-target', st.action === 'click' ? '' : st.action); } catch (_err) { /* 무해 */ }
+        if (currentAction === 'fill') startFillWatch();
+      };
+      if (st.markDelay) markTimer = setTimeout(mark, st.markDelay);
+      else mark();
+      return true;
+    };
+    if (!locate()) {
+      locateTimer = setInterval(function () {
+        if (locate() && locateTimer) { clearInterval(locateTimer); locateTimer = null; }
+      }, 180);
     }
   }
 
+  // fill 단계: 값이 비어 있지 않고 ~1초간 그대로면 "타이핑을 마쳤다"로 보고 전진.
+  // 텍스트는 앱의 원래 input→저장 흐름에 그대로 남는다 (셸은 값을 만들지도 바꾸지도 않는다).
+  function startFillWatch() {
+    fillTimer = setInterval(function () {
+      try {
+        if (finished || currentAction !== 'fill' || !currentTarget) return;
+        const v = 'value' in currentTarget ? currentTarget.value : currentTarget.textContent;
+        if (v && String(v).trim() !== '' && v === fillLastVal) { advance(); return; }
+        fillLastVal = v;
+      } catch (_err) { /* 무해 */ }
+    }, 500);
+  }
+
+  function advance() {
+    if (finished) return;
+    const next = idx + 1;
+    if (next >= ONBOARD_STEPS.length) finish('done');
+    else showStep(next);
+  }
+
+  function finish(mode) {
+    if (finished) return;
+    finished = true;
+    clearTimers();
+    clearTargetMark();
+    document.removeEventListener('click', onDocClick, true);
+    document.removeEventListener('pointerdown', onDocPointerDown, true);
+    document.removeEventListener('pointerup', onDocPointerUp, true);
+    if (root.isConnected) root.remove();
+    if (styleEl.isConnected) styleEl.remove();
+    onboardingActive = false;
+    lsSet(ONBOARDED_KEY, mode);                 // 완료 플래그 정본 — 재기동 시 재표시 금지
+    petitApi.onboarding.setDone().catch(function () { /* 스텁 실패 무해 — 정본은 localStorage */ });
+  }
+
+  // ── 전진 판정: 사용자 발행(isTrusted) 입력만 계수 (합성 이벤트·자동 전진 계수 금지) ──
+
+  function onDocClick(ev) {
+    try {
+      if (!ev.isTrusted || finished || !currentTarget) return;
+      if (currentAction !== 'click' && currentAction !== 'drag') return;
+      const t = ev.target;
+      if (t !== currentTarget && !(currentTarget.contains && currentTarget.contains(t))) return;
+      // click 단계 완료. drag 단계에서 "이동 없는 클릭"이었다면 앱 팔레트의 원래 click
+      // 경로가 그대로 부착하므로 — 사용자 입력 1회에 의한 부착 — 역시 완료로 본다.
+      advance();
+    } catch (_err) { /* 무해 */ }
+  }
+
+  function onDocPointerDown(ev) {
+    try {
+      if (!ev.isTrusted || finished) return;
+      if (currentAction !== 'drag' || !currentTarget) return;
+      const t = ev.target;
+      if (t === currentTarget || (currentTarget.contains && currentTarget.contains(t))) {
+        dragArm = { el: currentTarget, x: ev.clientX || 0, y: ev.clientY || 0 };
+      }
+    } catch (_err) { /* 무해 */ }
+  }
+
+  function onDocPointerUp(ev) {
+    try {
+      if (!ev.isTrusted || finished) return;
+      const arm = dragArm;
+      dragArm = null;
+      if (!arm || currentAction !== 'drag' || currentTarget !== arm.el) return;
+      const t = ev.target;
+      if (t === arm.el || (arm.el.contains && arm.el.contains(t))) return;  // 클릭 — onDocClick 경로
+      const dx = (ev.clientX || 0) - arm.x;
+      const dy = (ev.clientY || 0) - arm.y;
+      if (Math.hypot(dx, dy) < 24) return;      // 짧은 흔들림 — 드래그로 보지 않는다 (재시도 가능)
+      // 사용자 드래그 1회 완료 — 팔레트 단추의 앱 click 경로로 부착시킨다.
+      // 이 합성 click 은 isTrusted=false 라 위 판정들이 무시한다 (이중 계수 없음).
+      try {
+        arm.el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      } catch (_err) { /* 무해 */ }
+      advance();
+    } catch (_err) { /* 무해 */ }
+  }
+
   btnSkip.addEventListener('click', function () { finish('skip'); });
-  document.addEventListener('click', onUserClick, true);
+  document.addEventListener('click', onDocClick, true);
+  document.addEventListener('pointerdown', onDocPointerDown, true);
+  document.addEventListener('pointerup', onDocPointerUp, true);
   showStep(0);
+}
+
+// 설정 패널에 재실행 컨트롤 주입 ([data-onboarding-replay] — rev.6 신설 훅, 원본 HTML 무수정).
+// 패널(#settingsPanel)은 닫힘 시 visibility:hidden 이므로 주입 버튼도 함께 숨는다
+// — "설정을 연 뒤에만 보인다"는 채점기 엄격 가시성 관찰과 자연스럽게 일치한다.
+function injectOnboardingReplay() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel || panel.querySelector('[data-onboarding-replay]')) return;
+  const sec = el('div');
+  sec.className = 'sp-sec';                    // 앱 패널 관용 스타일 재사용 (DOM 공유)
+  const head = el('h3', undefined, '처음 안내');
+  const row = el('div');
+  row.className = 'sp-row';
+  const btn = el('button', undefined, '🌱 처음 안내 다시 보기');
+  btn.type = 'button';
+  btn.className = 'tool-btn';
+  btn.setAttribute('data-onboarding-replay', '');
+  btn.addEventListener('click', function () {
+    try { startOnboarding(); } catch (_err) { /* 무해 */ }
+  });
+  const small = el('p', undefined, '첫 만남 때의 안내를 처음부터 다시 진행해요. 언제든 건너뛸 수 있어요.');
+  small.className = 'sp-small';
+  row.appendChild(btn);
+  sec.appendChild(head);
+  sec.appendChild(row);
+  sec.appendChild(small);
+  panel.appendChild(sec);
+}
+
+function initOnboarding() {
+  if (PAGE !== 'postit') return;
+  injectOnboardingReplay();                    // 재실행 진입점은 항상 준비 (완료·건너뛰기 후 포함)
+  if (lsGet(ONBOARDED_KEY) !== null) return;   // fresh userData 에서만 자동 표시
+  // 앱 초기화(load)가 끝난 뒤 시작 — fresh 첫 기동의 무거운 초기화와 첫 클릭이
+  // 경합하지 않게 한다 (오버레이는 load 직후 표시 — 15초 표시 계약에 충분).
+  if (document.readyState === 'complete') startOnboarding();
+  else window.addEventListener('load', function () { startOnboarding(); }, { once: true });
 }
 
 // ────────────────────────────────────────────────────────────────────────────

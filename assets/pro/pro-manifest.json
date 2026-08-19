@@ -1,0 +1,20 @@
+{
+  "product": "쁘띠캘린더 포스트잇 월 — Pro",
+  "generated": "2026-08-19",
+  "stickerPacks": [
+    {
+      "id": "travel-snack",
+      "name": "여행·간식",
+      "stickers": ["✈️", "🗼", "🏖️", "⛺", "🚗", "🍕", "🍰", "🍓", "🥐", "🍜"]
+    },
+    {
+      "id": "animal-friends",
+      "name": "동물 친구",
+      "stickers": ["🐶", "🐱", "🐰", "🐻", "🐼", "🦊", "🐥", "🐢", "🦋", "🐳"]
+    }
+  ],
+  "skins": [
+    { "id": "deepsea", "name": "심해 블루", "baseColor": "#1F4E79" },
+    { "id": "lavender", "name": "라벤더 안개", "baseColor": "#C9B8E8" }
+  ]
+}

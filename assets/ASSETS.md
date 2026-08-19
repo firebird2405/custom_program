@@ -8,6 +8,7 @@
 | cork-texture.jpg | https://ambientcg.com/view?id=Cork001 | CC0 (Public Domain) |
 | Gaegu-Regular.ttf | https://github.com/google/fonts/raw/main/ofl/gaegu/Gaegu-Regular.ttf | OFL (SIL Open Font License 1.1) |
 | NanumPenScript-Regular.ttf | https://github.com/google/fonts/raw/main/ofl/nanumpenscript/NanumPenScript-Regular.ttf | OFL (SIL Open Font License 1.1) |
+| pro/pro-manifest.json | (자체 제작 — 이 저장소에서 직접 작성한 Pro 스티커·테마 정의 JSON) | CC0 (Public Domain) |
 
 ## 상세
 
@@ -18,3 +19,6 @@
   라이선스: SIL Open Font License 1.1 (OFL-1.1).
 - **NanumPenScript-Regular.ttf** — 나눔손글씨 펜(Nanum Pen Script), 한글 손글씨 폰트. Google Fonts 공식 저장소 `ofl/` 디렉터리에서 다운로드.
   라이선스: SIL Open Font License 1.1 (OFL-1.1).
+- **pro/pro-manifest.json** — Pro(프리미엄) 신규 가치 매니페스트 (A45 계약 3): 신규 스티커 2팩(여행·간식 / 동물 친구,
+  전부 이모지 식별자 — 별도 이미지 파일 없음)과 프리미엄 테마 2종(심해 블루 #1F4E79 / 라벤더 안개 #C9B8E8)의 정의.
+  이 저장소에서 직접 작성한 자체 제작물로 CC0 (Public Domain) 로 둔다. 상업 배포 허용.

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 시안 C — 손글씨 캐릭터풍: P 모노그램 + 하트·테이프 낙서 (자체 제작) -->
+  <defs>
+    <clipPath id="cClip"><rect width="512" height="512" rx="100"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#cClip)">
+    <!-- 크림 종이 바탕 -->
+    <rect width="512" height="512" fill="#fff4dc"/>
+    <!-- 은은한 모눈 점 -->
+    <g fill="#c9b489" opacity="0.35">
+      <circle cx="96" cy="96" r="5"/><circle cx="256" cy="72" r="5"/><circle cx="424" cy="104" r="5"/>
+      <circle cx="72" cy="256" r="5"/><circle cx="448" cy="256" r="5"/>
+      <circle cx="96" cy="424" r="5"/><circle cx="256" cy="452" r="5"/><circle cx="420" cy="428" r="5"/>
+    </g>
+
+    <!-- 마스킹 테이프 (좌상단, 물방울 무늬) -->
+    <g transform="rotate(-14 90 96)">
+      <rect x="-46" y="66" width="252" height="66" fill="#f6b1c8" opacity="0.92"/>
+      <g fill="#ffffff" opacity="0.85">
+        <circle cx="6" cy="88" r="7"/><circle cx="58" cy="112" r="7"/><circle cx="112" cy="86" r="7"/>
+        <circle cx="164" cy="112" r="7"/><circle cx="196" cy="84" r="7"/>
+      </g>
+    </g>
+
+    <!-- 손글씨 P 모노그램 (크레용 느낌 획) -->
+    <g fill="none" stroke="#473f36" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M196,134 C189,214 191,308 199,396" stroke-width="46"/>
+      <path d="M199,148 C296,116 356,164 351,226 C346,290 268,304 205,292" stroke-width="46"/>
+    </g>
+    <!-- P 볼 속 얼굴 -->
+    <g>
+      <circle cx="262" cy="208" r="11" fill="#473f36"/>
+      <circle cx="308" cy="212" r="11" fill="#473f36"/>
+      <path d="M268,240 C280,252 296,252 307,241" fill="none" stroke="#473f36" stroke-width="9" stroke-linecap="round"/>
+      <circle cx="246" cy="234" r="10" fill="#f5a0a0" opacity="0.85"/>
+      <circle cx="324" cy="240" r="10" fill="#f5a0a0" opacity="0.85"/>
+    </g>
+
+    <!-- 손그림 하트 -->
+    <g transform="rotate(12 368 366)">
+      <path d="M368,406 C356,384 322,376 322,348 C322,326 346,318 368,340 C390,318 414,326 414,348 C414,376 380,384 368,406 Z"
+            fill="#f2766b" stroke="#d94f4f" stroke-width="8" stroke-linejoin="round"/>
+    </g>
+
+    <!-- 반짝임 + 밑줄 낙서 -->
+    <g stroke="#e8a33d" stroke-width="9" stroke-linecap="round">
+      <path d="M412,142 h34 M429,125 v34"/>
+      <path d="M118,332 h22 M129,321 v22" stroke-width="7"/>
+    </g>
+    <path d="M156,438 C226,424 296,450 376,432" fill="none" stroke="#8fc7b6" stroke-width="13" stroke-linecap="round"/>
+  </g>
+</svg>

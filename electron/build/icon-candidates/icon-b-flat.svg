@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 시안 B — 파스텔 플랫 미니멀: 캘린더 격자 + 포스트잇 모서리 (자체 제작) -->
+  <defs>
+    <clipPath id="bClip"><rect width="512" height="512" rx="100"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#bClip)">
+    <!-- 파스텔 민트 바탕 -->
+    <rect width="512" height="512" fill="#c7ebdd"/>
+
+    <!-- 캘린더 카드 (플랫 오프셋 섀도) -->
+    <rect x="86" y="140" width="300" height="296" rx="30" fill="#132b23" opacity="0.1" transform="translate(10 12)"/>
+    <rect x="86" y="140" width="300" height="296" rx="30" fill="#ffffff"/>
+
+    <!-- 헤더 (위쪽 모서리만 둥글게) -->
+    <path d="M116,140 h240 a30,30 0 0 1 30,30 v56 h-300 v-56 a30,30 0 0 1 30,-30 Z" fill="#ff9fae"/>
+
+    <!-- 바인더 링 -->
+    <rect x="146" y="96" width="24" height="78" rx="12" fill="#5fb9a2"/>
+    <rect x="302" y="96" width="24" height="78" rx="12" fill="#5fb9a2"/>
+
+    <!-- 날짜 격자 (한 칸 강조) -->
+    <g fill="#e8edf2">
+      <rect x="116" y="258" width="66" height="56" rx="12"/>
+      <rect x="203" y="258" width="66" height="56" rx="12"/>
+      <rect x="290" y="258" width="66" height="56" rx="12"/>
+      <rect x="116" y="332" width="66" height="56" rx="12"/>
+      <rect x="203" y="332" width="66" height="56" rx="12"/>
+    </g>
+    <rect x="203" y="258" width="66" height="56" rx="12" fill="#ffb1bd"/>
+    <circle cx="236" cy="286" r="9" fill="#ffffff"/>
+
+    <!-- 포스트잇 모서리 (플랫 접힘) -->
+    <g transform="rotate(7 402 402)">
+      <rect x="300" y="300" width="176" height="176" rx="10" fill="#123028" opacity="0.12" transform="translate(8 10)"/>
+      <rect x="300" y="300" width="176" height="176" rx="10" fill="#ffd97a"/>
+      <path d="M476,412 L476,476 L412,476 Z" fill="#eeb84e"/>
+    </g>
+  </g>
+</svg>

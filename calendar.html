@@ -397,6 +397,8 @@ footer .hint{font-size:12px; color:var(--muted); margin-left:auto;}
 #setCorruptList li button{padding:2px 8px; font-size:12px;}
 #setCorruptClear{align-self:flex-start; padding:4px 10px; font-size:13px;}
 .spInfo{font-size:13px; line-height:1.55;}
+.spLicList{margin:4px 0 0; padding-left:16px; list-style:disc;}
+.spLicList li{margin:2px 0; word-break:break-all;}
 /* 다크 프리셋: 설정 패널을 배경보다 살짝 띄운 따뜻한 브라운으로 — 컨트롤 표면·경계도 패널 안에서만 조화 */
 [data-preset="dark"] #settingsPanel{
   background:#312818;
@@ -626,11 +628,16 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
     <section class="spSec">
       <h3>정보</h3>
       <p class="spInfo">캘린더 — 캘린더 + 포스트잇 월 (2026-08)</p>
-      <p class="spInfo spSmall">
-        글꼴: Gaegu · Nanum Pen Script (SIL OFL 1.1)<br>
-        음력 변환표: korean-lunar-calendar (MIT)<br>
-        전체 에셋 출처: assets/ASSETS.md
-      </p>
+      <div class="spInfo spSmall" data-licenses>
+        <p>라이선스 고지 — 번들 에셋·라이브러리 전수 (상세: assets/ASSETS.md)</p>
+        <ul class="spLicList">
+          <li>cork-texture.jpg — ambientCG Cork001 · CC0 (Public Domain)</li>
+          <li>Gaegu-Regular.ttf — 개구쟁이 글꼴, Google Fonts · SIL OFL 1.1</li>
+          <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 글꼴, Google Fonts · SIL OFL 1.1</li>
+          <li>korean-lunar-calendar v0.4.0 — 음력 변환표 · MIT License, (c) 2022 Jinil Lee</li>
+          <li>앱 아이콘 — 자체 제작 (쁘띠캘린더 원본, 외부 에셋 불사용)</li>
+        </ul>
+      </div>
       <p class="spInfo spSmall">단축키: ← → 이동 · T 오늘 · W 주간/월간 · ESC 닫기</p>
     </section>
   </div>

@@ -1,0 +1,7 @@
+{
+  "format": "petit-license",
+  "v": 1,
+  "alg": "ECDSA-P256-SHA256",
+  "payload": "eyJhcHAiOiJwZXRpdCIsInByb2R1Y3QiOiJwcm8iLCJ0ZXN0Ijp0cnVlLCJsaWNlbnNlZSI6ImdyYWRlci10ZXN0LWZpeHR1cmUiLCJpc3N1ZWQiOiIyMDI2LTA4LTE5In0=",
+  "sig": "HV0fY0YrmQp/vO/DtrjakS6+YcJDOjpv0GPoK9UdDt4QvioYWxOYuoWxTPa3oT8LlTv757U5f9K18O3NAfRX+w=="
+}

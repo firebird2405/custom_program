@@ -964,6 +964,105 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   .notice.show { animation: none; }
   .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
 }
+/* ── 프리미엄(Pro) — 발주 #9 A45: 잠금 표시([data-pro-lock])·라이선스 팝업·프리미엄 테마 ──
+   해제 상태는 html.pro-ok 클래스가 정본: 잠금 표시는 전부 숨고 Pro 콘텐츠가 열린다.
+   fresh 기본 상태(라이선스 없음)에서는 아래 어떤 규칙도 기존 렌더를 바꾸지 않는다 (additive). */
+.pro-lock-btn {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px dashed rgba(94,62,24,0.45);
+  border-radius: 9px;
+  background: rgba(255,236,170,0.55);
+  color: #6b4d2e;
+  font-family: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.pro-lock-btn:hover { background: rgba(255,236,170,0.85); }
+.pro-content { display: none; }
+html.pro-ok .pro-content { display: block; }
+html.pro-ok [data-pro-lock] { display: none !important; }
+.pro-banner {
+  display: none;
+  position: fixed;
+  left: 50%;
+  top: 64px;
+  transform: translateX(-50%);
+  max-width: min(560px, 92vw);
+  padding: 11px 15px;
+  border-radius: 11px;
+  background: #fff8e2;
+  border: 1px solid rgba(94,62,24,0.35);
+  color: #5e3e18;
+  font-size: 16px;
+  line-height: 1.35;
+  box-shadow: 0 8px 22px rgba(30,15,5,0.4);
+  cursor: pointer;
+  z-index: 100002;
+}
+.pro-banner.show { display: block; }
+.license-pop {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(430px, 92vw);
+  padding: 14px 16px 16px;
+  border-radius: 12px;
+  background: #fffdf4;
+  border: 1px solid rgba(94,62,24,0.35);
+  color: #4a3421;
+  box-shadow: 0 12px 32px rgba(30,15,5,0.45);
+  z-index: 100004;
+}
+.license-pop[hidden] { display: none; }
+.lic-input {
+  display: block;
+  width: 100%;
+  margin: 10px 0 6px;
+  padding: 7px;
+  border: 1px dashed rgba(94,62,24,0.4);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.7);
+  font-family: inherit;
+  font-size: 14px;
+  color: inherit;
+  cursor: pointer;
+}
+.lic-msg { min-height: 1.3em; margin: 4px 0 0; color: #a33b2e; }
+.lic-list ul { margin: 4px 0 0; padding-left: 18px; }
+.lic-list li { margin: 2px 0; }
+/* 프리미엄 테마 2종 — data-pro-theme 속성은 라이선스 해제 상태에서만 JS가 부여한다.
+   테마 프리셋 규칙보다 뒤에 두어 같은 특이도에서 프리미엄 쪽이 이긴다. */
+html[data-pro-theme="deepsea"] body { background: #1F4E79; }
+html[data-pro-theme="deepsea"] #board {
+  background-image:
+    radial-gradient(120% 95% at 50% 42%, rgba(0,0,0,0) 52%, rgba(2,12,24,0.55) 100%),
+    linear-gradient(180deg, #28608f, #173a5b);
+  background-size: auto, auto;
+  background-repeat: no-repeat, no-repeat;
+  background-blend-mode: normal, normal;
+  box-shadow:
+    inset 0 0 0 10px rgba(12,32,52,0.95),
+    inset 0 0 0 12px rgba(140,190,235,0.3),
+    inset 0 0 110px rgba(2,12,24,0.55);
+}
+html[data-pro-theme="lavender"] body { background: #C9B8E8; }
+html[data-pro-theme="lavender"] #board {
+  background-image:
+    radial-gradient(120% 95% at 50% 42%, rgba(255,255,255,0) 55%, rgba(90,70,130,0.28) 100%),
+    linear-gradient(180deg, #ded2f2, #c3b2e3);
+  background-size: auto, auto;
+  background-repeat: no-repeat, no-repeat;
+  background-blend-mode: normal, normal;
+  box-shadow:
+    inset 0 0 0 10px rgba(140,120,180,0.75),
+    inset 0 0 0 12px rgba(255,250,255,0.45),
+    inset 0 0 90px rgba(90,70,130,0.3);
+}
 </style>
 </head>
 <body>
@@ -1025,6 +1124,24 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
 </div>
 
 <div class="ctxmenu" id="ctxMenu" data-ctx-menu role="menu"></div>
+
+<!-- 프리미엄 잠금 안내 배너 (A45): 보드 4개째 시도 등 잠긴 기능에 닿으면 표시.
+     클릭 = 라이선스 안내·가져오기 팝업. 해제 상태(html.pro-ok)에서는 CSS로 전부 숨는다. -->
+<button type="button" class="pro-banner" id="proBanner" data-pro-lock title="프리미엄 잠금 해제 안내 열기">
+  🔒 보드는 무료로 3개까지예요 — 4번째 보드부터는 프리미엄! 여기를 누르면 라이선스로 잠금 해제하는 방법을 알려드려요.
+</button>
+
+<!-- 라이선스 가져오기 팝업 (A45 계약 4): [data-license-import] = input[type=file] 자신.
+     서명 검증은 이 컴퓨터 안 WebCrypto 로만 수행 — 어디로도 전송되지 않는다 (오프라인). -->
+<div class="license-pop" id="licensePop" hidden aria-label="프리미엄 라이선스">
+  <div class="sp-head">🔑 프리미엄 라이선스
+    <button type="button" class="notice-close sp-close" id="licClose" title="닫기">✕</button>
+  </div>
+  <p class="sp-small">프리미엄에는 <strong>새 스티커 2팩(여행·간식 / 동물 친구)</strong>, <strong>프리미엄 테마 2종(심해 블루 / 라벤더 안개)</strong>, <strong>보드 4개째부터 무제한</strong>이 담겨 있어요.</p>
+  <p class="sp-small">가지고 있는 라이선스 파일(.license)을 아래에서 선택하면 이 컴퓨터에서 서명을 확인한 뒤 바로 잠금이 풀려요. 인터넷 연결은 필요 없고, 파일이 밖으로 전송되지도 않아요.</p>
+  <input type="file" id="licenseFile" class="lic-input" data-license-import accept=".license,application/json" aria-label="라이선스 파일 선택">
+  <p class="sp-small lic-msg" id="licMsg"></p>
+</div>
 
 <aside class="spanel" id="settingsPanel" aria-label="설정 패널">
   <div class="sp-head">⚙️ 설정
@@ -1144,7 +1261,17 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   <div class="sp-sec sp-info">
     <h3>정보</h3>
     <p>🗒️ 포스트잇 월 — 캘린더+포스트잇 월 rev.5 (오프라인 단일 파일, 이 컴퓨터에만 저장)</p>
-    <p>에셋 라이선스: 코르크 질감 cork-texture.jpg = ambientCG "Cork001" (CC0 퍼블릭 도메인) · 개구쟁이 Gaegu-Regular.ttf (OFL 1.1) · 나눔손글씨 펜 NanumPenScript-Regular.ttf (OFL 1.1). 전체 출처는 assets/ASSETS.md 참고.</p>
+    <div class="lic-list" data-licenses>
+      <p>에셋·오픈소스 고지 (전체 출처·라이선스 원문은 assets/ASSETS.md):</p>
+      <ul>
+        <li>cork-texture.jpg — 코르크 질감, ambientCG "Cork001" · CC0 (Public Domain)</li>
+        <li>Gaegu-Regular.ttf — 개구쟁이 한글 손글씨 폰트, Google Fonts · OFL 1.1 (SIL Open Font License)</li>
+        <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 폰트, Google Fonts · OFL 1.1 (SIL Open Font License)</li>
+        <li>pro-manifest.json — Pro 스티커·테마 정의 (assets/pro/, 자체 제작) · CC0 (Public Domain)</li>
+        <li>korean-lunar-calendar — 한국 음력 변환 알고리즘 (캘린더 앱의 음력 표시에 사용) · MIT License</li>
+        <li>Electron / Chromium — 데스크톱 셸 런타임 · MIT 등 오픈소스 라이선스</li>
+      </ul>
+    </div>
     <p>단축키: Esc = 편집·메뉴·설정 닫기 · 노트 클릭 = 편집 · 위쪽 잡아 끌기 = 이동 · 오른쪽 아래 모서리 끌기 = 크기 조절 · 우클릭 = 메뉴</p>
   </div>
 </aside>
@@ -1220,6 +1347,30 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
       </span>
     </div>
     <p class="sp-small">테이프·프레임은 모든 보드에 함께 적용돼요. 기본을 고르면 지금 모습 그대로예요.</p>
+  </div>
+
+  <!-- 프리미엄 (A45): 잠금 상태 = [data-pro-lock] 버튼만 노출(클릭 → 해제 안내+가져오기),
+       해제 상태 = 신규 스티커 2팩 + 프리미엄 테마 2종 (assets/pro/pro-manifest.json 과 동일 정의).
+       무료 기능(위 섹션 전부)은 이 섹션과 조상-후손 관계가 없다 — 동결 하한 불가침. -->
+  <div class="sp-sec" id="dpProSec">
+    <h3>프리미엄 ✨</h3>
+    <button type="button" class="pro-lock-btn" id="dpProLock" data-pro-lock title="프리미엄 잠금 해제 안내 열기">
+      🔒 새 스티커 2팩(여행·간식 / 동물 친구) · 프리미엄 테마 2종 · 보드 무제한 — 라이선스로 잠금 해제
+    </button>
+    <div class="pro-content" id="dpProContent">
+      <div class="sp-row"><span class="sp-lab">여행·간식</span></div>
+      <div class="stpal" id="dpStTravel"></div>
+      <div class="sp-row"><span class="sp-lab">동물 친구</span></div>
+      <div class="stpal" id="dpStAnimal"></div>
+      <div class="sp-row"><span class="sp-lab">프리미엄 테마</span>
+        <span class="seg" id="dpProTheme">
+          <button type="button" data-ptval="deepsea">심해 블루</button>
+          <button type="button" data-ptval="lavender">라벤더 안개</button>
+          <button type="button" data-ptval="">끄기</button>
+        </span>
+      </div>
+      <p class="sp-small">프리미엄 테마는 기본 테마 위에 얹혀요. "끄기"를 누르면 원래 테마로 돌아가요.</p>
+    </div>
   </div>
 </aside>
 
@@ -4127,6 +4278,13 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
   }
 
   function addBoard() {
+    /* Free/Pro 경계 (A45 계약 2): 보드는 무료로 3개까지 — 4개째 "생성 시도"만 잠근다.
+       버튼은 disabled 로 만들지 않는다(동결 하한: [data-add-board] 비잠금 관찰) — 잠금은
+       생성 차단 + [data-pro-lock] 배너 노출로 표현하고, 해제(proOk) 시 이 분기는 사라진다. */
+    if (!proOk && boards.length >= FREE_BOARD_MAX) {
+      showProLockBanner();
+      return;
+    }
     var maxN = 1;
     boards.forEach(function (id) {
       var num = parseInt(id.slice(1), 10);
@@ -4650,6 +4808,208 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
       refreshDataPanel();
     });
   });
+
+  /* ══ 프리미엄(Pro)·라이선스 — 발주 #9 A45 ══
+     Free 하한 = 2026-08-18 동결 빌드의 기능 전체 (이 모듈은 기존 기능을 무엇도 잠그지 않는다).
+     Pro = 순수 신규 가치만: 신규 스티커 2팩 · 프리미엄 테마 2종 · 보드 4개째부터.
+     라이선스 = 서명 파일(ECDSA P-256 / SHA-256): 앱에는 공개키(JWK)만 내장하고 WebCrypto 로
+     오프라인 검증한다 — 개인키·발급기는 저장소·배포물 어디에도 없다 (A45 계약 4).
+     검증 성공한 원문만 postit-license(additive 키)에 저장하고, 재기동 시 저장본을 다시
+     검증해 통과할 때만 해제한다 (저장본 변조 방어). 실패는 전부 조용한 거부 — dialog·크래시 0. */
+
+  var FREE_BOARD_MAX = 3;                  // 무료 보드 한도 — 4개째부터 Pro (A45 계약 2)
+  var LICENSE_KEY = 'postit-license';      // additive 신규 키 (B rev.5 단서)
+  var PRO_THEME_KEY = 'postit-pro-theme';  // additive 신규 키 — 값 없음 = 현행 렌더 그대로
+  var proOk = false;
+
+  /* 서명 검증용 공개키 (P-256 JWK) — 공개 정보라 내장해도 안전하다 */
+  var PRO_PUB_JWK = {
+    kty: 'EC',
+    crv: 'P-256',
+    x: 'eudcFe3QrdCQ1AONNVWwY0-TvX1jBNKyaZ8Zkf4oPhY',
+    y: 'Y-GAm55Bgo1zLKVHjwExfop04FdCxNFPolmoQzOi8As'
+  };
+
+  /* assets/pro/pro-manifest.json 과 동일 정의 — 단일 파일 앱은 file:// 에서 로컬 JSON 을
+     fetch 할 수 없어 내장한다 (매니페스트가 계약 정본, 여기는 실사용 사본) */
+  var PRO_PACKS = [
+    { id: 'travel-snack', host: 'dpStTravel', stickers: ['✈️', '🗼', '🏖️', '⛺', '🚗', '🍕', '🍰', '🍓', '🥐', '🍜'] },
+    { id: 'animal-friends', host: 'dpStAnimal', stickers: ['🐶', '🐱', '🐰', '🐻', '🐼', '🦊', '🐥', '🐢', '🦋', '🐳'] }
+  ];
+
+  var proBanner = document.getElementById('proBanner');
+  var licPop = document.getElementById('licensePop');
+  var licInput = document.getElementById('licenseFile');
+  var licMsgEl = document.getElementById('licMsg');
+
+  var proKeyPromise = null;
+  function getProKey() {
+    if (!proKeyPromise) {
+      if (window.crypto && window.crypto.subtle && typeof window.crypto.subtle.importKey === 'function') {
+        proKeyPromise = window.crypto.subtle.importKey(
+          'jwk', PRO_PUB_JWK, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']
+        );
+      } else {
+        proKeyPromise = Promise.reject(new Error('WebCrypto 미지원'));
+      }
+      proKeyPromise.catch(function () { /* 미지원 환경에서도 unhandledrejection 을 만들지 않는다 */ });
+    }
+    return proKeyPromise;
+  }
+
+  function b64ToBytes(s) {
+    var bin = atob(String(s).replace(/\s+/g, ''));   // 잘못된 base64 는 throw — 호출측 try 가 받는다
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  }
+
+  /* 라이선스 원문 검증 — 항상 resolve({ok, reason}) (reject 없음: pageerror 0 규정) */
+  function verifyLicenseText(text) {
+    return new Promise(function (resolve) {
+      var obj = null;
+      try { obj = JSON.parse(text); } catch (err) {
+        resolve({ ok: false, reason: '라이선스 파일을 읽을 수 없어요 (형식 오류).' });
+        return;
+      }
+      if (!obj || typeof obj !== 'object' || obj.format !== 'petit-license' || obj.v !== 1 ||
+          typeof obj.payload !== 'string' || typeof obj.sig !== 'string') {
+        resolve({ ok: false, reason: '라이선스 형식이 올바르지 않아요.' });
+        return;
+      }
+      var payloadBytes = null;
+      var sigBytes = null;
+      try {
+        payloadBytes = b64ToBytes(obj.payload);
+        sigBytes = b64ToBytes(obj.sig);
+      } catch (err) {
+        resolve({ ok: false, reason: '라이선스 데이터가 손상되어 있어요.' });
+        return;
+      }
+      getProKey().then(function (key) {
+        return window.crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes, payloadBytes);
+      }).then(function (valid) {
+        if (!valid) {
+          resolve({ ok: false, reason: '서명 검증에 실패했어요 — 변조되었거나 유효하지 않은 라이선스예요.' });
+          return;
+        }
+        var p = null;
+        try { p = JSON.parse(new TextDecoder('utf-8').decode(payloadBytes)); } catch (err) { p = null; }
+        if (!p || p.app !== 'petit' || p.product !== 'pro') {
+          resolve({ ok: false, reason: '이 앱의 프리미엄 라이선스가 아니에요.' });
+          return;
+        }
+        resolve({ ok: true, payload: p });
+      }).catch(function () {
+        resolve({ ok: false, reason: '서명 검증을 수행할 수 없어요.' });
+      });
+    });
+  }
+
+  /* 프리미엄 테마 — 해제 상태에서만 html[data-pro-theme] 를 부여한다 */
+  var proTheme = '';
+  try {
+    var ptRaw = localStorage.getItem(PRO_THEME_KEY);
+    if (ptRaw === 'deepsea' || ptRaw === 'lavender') proTheme = ptRaw;
+  } catch (err) { /* 무시 */ }
+
+  function applyProTheme() {
+    if (proOk && proTheme) document.documentElement.setAttribute('data-pro-theme', proTheme);
+    else document.documentElement.removeAttribute('data-pro-theme');
+  }
+
+  function paintProThemeUI() {
+    var host = document.getElementById('dpProTheme');
+    if (!host) return;
+    Array.prototype.forEach.call(host.querySelectorAll('button[data-ptval]'), function (b) {
+      b.classList.toggle('sel', (b.getAttribute('data-ptval') || '') === (proOk ? proTheme : ''));
+    });
+  }
+
+  /* 해제 상태 전환의 단일 진입점 — html.pro-ok 가 정본 (CSS 가 잠금 표시 전체를 숨긴다) */
+  function setProOk(ok) {
+    proOk = !!ok;
+    document.documentElement.classList.toggle('pro-ok', proOk);
+    if (proOk) proBanner.classList.remove('show');
+    applyProTheme();
+    paintProThemeUI();
+  }
+
+  function setLicMsg(msg) { licMsgEl.textContent = msg; }
+  function showProLockBanner() { if (!proOk) proBanner.classList.add('show'); }
+  function openLicensePop() {
+    proBanner.classList.remove('show');
+    setLicMsg('');
+    licPop.removeAttribute('hidden');
+  }
+  function closeLicensePop() { licPop.setAttribute('hidden', ''); }
+
+  document.getElementById('licClose').addEventListener('click', closeLicensePop);
+
+  /* 잠금 표시는 어디에 있든 클릭 = 해제 안내 팝업 (배너·꾸미기 패널 공용 위임) */
+  document.addEventListener('click', function (e) {
+    if (proOk) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('[data-pro-lock]')) openLicensePop();
+  });
+
+  /* 라이선스 파일 가져오기 ([data-license-import]) — 성공 시 즉시 해제 + 저장, 실패는 조용한 거부 */
+  licInput.addEventListener('change', function () {
+    var f = licInput.files && licInput.files[0];
+    licInput.value = '';
+    if (!f) return;
+    if (f.size > 64 * 1024) {
+      setLicMsg('라이선스 파일이 너무 커요. 64KB 이하의 .license 파일이어야 해요.');
+      return;
+    }
+    var fr = new FileReader();
+    fr.onerror = function () { setLicMsg('파일을 읽지 못했어요. 다시 시도해 주세요.'); };
+    fr.onload = function () {
+      var text = String(fr.result || '');
+      verifyLicenseText(text).then(function (res) {
+        if (!res.ok) {
+          setLicMsg(res.reason + ' 정품 라이선스 파일이 맞는지 확인해 주세요.');
+          return;
+        }
+        try { localStorage.setItem(LICENSE_KEY, text); } catch (err) {
+          showNotice('저장 공간이 부족해 라이선스를 저장하지 못했어요 — 이번 실행 동안만 잠금이 풀려요.');
+        }
+        setProOk(true);
+        closeLicensePop();
+        showNotice('🎉 프리미엄이 잠금 해제되었어요! 새 스티커 2팩·프리미엄 테마 2종·보드 무제한을 쓸 수 있어요.');
+      });
+    };
+    fr.readAsText(f, 'utf-8');
+  });
+
+  /* Pro 스티커 팔레트 — 기존 fillPalette/addEmojiSticker 재사용: 부착·저장·재기동 보존 경로 동일 */
+  PRO_PACKS.forEach(function (p) { fillPalette(p.host, p.stickers); });
+
+  /* 프리미엄 테마 선택 (해제 후에만 보이는 .pro-content 내부 — 잠금 상태 방어도 겸함) */
+  Array.prototype.forEach.call(document.getElementById('dpProTheme').querySelectorAll('button[data-ptval]'), function (b) {
+    b.addEventListener('click', function () {
+      if (!proOk) { openLicensePop(); return; }
+      proTheme = b.getAttribute('data-ptval') || '';
+      try {
+        if (proTheme) localStorage.setItem(PRO_THEME_KEY, proTheme);
+        else localStorage.removeItem(PRO_THEME_KEY);
+      } catch (err) { /* 무시 */ }
+      applyProTheme();
+      paintProThemeUI();
+      playTick();   /* 직접 제스처(테마 클릭) 내부 */
+    });
+  });
+  paintProThemeUI();
+
+  /* 기동: 저장된 라이선스가 있으면 다시 검증해 통과할 때만 해제 (변조 저장본은 무시) */
+  (function () {
+    var raw = null;
+    try { raw = localStorage.getItem(LICENSE_KEY); } catch (err) { raw = null; }
+    if (typeof raw !== 'string' || !raw) return;
+    verifyLicenseText(raw).then(function (res) {
+      if (res.ok) setProOk(true);
+    });
+  })();
 
   /* ── 기동: 보드 목록 발견 → 활성 보드 복원 → 렌더 ── */
 

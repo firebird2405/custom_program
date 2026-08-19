@@ -22,6 +22,7 @@ const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { registerMigrateIpc } = require('./migrate');
+const { registerBackupIpc, startBackupScheduler } = require('./backup');
 
 // ── userData 오버라이드 훅 (app ready 이전에 확정해야 한다) ─────────────────
 if (process.env.PETIT_USERDATA) {
@@ -221,6 +222,7 @@ function registerStubIpc() {
 
 function main() {
   registerMigrateIpc(); // 'petit:migrate:detect' / ':run' / ':status'
+  registerBackupIpc();  // 'petit:backup:status' / ':choose-folder' / ':run-now' / ':set-auto' / ':set-include-images'
   registerStubIpc();
 
   app.whenReady().then(() => {
@@ -254,6 +256,10 @@ function main() {
       '쁘띠캘린더 — 포스트잇 월',
       { width: 1024, height: 740 }
     );
+
+    // 예약 자동 백업 체커 기동 — Pro(postit-license 검증) + 설정 auto 일 때만 실행된다.
+    // 창 생성 뒤에 시작해야 첫 체크가 저장소를 읽을 창을 찾을 수 있다 (backup.js).
+    startBackupScheduler();
   });
 
   // 두 창이 모두 닫히면 종료 (Windows 단일 플랫폼 — 예외 분기 없음)

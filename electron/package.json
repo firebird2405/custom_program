@@ -10,10 +10,11 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --dir",
-    "//dist:appx": "3단계(스토어 제출)에서 활성화 — electron-builder --win appx. 그 전에 electron-builder.yml appx 절의 identityName·publisher·publisherDisplayName을 파트너 센터 실값으로 기입할 것 (A48② 플레이스홀더 금지)."
+    "dist:appx": "node check-appx-identity.js && electron-builder --win appx"
   },
   "comments": {
     "build": "패키징 설정 정본은 electron-builder.yml (이 파일의 build 블록은 사용하지 않는다). files/extraResources 화이트리스트로 backups·.edge·protocol 미동봉(A46), 원본 HTML은 resources/ 루트에 무변형 복사(A42 SHA256 동일).",
+    "dist:appx": "MS Store 패키지 빌드. 1단계 가드(check-appx-identity.js)가 electron-builder.yml appx 절의 identityName·publisher·publisherDisplayName 기입 여부를 검사 — 미기입/플레이스홀더면 한국어 안내 후 중단(A48②). 값 확보 절차는 protocol/STORE-GUIDE.md.",
     "fuses": "fuse는 afterPack 훅(apply-fuses.js, @electron/fuses)으로 빌드 시 자동 적용 — EnableNodeCliInspectArguments=true 유지 필수(채점기 _electron.launch 계약, SCORECARD rev.6 초안 A42). electron-builder는 25.1.8 고정: 26.x 내장 electronFuses는 Node 20+ 전용(@noble/hashes ESM-only)이라 Node 18에서 빌드 불가."
   },
   "devDependencies": {

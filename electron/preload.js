@@ -60,6 +60,14 @@ const petitApi = {
     // A47 스텁 — 완료 플래그의 정본은 렌더러 localStorage(postit-onboarded)
     getState: function () { return ipcRenderer.invoke('petit:onboarding:get'); },
     setDone: function () { return ipcRenderer.invoke('petit:onboarding:set-done'); }
+  },
+  backup: {
+    // 백업 엔진(main: backup.js) — 폴더 지정·지금 백업(Free) + 예약 자동 백업(Pro 게이트)
+    status: function () { return ipcRenderer.invoke('petit:backup:status'); },
+    chooseFolder: function () { return ipcRenderer.invoke('petit:backup:choose-folder'); },
+    runNow: function () { return ipcRenderer.invoke('petit:backup:run-now'); },
+    setAuto: function (on) { return ipcRenderer.invoke('petit:backup:set-auto', on === true); },
+    setIncludeImages: function (on) { return ipcRenderer.invoke('petit:backup:set-include-images', on === true); }
   }
 };
 contextBridge.exposeInMainWorld('petit', petitApi);
@@ -545,6 +553,196 @@ function initOnboarding() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 백업 UI (양 창 설정 패널 — 발주: 클라우드 폴더 백업 + Pro 예약 자동 백업)
+// 훅: [data-backup-section] 섹션 / [data-backup-folder] 폴더 표시 /
+//     [data-backup-choose] 폴더 변경(네이티브 폴더 대화상자 — main dialog) /
+//     [data-backup-now] 지금 백업(Free 포함) / [data-backup-images] 이미지 포함 옵션 /
+//     [data-backup-auto] 예약 토글(Pro 게이트) / [data-backup-status] 상태 줄.
+// Pro 잠금 표시: 예약 토글 옆 [data-pro-lock] — 포스트잇 창에서는 앱의 A45 규약과
+// 그대로 맞물린다 (html.pro-ok CSS 가 숨기고, 클릭 시 앱 전역 핸들러가 라이선스
+// 팝업을 연다). 캘린더 창에는 앱측 Pro CSS 가 없으므로 status().pro 로 직접 숨긴다.
+// 원본 HTML 은 무수정(A42) — 전부 preload 주입. 저장 키는 건드리지 않는다 (main 이
+// userData\backup-config.json 에 보관).
+// ────────────────────────────────────────────────────────────────────────────
+
+function injectBackupSection() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel || panel.querySelector('[data-backup-section]')) return;
+  const isCal = PAGE === 'calendar';
+  const host = isCal ? (panel.querySelector('.spBody') || panel) : panel;
+
+  const sec = el(isCal ? 'section' : 'div');
+  sec.className = isCal ? 'spSec' : 'sp-sec';
+  sec.setAttribute('data-backup-section', '');
+  sec.appendChild(el('h3', undefined, '백업'));
+
+  // 폴더 표시
+  const folderWrap = el('div', { display: 'flex', flexDirection: 'column', gap: '3px', margin: '6px 0' });
+  folderWrap.appendChild(el('span', { fontSize: '12.5px', opacity: '0.75' }, '저장 폴더'));
+  const folderVal = el('span', { fontSize: '12.5px', wordBreak: 'break-all', lineHeight: '1.4' }, '확인 중…');
+  folderVal.setAttribute('data-backup-folder', '');
+  folderWrap.appendChild(folderVal);
+  sec.appendChild(folderWrap);
+
+  // 버튼 행 (폴더 변경 · 지금 백업)
+  const btnRow = el('div', { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '6px 0' });
+  const mkBtn = function (label) {
+    const b = el('button', undefined, label);
+    b.type = 'button';
+    if (!isCal) b.className = 'tool-btn'; // 포스트잇 패널 관용 버튼 스타일
+    return b;
+  };
+  const btnChoose = mkBtn('📁 폴더 변경…');
+  btnChoose.title = '백업을 저장할 폴더를 고르기 (OneDrive 등 동기화 폴더면 클라우드 백업)';
+  btnChoose.setAttribute('data-backup-choose', '');
+  const btnNow = mkBtn('💾 지금 백업');
+  btnNow.title = '캘린더·포스트잇 데이터를 지금 바로 백업 파일로 저장';
+  btnNow.setAttribute('data-backup-now', '');
+  btnRow.appendChild(btnChoose);
+  btnRow.appendChild(btnNow);
+  sec.appendChild(btnRow);
+
+  // 이미지 포함 옵션 (기본 꺼짐 — 용량 안내)
+  const imgLabel = el('label', { display: 'flex', alignItems: 'flex-start', gap: '6px', margin: '6px 0', fontSize: '13px', cursor: 'pointer' });
+  const imgChk = document.createElement('input');
+  imgChk.type = 'checkbox';
+  imgChk.setAttribute('data-backup-images', '');
+  imgLabel.appendChild(imgChk);
+  imgLabel.appendChild(el('span', { lineHeight: '1.4' }, '백업에 이미지 포함 (배경·사진 스티커 — 파일이 커져서 기본은 꺼져 있어요)'));
+  sec.appendChild(imgLabel);
+
+  // 예약 자동 백업 (Pro 게이트)
+  const autoRow = el('div', { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', flexWrap: 'wrap' });
+  const autoLabel = el('label', { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' });
+  const autoChk = document.createElement('input');
+  autoChk.type = 'checkbox';
+  autoChk.setAttribute('data-backup-auto', '');
+  autoLabel.appendChild(autoChk);
+  autoLabel.appendChild(el('span', undefined, '매일 자동 백업 (앱이 켜져 있는 동안 하루 1번)'));
+  autoRow.appendChild(autoLabel);
+  const lockMark = el('button', {
+    font: 'inherit',
+    fontSize: '12px',
+    padding: '2px 8px',
+    borderRadius: '9px',
+    border: '1px solid #d8cbb0',
+    background: '#fff3ec',
+    color: '#a4653c',
+    cursor: 'pointer'
+  }, '🔒 프리미엄');
+  lockMark.type = 'button';
+  lockMark.title = '예약 자동 백업은 프리미엄(Pro) 기능이에요';
+  lockMark.setAttribute('data-pro-lock', ''); // 포스트잇: 앱 A45 규약과 결합 (pro-ok 시 CSS 숨김 + 클릭 시 라이선스 팝업)
+  autoRow.appendChild(lockMark);
+  sec.appendChild(autoRow);
+
+  // 안내문 (클라우드 백업 안내 + 상태 줄)
+  const hint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '5px 0 0' },
+    '저장 폴더를 OneDrive·구글 드라이브 같은 동기화 폴더로 지정하면, 백업이 자동으로 클라우드에도 올라가요.');
+  if (isCal) hint.className = 'spSmall';
+  else hint.className = 'sp-small';
+  sec.appendChild(hint);
+  const statusLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '5px 0 0', minHeight: '0' }, '');
+  statusLine.className = isCal ? 'spSmall' : 'sp-small';
+  statusLine.setAttribute('data-backup-status', '');
+  sec.appendChild(statusLine);
+
+  host.appendChild(sec);
+
+  // ── 상태 동기화 ──
+  let bkPro = false;
+  function setStatus(msg) { statusLine.textContent = msg || ''; }
+  function applyProState() {
+    autoChk.disabled = !bkPro;
+    lockMark.style.display = bkPro ? 'none' : '';
+    if (!bkPro) autoLabel.style.opacity = '0.62';
+    else autoLabel.style.opacity = '';
+  }
+  let refreshing = false;
+  async function refreshBackupUi() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      const st = await petitApi.backup.status();
+      if (st && st.ok) {
+        bkPro = st.pro === true;
+        folderVal.textContent = st.folder + (st.folderIsDefault ? ' (기본)' : '');
+        imgChk.checked = st.includeImages === true;
+        autoChk.checked = st.auto === true;
+        applyProState();
+      }
+    } catch (_err) { /* 브리지 실패 — UI 만 유지 */ }
+    refreshing = false;
+  }
+
+  btnChoose.addEventListener('click', async function () {
+    btnChoose.disabled = true;
+    try {
+      const res = await petitApi.backup.chooseFolder();
+      if (res && res.ok && !res.canceled) {
+        folderVal.textContent = res.folder;
+        setStatus('저장 폴더를 바꿨어요. 동기화 폴더라면 이제 클라우드로도 백업돼요.');
+      } else if (res && !res.ok) {
+        setStatus(String(res.reason || '폴더를 바꾸지 못했어요.'));
+      }
+    } catch (_err) { setStatus('폴더를 바꾸지 못했어요.'); }
+    btnChoose.disabled = false;
+  });
+
+  btnNow.addEventListener('click', async function () {
+    btnNow.disabled = true;
+    setStatus('백업하는 중…');
+    try {
+      const res = await petitApi.backup.runNow();
+      if (res && res.ok) setStatus('백업 완료! ' + String(res.summary || ''));
+      else setStatus('백업 실패: ' + String((res && res.reason) || '알 수 없는 오류'));
+    } catch (_err) { setStatus('백업 실패: 백업 엔진과 연결하지 못했어요.'); }
+    btnNow.disabled = false;
+  });
+
+  imgChk.addEventListener('change', async function () {
+    try { await petitApi.backup.setIncludeImages(imgChk.checked); } catch (_err) { /* 다음 status 로 재동기화 */ }
+  });
+
+  autoChk.addEventListener('change', async function () {
+    const want = autoChk.checked;
+    try {
+      const res = await petitApi.backup.setAuto(want);
+      if (res && res.ok) {
+        setStatus(want ? '매일 자동 백업을 켰어요. 앱이 켜져 있는 동안 하루 1번 저장돼요.' : '자동 백업을 껐어요.');
+      } else {
+        autoChk.checked = false;
+        setStatus(String((res && res.reason) || '자동 백업을 켜지 못했어요.'));
+      }
+    } catch (_err) {
+      autoChk.checked = !want;
+      setStatus('자동 백업 설정을 바꾸지 못했어요.');
+    }
+  });
+
+  // 패널이 열릴 때마다 최신 상태 재조회 (calendar: .open / postit: .spanel.open)
+  const panelObserver = new MutationObserver(function () {
+    if (panel.classList.contains('open')) refreshBackupUi();
+  });
+  panelObserver.observe(panel, { attributes: true, attributeFilter: ['class'] });
+
+  // 포스트잇: 라이선스 해제(html.pro-ok)를 즉시 반영 — A45 해제 흐름과 동기
+  if (PAGE === 'postit') {
+    const htmlObserver = new MutationObserver(function () {
+      const nowPro = document.documentElement.classList.contains('pro-ok');
+      if (nowPro !== bkPro) refreshBackupUi();
+    });
+    htmlObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  refreshBackupUi();
+}
+
+function initBackupUi() {
+  try { injectBackupSection(); } catch (_err) { /* 셸 UI 실패는 앱 무영향 */ }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 진입점 — 앱 DOM 준비 후 셸 UI 부착
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -552,6 +750,7 @@ function initShellUi() {
   if (!PAGE || !document.body) return;
   initMigrateUi().catch(function () { /* 브리지 실패 시 셸 UI 만 생략 — 앱 무영향 */ });
   if (PAGE === 'postit') initOnboarding();
+  initBackupUi(); // 양 창 설정 패널에 [백업] 섹션 주입
 }
 
 if (document.readyState === 'loading') {

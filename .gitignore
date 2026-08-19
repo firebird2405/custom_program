@@ -7,6 +7,11 @@ protocol/grader/test-results/
 protocol/grader/playwright-report/
 protocol/grader/.last-run.json
 
+# Electron 셸 의존성·빌드 산출물 (electron/package-lock.json 기준 npm ci 로 복원)
+electron/node_modules/
+electron/dist/
+dist/
+
 # OS 잔재
 Thumbs.db
 desktop.ini

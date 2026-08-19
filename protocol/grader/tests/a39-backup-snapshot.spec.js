@@ -43,7 +43,7 @@ function findEdgeExe() {
   return candidates.find((p) => p && fs.existsSync(p)) || null;
 }
 
-function runPowerShell(args, timeoutMs = 30000) {
+function runPowerShell(args, timeoutMs = 60000) {
   return execFileSync(POWERSHELL_EXE, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass'].concat(args), {
     encoding: 'utf8',
     timeout: timeoutMs,
@@ -109,7 +109,7 @@ function killOurEdgeProcesses() {
 /** 우리 msedge 가 전부 내려갈 때까지 대기.
  *  graceMs 동안 우아한 종료(WM_CLOSE·자연 종료)를 기다린다 — 곧바로 강제 종료하면
  *  localStorage(LevelDB) 플러시 유실·로그 꼬리 손상이 생길 수 있다. grace 초과분만 kill. */
-async function ensureOurEdgeClosed(timeoutMs = 20000, graceMs = 6000) {
+async function ensureOurEdgeClosed(timeoutMs = 60000, graceMs = 6000) {
   const start = Date.now();
   for (;;) {
     const procs = listOurEdgeProcesses();

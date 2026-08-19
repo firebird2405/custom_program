@@ -1,0 +1,109 @@
+# ============================================================================
+# 쁘띠캘린더(PetitCalendar) — electron-builder 설정 정본
+#
+# 계약 근거: protocol/SCORECARD-rev6-draft.md
+#   A42 — 패키지 리소스의 calendar.html·postit.html은 저장소 원본과 SHA256 동일
+#         (빌드 변형·주입 금지). main.js는 __dirname/'..'로 해석하므로
+#         app.asar 기준 '..' == resources/ — 아래 extraResources가 그 자리에
+#         원본을 "복사만" 한다 (변형 0).
+#   A44 — 앱 런타임 외부 요청 0. 이 설정은 autoUpdater·publish 구성을 두지 않는다.
+#   A46 — 화이트리스트 패키징: backups/ · .edge/ · protocol/ · *.log ·
+#         실사용 저장 데이터는 어떤 산출물에도 절대 동봉되지 않는다.
+#         (files·extraResources에 열거된 것 외에는 아무것도 실리지 않는 구조)
+#   A48 — 아이콘은 build/icon.png(512) + build/appx/ 실규격 세트 (자체 제작).
+#
+# 빌드: cd electron ; npx electron-builder --dir   (1주차 — win-unpacked 검증)
+#       3주차: npx electron-builder --win nsis / --win appx (identity 기입 후)
+# ============================================================================
+
+appId: com.petitcalendar.app
+productName: 쁘띠캘린더
+# 실행 파일명은 ASCII 유지 (경로 인코딩·서명·채점 도구 호환) — 표시 이름은 위 한국어가 정본
+executableName: PetitCalendar
+copyright: "© 2026 firebird2405"
+
+directories:
+  output: dist
+  buildResources: build
+
+# 앱 코드는 asar로 봉인 (아래 fuse onlyLoadAppFromAsar와 세트)
+asar: true
+
+# 프로덕션 의존성 0 — 재빌드 단계 불필요
+npmRebuild: false
+
+# 오프라인·재현 빌드: npm install이 이미 받아둔 Electron 배포본을 그대로 사용
+# (빌드 시 원격 재다운로드 방지)
+electronDist: node_modules/electron/dist
+
+# A46 경량화 ①: 로케일 팩 55개 → 한국어 + 영어만 (약 46MB 절감)
+# 앱 자체 UI는 HTML 내장 한국어 — Chromium 내부 문자열 로케일만 해당.
+electronLanguages:
+  - ko
+  - en-US
+
+# ── A46 화이트리스트 ①: 앱 번들(asar)에는 셸 코드만 ─────────────────────────
+files:
+  - main.js
+  - "!node_modules/**"
+
+# ── A46 화이트리스트 ②: 저장소 원본 HTML·에셋을 resources/ 루트에 복사 ──────
+# main.js의 repoRoot(path.resolve(__dirname,'..'))가 패키지에서 resources/를
+# 가리키므로 개발 트리와 동일한 상대 구조가 성립한다.
+# A42: 복사만 허용 — 어떤 후처리(민지피케이션·주입·치환)도 금지.
+extraResources:
+  - from: "../calendar.html"
+    to: "."
+  - from: "../postit.html"
+    to: "."
+  - from: "../assets"
+    to: "assets"
+    filter:
+      - "**/*"
+
+# ── Electron fuses (afterPack 훅으로 적용 — apply-fuses.js) ──────────────────
+# ★ A42 채점 가능성 계약 ★
+#   EnableNodeCliInspectArguments 는 반드시 true 유지.
+#   Playwright _electron.launch 는 --inspect 계열 스위치로 main 프로세스에
+#   붙는다 — 이 fuse를 끄면 "패키지 exe 채점"이 영구 불가능해진다.
+#   (SCORECARD rev.6 초안 A42 및 하단 개정 절차 메모 명시)
+#
+# 구현 메모: electron-builder 26.x의 내장 electronFuses 옵션은 Node 20+ 전용
+# (@noble/hashes 2.x ESM-only → Node 18에서 ERR_REQUIRE_ESM으로 빌드 자체 불가).
+# 이 프로젝트는 Node 18 환경이므로 electron-builder 25.1.8 + afterPack 훅으로
+# 동일 효과를 낸다. 훅이 적용하는 값(변경 금지):
+#   EnableNodeCliInspectArguments=true(A42) · RunAsNode=false ·
+#   EnableNodeOptionsEnvironmentVariable=false · OnlyLoadAppFromAsar=true
+afterPack: ./apply-fuses.js
+
+# ── Windows 타깃 ─────────────────────────────────────────────────────────────
+win:
+  target:
+    - nsis
+    - appx
+  icon: build/icon.png
+
+nsis:
+  oneClick: true
+  perMachine: false
+  # 제거 시 사용자 데이터(userData) 보존 — 재설치 복원 경로 유지
+  deleteAppDataOnUninstall: false
+  artifactName: "PetitCalendar-Setup-${version}.${ext}"
+  shortcutName: "쁘띠캘린더"
+
+# ── MS Store(appx/msix) — 3주차 파트너 센터 예약 후 실값 기입 ────────────────
+# A48②: 매니페스트 Identity 는 플레이스홀더 리터럴 금지 — 아래 3개 값을
+# 파트너 센터 "제품 ID 관리" 화면의 실값으로 채우기 전에는 appx 타깃을
+# 빌드하지 말 것 (--dir·nsis 는 무관).
+#   identityName:        (예: 12345Firebird.PetitCalendar — Package/Identity/Name)
+#   publisher:           (예: CN=XXXXXXXX-XXXX-... — Package/Identity/Publisher)
+#   publisherDisplayName: (파트너 센터 게시자 표시 이름)
+appx:
+  displayName: 쁘띠캘린더
+  applicationId: PetitCalendar
+  backgroundColor: "#B08968"   # 코르크 브라운 (타일 배경)
+  languages:
+    - ko-KR
+  showNameOnTiles: true
+
+# publish 구성 없음 — 자동 업데이트·원격 요청 금지 (A44)

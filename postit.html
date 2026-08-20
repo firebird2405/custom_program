@@ -3957,6 +3957,31 @@ html[data-pro-theme="lavender"] #board {
     ctxMenuEl.appendChild(delItem);
   }
 
+  /* 탭 미니 메뉴: 열기 / 이름 바꾸기 / 삭제 — 우클릭한 그 탭의 보드가 대상 (활성 보드 아님) */
+  function buildTabMenu(id) {
+    if (id !== boardId) {
+      ctxMenuEl.appendChild(ctxItem('이 보드 열기', function () { switchBoard(id); }));
+      ctxMenuEl.appendChild(ctxSep());
+    }
+    var ren = ctxItem('보드 이름 바꾸기', function () { startTabRename(id); });
+    ren.title = '탭을 더블클릭해도 바꿀 수 있어요 (빈 이름 = 기본 이름)';
+    ctxMenuEl.appendChild(ren);
+    var del = ctxItem('보드 삭제', function () {
+      confirmThen(null, function () {
+        playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
+        deleteBoard(id);
+      });
+    });
+    if (id === 'b1' || boards.length <= 1) {
+      del.disabled = true;
+      del.classList.add('soon');
+      del.title = id === 'b1' ? '기본 보드는 삭제할 수 없어요' : '마지막 남은 보드는 삭제할 수 없어요';
+    } else {
+      del.title = '이 보드를 삭제해요 (토스트의 실행 취소로 되돌릴 수 있어요)';
+    }
+    ctxMenuEl.appendChild(del);
+  }
+
   /* 스티커 미니 메뉴: 맨 앞으로 / 삭제(실행 취소 가능) */
   function buildStickerMenu(id) {
     ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () {
@@ -3979,6 +4004,7 @@ html[data-pro-theme="lavender"] #board {
     ctxMenuEl.setAttribute('data-ctx-menu', type);
     if (type === 'note') buildNoteMenu(id);
     else if (type === 'sticker') buildStickerMenu(id);
+    else if (type === 'tab') buildTabMenu(id);
     else buildBoardMenu(px, py);
     ctxMenuEl.classList.add('open');
     ctxOpen = true;
@@ -4017,6 +4043,16 @@ html[data-pro-theme="lavender"] #board {
       e.preventDefault();
       openCtxMenu('note', e.clientX, e.clientY, noteEl.getAttribute('data-id'));
       return;
+    }
+    /* 보드 탭 우클릭 = 그 보드 전용 미니 메뉴 (열기/이름 바꾸기/삭제) — 사용자 제안(2026-08-20) */
+    var tabWrap = t.closest('.board-tab-wrap');
+    if (tabWrap) {
+      var tabBtn = tabWrap.querySelector('[data-board-tab]');
+      if (tabBtn && tabBtn.getAttribute('data-bid')) {
+        e.preventDefault();
+        openCtxMenu('tab', e.clientX, e.clientY, tabBtn.getAttribute('data-bid'));
+        return;
+      }
     }
     e.preventDefault();
     if (t.closest('.toolbar')) { closeCtxMenu(); return; }

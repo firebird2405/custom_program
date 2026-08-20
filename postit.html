@@ -798,6 +798,63 @@ html[data-theme-preset="dark"] .confirm-no:hover { background: rgba(172,162,215,
 }
 .confirm-no:hover { background: #ddcda9; }
 
+/* ── 사진 스티커 배경 지우기(누끼) 편집 카드 (발주 #10) — 비모달 팝오버, 보드 위 ── */
+.nukki-pop {
+  position: fixed;
+  top: 64px;
+  right: 372px;
+  width: 324px;
+  max-width: calc(100vw - 396px);
+  padding: 12px 14px 14px;
+  background: linear-gradient(180deg, rgba(255,251,240,0.98), rgba(246,236,214,0.98));
+  color: #4a3421;
+  border-radius: 14px;
+  box-shadow: -6px 8px 24px rgba(43,24,8,0.4), inset 0 0 0 1px rgba(255,255,255,0.65);
+  z-index: 100000;
+  font-size: 15px;
+}
+@media (max-width: 880px) {
+  .nukki-pop { left: 14px; right: auto; max-width: calc(100vw - 28px); }
+}
+.nukki-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Nanum Pen Script", "Gaegu", cursive;
+  font-size: 24px;
+  line-height: 1.1;
+}
+.nukki-head .notice-close { margin-left: auto; }
+.nukki-canvas-wrap {
+  margin: 9px 0 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  text-align: center;
+  line-height: 0;
+  background-color: #ececec;
+  background-image:
+    linear-gradient(45deg, #cfcfcf 25%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 75%, #cfcfcf 75%),
+    linear-gradient(45deg, #cfcfcf 25%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 75%, #cfcfcf 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  box-shadow: inset 0 0 0 1px rgba(94,62,24,0.25);
+}
+.nukki-canvas-wrap canvas { max-width: 100%; max-height: 230px; }
+.nukki-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.nukki-row input[type="range"] { flex: 1 1 90px; min-width: 70px; }
+.nukki-tolval { min-width: 26px; text-align: right; font-weight: 700; }
+.nukki-status { margin: 4px 0 8px; min-height: 18px; font-size: 13.5px; line-height: 1.35; opacity: 0.85; word-break: keep-all; }
+.nukki-btns { display: flex; gap: 7px; flex-wrap: wrap; }
+.nukki-apply { background: #FFD966; box-shadow: 0 1px 0 rgba(122,84,34,0.4); }
+.nukki-apply:hover { background: #f5cd52; }
+.nukki-apply:disabled { opacity: 0.45; cursor: default; transform: none; }
+html[data-theme-preset="dark"] .nukki-pop {
+  background: linear-gradient(180deg, rgba(60,56,80,0.98), rgba(44,41,60,0.98));
+  color: #e8e4f4;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(150,140,195,0.32);
+}
+html[data-theme-preset="dark"] .nukki-apply { color: #4a3421; }
+
 /* ── 우클릭 메뉴 (브라우저 기본 메뉴 대체 — A21) ── */
 .ctxmenu {
   display: none;
@@ -1395,6 +1452,14 @@ html[data-pro-theme="lavender"] #board {
   var BG_IMG_MAX_LEN = 3 * 1024 * 1024;
   var STICKER_IMG_MAX_SIDE = 1024;              // 사진 스티커 (IndexedDB 저장)
   var STICKER_IMG_MAX_LEN = 800 * 1024;
+  var NUKKI_PNG_MAX_LEN = 2800 * 1024;          // 누끼 결과 PNG(알파) 데이터 URI 길이 상한 — 초과 시 축소 재시도
+
+  /* 누끼(배경 지우기) 파라미터 — 발주 #10 */
+  var NUKKI_TOL_MIN = 8;             // 허용 오차 슬라이더 범위 (색거리, 채널 평균 제곱근 기준)
+  var NUKKI_TOL_MAX = 64;
+  var NUKKI_TOL_DEF = 24;
+  var NUKKI_DEBOUNCE_MS = 120;       // 슬라이더 → 미리보기 재계산 디바운스
+  var NUKKI_ALPHA_EPS = 16;          // 이 이하 알파 = 이미 투명(배경 취급 — 재편집 시 통과)
 
   /* 시간 상수 (ms) */
   var SAVE_DEBOUNCE_MS = 250;        // 노트 저장 디바운스 — "변경 ≤300ms 내 저장"(A5) 계약 안. 값 변경 금지
@@ -1463,6 +1528,8 @@ html[data-pro-theme="lavender"] #board {
   var stDrag = null;                         /* 스티커 드래그/리사이즈 상태 */
   var bgLoadToken = 0;                       /* 보드 전환 중 비동기 배경 로드 경합 방지 */
   var imgCache = {};                         /* IndexedDB 이미지 캐시 (key -> data URI | null) */
+  var nukki = null;                          /* 열려 있는 누끼 편집 카드 상태 (발주 #10) — 없으면 null */
+  var nukkiRunToken = 0;                     /* 비동기 처리 경합 방지 (카드 닫힘·재조작 시 무효화) */
 
   /* ── 설정 (postit-settings — additive 신규 키): 기본값 = 현행 동작 그대로 ── */
   var SETTINGS_KEY = 'postit-settings';
@@ -3982,12 +4049,21 @@ html[data-pro-theme="lavender"] #board {
     ctxMenuEl.appendChild(del);
   }
 
-  /* 스티커 미니 메뉴: 맨 앞으로 / 삭제(실행 취소 가능) */
+  /* 스티커 미니 메뉴: 맨 앞으로 / (사진이면) 배경 다듬기 / 삭제(실행 취소 가능) */
   function buildStickerMenu(id) {
     ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () {
       bringStickerToFront(id);
       playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
     }));
+    var stForMenu = findSticker(id);
+    if (stForMenu && stForMenu.type === 'photo') {
+      var trim = ctxItem('배경 다듬기', function () {
+        reeditStickerBackground(id);   /* IDB 원본 → 같은 누끼 편집 카드 재편집 (발주 #10) */
+        playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+      });
+      trim.title = '사진의 흰 배경을 지워 다듬어요 (되돌리기 가능)';
+      ctxMenuEl.appendChild(trim);
+    }
     ctxMenuEl.appendChild(ctxSep());
     var del = ctxItem('삭제', function () {
       confirmThen(null, function () {
@@ -4069,6 +4145,7 @@ html[data-pro-theme="lavender"] #board {
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (confirmPopEl) { closeConfirmPop(); return; }   /* 확인 팝오버만 먼저 닫는다 */
+      if (nukki) { closeNukkiEditor(); return; }         /* 누끼 편집 카드만 먼저 닫는다 (스티커는 그대로) */
       closeCtxMenu();
       closeSettings();
       closeDecorPanel();
@@ -4443,7 +4520,7 @@ html[data-pro-theme="lavender"] #board {
   document.addEventListener('pointerdown', function (e) {
     if (!decorPanelOpen()) return;
     var t = e.target;
-    if (t && t.closest && (t.closest('.dpanel') || t.closest('#decorBtn') || t.closest('.confirm-pop'))) return;
+    if (t && t.closest && (t.closest('.dpanel') || t.closest('#decorBtn') || t.closest('.confirm-pop') || t.closest('.nukki-pop'))) return;
     closeDecorPanel();
   });
 
@@ -4629,7 +4706,9 @@ html[data-pro-theme="lavender"] #board {
   fillPalette('dpStMood', EMOJI_SETS.mood);
   fillPalette('dpStOffice', EMOJI_SETS.office);
 
-  /* 사진 스티커: filechooser → 1024px 다운스케일 → IndexedDB → 폴라로이드 프레임 배치 */
+  /* 사진 스티커: filechooser → 1024px 다운스케일 → IndexedDB → 폴라로이드 프레임 배치.
+     발주 #10: 배치 직후 비모달 누끼(배경 지우기) 편집 카드를 띄운다 — "그대로 붙이기"가 기본
+     결과(이미 붙은 원본 유지)이므로 카드를 무시해도 동결 계약(파일 선택 → 즉시 부착) 그대로다. */
   document.getElementById('dpPhotoAdd').addEventListener('click', function () {
     decorPhotoInput.click();   /* 직접 제스처 — 파일 선택 창 */
   });
@@ -4655,9 +4734,477 @@ html[data-pro-theme="lavender"] #board {
         revealStickerGrip(renderSticker(s));
         saveDecorNow();
         showNotice('사진 스티커를 붙였어요.');
+        /* 편집 카드는 부가 기능 — 실패해도 스티커는 이미 붙어 있다 (강등 유지) */
+        try { openNukkiEditor(im, 'upload', s.id); }
+        catch (err) { /* 카드 없이 기존 흐름 그대로 */ }
       });
     });
   });
+
+  /* ══ 사진 스티커 배경 지우기(누끼) — 발주 #10 ══
+     알고리즘: 가장자리 연결 플러드필. 이미지 테두리 픽셀에서 시작하는 4방향 BFS 로,
+     기준색(네 모서리 샘플의 채널별 중앙값)과 색거리 ≤ 허용 오차인 "연결된" 영역만 알파 0.
+     피사체 내부의 흰색은 테두리와 연결되지 않아 보존된다. 경계는 1~2px 페더링(인접 알파 감쇠).
+     순수 캔버스(런타임 http(s) 0) — 결과는 PNG(알파) 데이터 URI 로 기존 IDB 경로 재사용. */
+
+  function nukkiRemoveBg(src, tol) {
+    var w = src.width;
+    var h = src.height;
+    var d = src.data;
+    var n = w * h;
+    var out = new Uint8ClampedArray(d);   /* 원본 ImageData 는 불변 — 사본에만 적용 */
+    /* 기준색: 네 모서리 픽셀의 채널별 중앙값 (투명 모서리는 흰색으로 간주 — 재편집 대비) */
+    var corners = [0, (w - 1) * 4, (h - 1) * w * 4, (n - 1) * 4];
+    var chR = [];
+    var chG = [];
+    var chB = [];
+    for (var ci = 0; ci < 4; ci++) {
+      var cp = corners[ci];
+      var ca = d[cp + 3];
+      chR.push(ca <= NUKKI_ALPHA_EPS ? 255 : d[cp]);
+      chG.push(ca <= NUKKI_ALPHA_EPS ? 255 : d[cp + 1]);
+      chB.push(ca <= NUKKI_ALPHA_EPS ? 255 : d[cp + 2]);
+    }
+    function med4(arr) {
+      arr.sort(function (a, b) { return a - b; });
+      return (arr[1] + arr[2]) / 2;
+    }
+    var refR = med4(chR);
+    var refG = med4(chG);
+    var refB = med4(chB);
+    var tolSq = 3 * tol * tol;   /* 채널 평균 제곱 거리 ≤ tol² 와 동치 */
+    function isBg(i4) {
+      if (d[i4 + 3] <= NUKKI_ALPHA_EPS) return true;   /* 이미 투명 = 배경 취급 (연결 통로) */
+      var dr = d[i4] - refR;
+      var dg = d[i4 + 1] - refG;
+      var db = d[i4 + 2] - refB;
+      return dr * dr + dg * dg + db * db <= tolSq;
+    }
+    var mark = new Uint8Array(n);     /* 1 = 제거 대상 */
+    var queue = new Int32Array(n);
+    var qt = 0;
+    function seed(i) {
+      if (!mark[i] && isBg(i * 4)) { mark[i] = 1; queue[qt++] = i; }
+    }
+    var x;
+    var y;
+    for (x = 0; x < w; x++) { seed(x); seed((h - 1) * w + x); }
+    for (y = 1; y < h - 1; y++) { seed(y * w); seed(y * w + w - 1); }
+    var qh = 0;
+    while (qh < qt) {
+      var i = queue[qh++];
+      var iy = (i / w) | 0;
+      var ix = i - iy * w;
+      if (ix > 0) seed(i - 1);
+      if (ix < w - 1) seed(i + 1);
+      if (iy > 0) seed(i - w);
+      if (iy < h - 1) seed(i + w);
+    }
+    var removedCount = qt;
+    /* 페더링: 제거 영역에 인접한 보존 픽셀 1링(강한 감쇠)·2링(약한 감쇠) — 경계 1~2px */
+    var ring = new Uint8Array(n);
+    var idx;
+    var ry;
+    var rx;
+    for (idx = 0; idx < n; idx++) {
+      if (mark[idx]) continue;
+      ry = (idx / w) | 0;
+      rx = idx - ry * w;
+      if ((rx > 0 && mark[idx - 1]) || (rx < w - 1 && mark[idx + 1]) ||
+          (ry > 0 && mark[idx - w]) || (ry < h - 1 && mark[idx + w])) ring[idx] = 1;
+    }
+    for (idx = 0; idx < n; idx++) {
+      if (mark[idx] || ring[idx]) continue;
+      ry = (idx / w) | 0;
+      rx = idx - ry * w;
+      if ((rx > 0 && ring[idx - 1] === 1) || (rx < w - 1 && ring[idx + 1] === 1) ||
+          (ry > 0 && ring[idx - w] === 1) || (ry < h - 1 && ring[idx + w] === 1)) ring[idx] = 2;
+    }
+    for (idx = 0; idx < n; idx++) {
+      var o4 = idx * 4;
+      if (mark[idx]) out[o4 + 3] = 0;
+      else if (ring[idx] === 1) out[o4 + 3] = (out[o4 + 3] * 0.35) | 0;
+      else if (ring[idx] === 2) out[o4 + 3] = (out[o4 + 3] * 0.72) | 0;
+    }
+    return { data: new ImageData(out, w, h), removed: removedCount, total: n };
+  }
+
+  /* 처리 결과 캔버스 → PNG(알파) 데이터 URI — 길이 상한 초과 시 0.7 배율 축소 재시도 (downscaleToUri 동형) */
+  function nukkiPngUri(canvas) {
+    var c = canvas;
+    for (var pass = 0; pass < 4; pass++) {
+      var uri = null;
+      try { uri = c.toDataURL('image/png'); } catch (err) { return null; }
+      if (typeof uri === 'string' && uri.length <= NUKKI_PNG_MAX_LEN && IMG_URI_RE.test(uri)) return uri;
+      var nw = Math.max(1, Math.round(c.width * 0.7));
+      var nh = Math.max(1, Math.round(c.height * 0.7));
+      var c2 = document.createElement('canvas');
+      c2.width = nw;
+      c2.height = nh;
+      var cx = c2.getContext('2d');
+      if (!cx) return null;
+      cx.drawImage(c, 0, 0, nw, nh);
+      c = c2;
+    }
+    return null;
+  }
+
+  /* 사진 스티커의 이미지 키 조회/교체 — 활성 보드는 모델·화면까지, 다른 보드는 저장분만
+     (restoreSticker 관용구 동형 — undo 토스트가 살아 있는 동안 보드를 옮겨도 안전) */
+  function stickerImgKeyIn(bid, sid) {
+    if (bid === boardId) {
+      var s = findSticker(sid);
+      return s && s.type === 'photo' ? s.img : null;
+    }
+    var all = readDecorAll();
+    var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
+    var k = null;
+    sanitizeDecor(bs[bid]).stickers.forEach(function (o) {
+      if (o.id === sid && o.type === 'photo') k = o.img;
+    });
+    return k;
+  }
+
+  function swapStickerImage(bid, sid, toKey) {
+    if (bid === boardId) {
+      var s = findSticker(sid);
+      if (!s || s.type !== 'photo') return false;
+      s.img = toKey;
+      var el = stickerEls[sid];
+      if (el) {
+        var img = el.querySelector('.stimg');
+        if (img) {
+          loadDecorImage(toKey, function (uri) {
+            if (uri) img.src = uri;   /* loadDecorImage 가 IMG_URI_RE 로 검증한 데이터 URI (B-1 예외) */
+          });
+        }
+      }
+      saveDecorNow();
+      return true;
+    }
+    var all = readDecorAll();
+    var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
+    var cur = sanitizeDecor(bs[bid]);
+    var hit = false;
+    cur.stickers.forEach(function (o) {
+      if (o.id === sid && o.type === 'photo') { o.img = toKey; hit = true; }
+    });
+    if (hit) writeDecorEntry(bid, decorEntryPlain(cur));
+    return hit;
+  }
+
+  /* 우클릭 "배경 다듬기": IDB 원본을 불러 같은 편집 카드로 재편집 */
+  function reeditStickerBackground(sid) {
+    var s = findSticker(sid);
+    if (!s || s.type !== 'photo') return;
+    loadDecorImage(s.img, function (uri) {
+      if (!uri) { showNotice('사진 원본을 불러오지 못해 배경을 다듬을 수 없어요.'); return; }
+      var probe = document.createElement('img');   /* 디코드 확인용 — DOM 에 넣지 않음 */
+      probe.onload = function () {
+        try { openNukkiEditor(probe, 'reedit', sid); }
+        catch (err) { showNotice('편집 카드를 여는 데 실패했어요. 스티커는 그대로예요.'); }
+      };
+      probe.onerror = function () { showNotice('사진을 읽지 못해 배경을 다듬을 수 없어요.'); };
+      probe.src = uri;   /* loadDecorImage 가 IMG_URI_RE 로 검증한 데이터 URI (B-1 예외) */
+    });
+  }
+
+  function closeNukkiEditor() {
+    if (!nukki) return;
+    nukkiRunToken++;   /* 대기 중 처리 무효화 */
+    if (nukki.debTimer) clearTimeout(nukki.debTimer);
+    var root = nukki.root;
+    nukki = null;
+    if (root && root.parentNode) root.parentNode.removeChild(root);
+  }
+
+  /* 카드 바깥 pointerdown = 닫기 (우클릭 메뉴 관용구 동형) — 스티커는 현재 상태 그대로 남는다 */
+  document.addEventListener('pointerdown', function (e) {
+    if (!nukki) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('.nukki-pop')) return;
+    closeNukkiEditor();
+  });
+
+  function nukkiStatus(msg) {
+    if (nukki && nukki.statusEl) nukki.statusEl.textContent = msg;
+  }
+
+  function nukkiSyncControls() {
+    if (!nukki) return;
+    nukki.slider.disabled = !nukki.on;
+    nukki.applyBtn.disabled = !(nukki.on && nukki.processed && !nukki.busy);
+  }
+
+  function nukkiPaint() {
+    if (!nukki) return;
+    var g = nukki.canvas.getContext('2d');
+    if (!g) return;
+    g.clearRect(0, 0, nukki.canvas.width, nukki.canvas.height);
+    g.putImageData(nukki.on && nukki.processed ? nukki.processed : nukki.srcData, 0, 0);
+  }
+
+  /* 미리보기 재계산 — "처리 중…" 표기 후 다음 틱에 동기 처리 (실패 시 토스트 강등, 원본 경로 유지) */
+  function nukkiRun() {
+    if (!nukki) return;
+    if (!nukki.on) {
+      nukki.processed = null;
+      nukki.busy = false;
+      nukkiPaint();
+      nukkiStatus('원본 그대로예요. (배경 지우기 꺼짐)');
+      nukkiSyncControls();
+      return;
+    }
+    nukki.busy = true;
+    nukkiStatus('처리 중…');
+    nukkiSyncControls();
+    var tok = ++nukkiRunToken;
+    setTimeout(function () {
+      if (!nukki || tok !== nukkiRunToken) return;
+      var res = null;
+      try { res = nukkiRemoveBg(nukki.srcData, nukki.tol); } catch (err) { res = null; }
+      nukki.busy = false;
+      if (!res) {
+        nukki.processed = null;
+        nukki.on = false;
+        nukki.toggle.checked = false;
+        nukkiPaint();
+        nukkiStatus('배경 지우기에 실패했어요.');
+        nukkiSyncControls();
+        showNotice('배경 지우기에 실패했어요. 사진은 그대로 쓸 수 있어요.');
+        return;
+      }
+      nukki.processed = res.data;
+      nukkiPaint();
+      nukkiStatus('전체의 ' + Math.round(res.removed * 100 / res.total) + '% 를 배경으로 지웠어요. 미리보기를 확인해 주세요.');
+      nukkiSyncControls();
+    }, 30);
+  }
+
+  /* [배경 지우고 붙이기]: PNG 인코딩 → 새 IDB 키 저장 → 스티커 참조 교체 → 이전 키 지연 정리 + undo 토스트 */
+  function nukkiApply() {
+    if (!nukki || !nukki.on || !nukki.processed || nukki.busy) return;
+    var st = nukki;
+    var c = document.createElement('canvas');
+    c.width = st.srcData.width;
+    c.height = st.srcData.height;
+    var g = c.getContext('2d');
+    var uri = null;
+    try {
+      if (g) { g.putImageData(st.processed, 0, 0); uri = nukkiPngUri(c); }
+    } catch (err) { uri = null; }
+    if (!uri) {
+      nukkiStatus('결과 저장에 실패했어요.');
+      showNotice('결과 PNG 를 만들지 못했어요. 사진은 그대로 쓸 수 있어요.');
+      return;
+    }
+    var newKey = 'img-' + uid();
+    nukkiStatus('저장 중…');
+    idbPut(newKey, uri, function (ok) {
+      if (!ok) {
+        nukkiStatus('저장에 실패했어요.');
+        showNotice('이미지 저장소(IndexedDB)를 쓸 수 없어 결과를 저장하지 못했어요. 사진은 그대로예요.');
+        return;
+      }
+      imgCache[newKey] = uri;
+      var bid = st.bid;
+      var sid = st.stickerId;
+      var oldKey = stickerImgKeyIn(bid, sid);
+      closeNukkiEditor();
+      playTick();   /* 직접 제스처(카드 버튼 클릭) 내부 */
+      if (oldKey && swapStickerImage(bid, sid, newKey)) {
+        if (oldKey !== newKey) scheduleDecorImageSweep(oldKey);   /* undo 토스트 소멸 뒤 미사용 시에만 정리 */
+        showUndoNotice('사진 배경을 지워 붙였어요.', function () {
+          swapStickerImage(bid, sid, oldKey);
+          scheduleDecorImageSweep(newKey);
+          playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
+          showNotice('원래 사진으로 되돌렸어요.');
+        });
+      } else {
+        /* 편집 중 스티커가 사라진 경우 — 결과를 새 스티커로 붙인다 (실패 없는 강등) */
+        var p = stickerSpawnXY(160, 190);
+        var ns = { id: 'st-' + uid(), type: 'photo', img: newKey, x: p.x, y: p.y, w: 160 };
+        decor.stickers.push(ns);
+        revealStickerGrip(renderSticker(ns));
+        saveDecorNow();
+        showNotice('배경을 지운 사진 스티커를 붙였어요.');
+      }
+    });
+  }
+
+  /* 비모달 누끼 편집 카드 — createElement/textContent 만 (위험 싱크 0).
+     mode 'upload' = 방금 붙인 스티커 다듬기(그대로 붙이기 = 유지·닫기, 취소 = 스티커 떼기)
+     mode 'reedit' = 기존 스티커 재편집(그대로 붙이기 숨김, 취소 = 변경 없이 닫기) */
+  function openNukkiEditor(imgEl, mode, stickerId) {
+    closeNukkiEditor();
+    var w = imgEl.naturalWidth;
+    var h = imgEl.naturalHeight;
+    if (!w || !h) { showNotice('사진 크기를 읽지 못해 배경 지우기를 열 수 없어요.'); return; }
+    var scale = Math.min(1, STICKER_IMG_MAX_SIDE / Math.max(w, h));
+    var cw = Math.max(1, Math.round(w * scale));
+    var chh = Math.max(1, Math.round(h * scale));
+    var srcCanvas = document.createElement('canvas');
+    srcCanvas.width = cw;
+    srcCanvas.height = chh;
+    var scx = srcCanvas.getContext('2d');
+    var srcData = null;
+    try {
+      if (scx) {
+        scx.drawImage(imgEl, 0, 0, cw, chh);
+        srcData = scx.getImageData(0, 0, cw, chh);
+      }
+    } catch (err) { srcData = null; }
+    if (!srcData) { showNotice('사진 픽셀을 읽지 못해 배경 지우기를 열 수 없어요. 스티커는 그대로예요.'); return; }
+
+    var root = document.createElement('div');
+    root.className = 'nukki-pop';
+    root.setAttribute('data-nukki-pop', mode);
+
+    var head = document.createElement('div');
+    head.className = 'nukki-head';
+    var htxt = document.createElement('span');
+    htxt.textContent = mode === 'reedit' ? '✂️ 배경 다듬기' : '✂️ 사진 배경 지우기';
+    head.appendChild(htxt);
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'notice-close';
+    closeBtn.textContent = '✕';
+    closeBtn.title = '닫기 (지금 상태 그대로)';
+    closeBtn.addEventListener('click', closeNukkiEditor);
+    head.appendChild(closeBtn);
+    root.appendChild(head);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'nukki-canvas-wrap';
+    var canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = chh;
+    canvas.setAttribute('data-nukki-canvas', '');
+    wrap.appendChild(canvas);
+    root.appendChild(wrap);
+
+    var togRow = document.createElement('label');
+    togRow.className = 'nukki-row';
+    var toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.checked = true;   /* 기본 켬 */
+    toggle.setAttribute('data-nukki-toggle', '');
+    var togTxt = document.createElement('span');
+    togTxt.textContent = '흰 배경 지우기';
+    togRow.appendChild(toggle);
+    togRow.appendChild(togTxt);
+    root.appendChild(togRow);
+
+    var tolRow = document.createElement('div');
+    tolRow.className = 'nukki-row';
+    var tolLab = document.createElement('span');
+    tolLab.textContent = '허용 오차';
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = String(NUKKI_TOL_MIN);
+    slider.max = String(NUKKI_TOL_MAX);
+    slider.step = '1';
+    slider.value = String(NUKKI_TOL_DEF);
+    slider.setAttribute('data-nukki-tol', '');
+    slider.title = '높일수록 배경에 가까운 색을 더 넓게 지워요';
+    var tolVal = document.createElement('span');
+    tolVal.className = 'nukki-tolval';
+    tolVal.setAttribute('data-nukki-tolval', '');
+    tolVal.textContent = String(NUKKI_TOL_DEF);
+    tolRow.appendChild(tolLab);
+    tolRow.appendChild(slider);
+    tolRow.appendChild(tolVal);
+    root.appendChild(tolRow);
+
+    var status = document.createElement('p');
+    status.className = 'nukki-status';
+    status.setAttribute('data-nukki-status', '');
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    root.appendChild(status);
+
+    var btns = document.createElement('div');
+    btns.className = 'nukki-btns';
+    var applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'tool-btn nukki-apply';
+    applyBtn.setAttribute('data-nukki-apply', '');
+    applyBtn.textContent = mode === 'reedit' ? '배경 지우고 바꾸기' : '배경 지우고 붙이기';
+    applyBtn.addEventListener('click', nukkiApply);
+    btns.appendChild(applyBtn);
+    if (mode !== 'reedit') {
+      var asisBtn = document.createElement('button');
+      asisBtn.type = 'button';
+      asisBtn.className = 'tool-btn';
+      asisBtn.setAttribute('data-nukki-asis', '');
+      asisBtn.textContent = '그대로 붙이기';
+      asisBtn.title = '배경을 지우지 않고 지금 붙은 원본 그대로 둬요';
+      asisBtn.addEventListener('click', function () {
+        closeNukkiEditor();   /* 원본은 이미 붙어 있다 */
+        playTick();   /* 직접 제스처(카드 버튼 클릭) 내부 */
+      });
+      btns.appendChild(asisBtn);
+    }
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'tool-btn';
+    cancelBtn.setAttribute('data-nukki-cancel', '');
+    cancelBtn.textContent = '취소';
+    cancelBtn.title = mode === 'reedit' ? '바꾸지 않고 닫아요' : '방금 붙인 스티커를 떼어내요 (실행 취소 가능)';
+    cancelBtn.addEventListener('click', function () {
+      var sid = nukki ? nukki.stickerId : null;
+      var m = nukki ? nukki.mode : mode;
+      closeNukkiEditor();
+      if (m !== 'reedit' && sid) deleteStickerById(sid);   /* 기존 떼기 경로 — undo 토스트 포함 */
+    });
+    btns.appendChild(cancelBtn);
+    root.appendChild(btns);
+
+    var hint = document.createElement('p');
+    hint.className = 'sp-small';
+    hint.textContent = mode === 'reedit'
+      ? '가장자리와 이어진 배경만 지워요 — 피사체 안쪽 흰색은 남아요. 바꾼 뒤에도 실행 취소로 되돌릴 수 있어요.'
+      : '가장자리와 이어진 배경만 지워요 — 피사체 안쪽 흰색은 남아요. 카드 바깥을 누르면 원본 그대로 둔 채 닫혀요.';
+    root.appendChild(hint);
+
+    nukki = {
+      root: root,
+      canvas: canvas,
+      toggle: toggle,
+      slider: slider,
+      applyBtn: applyBtn,
+      statusEl: status,
+      srcData: srcData,
+      processed: null,
+      on: true,
+      tol: NUKKI_TOL_DEF,
+      busy: false,
+      debTimer: null,
+      mode: mode,
+      stickerId: stickerId,
+      bid: boardId
+    };
+
+    toggle.addEventListener('change', function () {
+      if (!nukki) return;
+      nukki.on = !!toggle.checked;
+      if (nukki.debTimer) clearTimeout(nukki.debTimer);
+      nukkiRun();
+    });
+    slider.addEventListener('input', function () {
+      if (!nukki) return;
+      var v = parseInt(slider.value, 10);
+      if (!isFinite(v)) v = NUKKI_TOL_DEF;
+      nukki.tol = Math.max(NUKKI_TOL_MIN, Math.min(NUKKI_TOL_MAX, v));
+      tolVal.textContent = String(nukki.tol);
+      if (nukki.debTimer) clearTimeout(nukki.debTimer);
+      nukki.debTimer = setTimeout(nukkiRun, NUKKI_DEBOUNCE_MS);   /* 실시간 미리보기 — 디바운스 */
+    });
+
+    document.body.appendChild(root);
+    nukkiPaint();       /* 우선 원본을 보여 주고 */
+    nukkiRun();         /* 기본 켬 — 곧바로 1회 처리 */
+  }
 
   /* 노트 꾸밈: 테이프 색·무늬·보드 프레임 — postit-settings 저장 (기본 = 현행) */
   Array.prototype.forEach.call(document.getElementById('dpTapeColor').querySelectorAll('button[data-tval]'), function (b) {

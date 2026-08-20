@@ -368,15 +368,37 @@ async function runBackup(kind, preferredWin) {
 // ── 예약 자동 백업 (Pro 게이트 — 매일 1회, 앱 실행 중 체크) ─────────────────
 let schedTimer = null;
 
+// 라이선스 무효 백오프: auto=true 인데 라이선스가 무효면, 체크(창 executeJavaScript)를
+// 60초마다 무한 반복하지 않는다 — 연속 3회 무효 확인 후 이번 세션에서는 중단(로그 1회).
+// 재개 지점: 라이선스가 유효로 관찰되는 순간(status/set-auto) 게이트를 리셋한다.
+const autoLicenseGate = { misses: 0, stopped: false };
+
+function resetAutoLicenseGate() {
+  autoLicenseGate.misses = 0;
+  autoLicenseGate.stopped = false;
+}
+
 async function checkAutoBackup() {
   try {
     if (bkState.running) return;
     const cfg = getConfig();
-    if (cfg.auto !== true) return;
+    if (cfg.auto !== true) { resetAutoLicenseGate(); return; } // auto 꺼짐 — 게이트도 초기화
+    if (autoLicenseGate.stopped) return; // 세션 내 중단 — 창 평가 반복 자체를 멈춘다
     const iv = intervalMs();
     const now = Date.now();
     if (now - (cfg.lastAutoAt || 0) < iv) return;
-    if (!(await isProUnlocked(null))) return; // 라이선스 없이는 예약 백업이 절대 돌지 않는다
+    if (!(await isProUnlocked(null))) { // 라이선스 없이는 예약 백업이 절대 돌지 않는다
+      autoLicenseGate.misses += 1;
+      if (autoLicenseGate.misses >= 3 && !autoLicenseGate.stopped) {
+        autoLicenseGate.stopped = true;
+        console.error(
+          '[쁘띠캘린더 백업] 자동 백업이 켜져 있지만 유효한 Pro 라이선스를 3회 연속 확인하지 못했어요 — ' +
+          '이번 실행에서는 더 확인하지 않아요. (라이선스 적용 뒤 백업 설정을 열거나 자동 백업을 다시 켜면 재개돼요)'
+        );
+      }
+      return;
+    }
+    resetAutoLicenseGate(); // 유효 확인 — 연속 실패 카운트 초기화
     await runBackup('auto', null);
     // 실패해도 다음 주기까지 대기 — 실패 연타로 폴더·디스크를 괴롭히지 않는다
     cfg.lastAutoAt = Date.now();
@@ -389,10 +411,6 @@ function startBackupScheduler() {
   const iv = intervalMs();
   const tick = Math.max(1000, Math.min(iv, 60 * 1000)); // 하루 주기여도 체크는 1분 간격 (저비용)
   schedTimer = setInterval(checkAutoBackup, tick);
-}
-
-function stopBackupScheduler() {
-  if (schedTimer) { clearInterval(schedTimer); schedTimer = null; }
 }
 
 // ── IPC (preload 화이트리스트 채널의 main 측 종단) ──────────────────────────
@@ -421,6 +439,7 @@ function registerBackupIpc() {
     assertTrustedSender(event);
     const win = BrowserWindow.fromWebContents(event.sender);
     const pro = await isProUnlocked(win);
+    if (pro) resetAutoLicenseGate(); // 라이선스 유효 관찰 — 세션 백오프 해제 (예약 재개)
     return statusPayload(pro);
   });
 
@@ -467,6 +486,7 @@ function registerBackupIpc() {
           reason: '예약 자동 백업은 프리미엄(Pro) 기능이에요. 라이선스를 적용하면 켤 수 있어요.'
         };
       }
+      resetAutoLicenseGate(); // 유효 라이선스로 켬 — 세션 백오프 해제
     }
     cfg.auto = on;
     saveConfig(cfg);
@@ -482,4 +502,4 @@ function registerBackupIpc() {
   });
 }
 
-module.exports = { registerBackupIpc, startBackupScheduler, stopBackupScheduler };
+module.exports = { registerBackupIpc, startBackupScheduler };

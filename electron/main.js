@@ -26,7 +26,7 @@
 
 const { app, BrowserWindow, WebContentsView, screen, ipcMain } = require('electron');
 const path = require('path');
-const { REPO_ROOT, readJsonFile, writeJsonFile, assertTrustedSender } = require('./lib-shared');
+const { REPO_ROOT, readJsonFile, writeJsonFile, windowAppKind, assertTrustedSender } = require('./lib-shared');
 const { registerMigrateIpc } = require('./migrate');
 const { registerBackupIpc, startBackupScheduler } = require('./backup');
 
@@ -130,7 +130,9 @@ const runtime = {
   layoutViews: null,     // 병합 모드의 뷰 배치 함수 (드로어 개폐·리사이즈 시 재호출)
   activeTab: 'postit',   // 병합 모드의 활성 탭
   drawerOpen: false,     // 탭바 설정 드로어 개폐 (열리면 앱 뷰를 아래로 밀어 공간 확보)
-  transitioning: false   // 분리↔병합 전환 중 (일시적 0창 상태에서 종료 방지)
+  transitioning: false,  // 분리↔병합 전환 중 (겹침 전환 구간에서 이중 전환·조기 종료 방지)
+  pendingAlarms: 0,      // 병합 모드에서 캘린더가 백그라운드 탭일 때 쌓인 일정 알림 건수 (탭바 배지)
+  lastAlarmText: ''      // 마지막 알림 텍스트 (탭바 미니 알림 스트립 표시용, ≤200자)
 };
 
 // ============================================================================
@@ -273,22 +275,23 @@ function createAppWindow(state, key, htmlFile, windowTitle, defaults) {
   return win;
 }
 
-/** 분리 모드 진입: 앱 창 2개 (캘린더 좌 / 포스트잇 우) */
+/** 분리 모드 진입: 앱 창 2개 (캘린더 좌 / 포스트잇 우) — 전환 순서 제어용으로 창 배열 반환 */
 function openSeparateWindows() {
-  createAppWindow(
+  const calWin = createAppWindow(
     runtime.state,
     'calendar',
     path.join(REPO_ROOT, 'calendar.html'),
     '쁘띠캘린더 — 캘린더',
     { width: 1024, height: 740 }
   );
-  createAppWindow(
+  const postitWin = createAppWindow(
     runtime.state,
     'postit',
     path.join(REPO_ROOT, 'postit.html'),
     '쁘띠캘린더 — 포스트잇 월',
     { width: 1024, height: 740 }
   );
+  return [calWin, postitWin];
 }
 
 // ============================================================================
@@ -306,7 +309,20 @@ function setActiveTab(tab) {
   if (!win || win.isDestroyed() || !runtime.views || !runtime.views[tab]) return false;
   runtime.activeTab = tab;
   win.contentView.addChildView(runtime.views[tab]);
+  if (tab === 'calendar' && runtime.pendingAlarms > 0) {
+    // 캘린더 탭이 전면으로 왔다 — 쌓인 알림 배지를 비운다 (사용자가 알림을 확인한 시점)
+    runtime.pendingAlarms = 0;
+    runtime.lastAlarmText = '';
+  }
+  pushTabbarUi();
   return true;
+}
+
+/** 탭바 페이지에 셸 상태를 밀어 넣는다 — 단축키 전환·알림 배지 등 탭바 요청 없이 바뀐 상태 반영 */
+function pushTabbarUi() {
+  const win = runtime.mergedWin;
+  if (!win || win.isDestroyed()) return;
+  try { win.webContents.send('petit:shell:ui-push', shellStatePayload()); } catch (_err) { /* 로드 전/파괴 중 — 무해 (탭바가 초기 getState 로 동기화) */ }
 }
 
 /** 활성 탭 뷰에 키보드 포커스 — 탭 전환 직후 바로 타이핑할 수 있게 */
@@ -367,6 +383,36 @@ function createMergedWindow(state, settings) {
   runtime.mergedWin = win;
   runtime.views = views;
   runtime.drawerOpen = false;
+  runtime.pendingAlarms = 0;   // 새 병합 창 — 배지 누적은 창 수명 단위
+  runtime.lastAlarmText = '';
+
+  // ── 병합 모드 탭 단축키 (Ctrl+Tab 순환 / Ctrl+1 포스트잇 / Ctrl+2 캘린더) ──
+  // before-input-event 는 렌더러가 키를 받기 전에 main 이 가로챈다 — 앱 입력 필드에
+  // 포커스가 있어도 안전하다: Ctrl+Tab·Ctrl+숫자는 텍스트를 만들지 않는 조합이고,
+  // 양 앱 모두 이 조합을 쓰지 않는다 (preventDefault 로 렌더러 전달도 차단).
+  // 탭바 호스트·두 앱 뷰 모두에 배선 — 포커스가 어디 있든 동작한다.
+  const wireTabShortcuts = (wc) => {
+    wc.on('before-input-event', (event, input) => {
+      if (runtime.mode !== 'merged' || runtime.mergedWin !== win || win.isDestroyed()) return;
+      // 텍스트 없는 키(Tab·수식 조합 숫자)는 keyDown 이 아니라 rawKeyDown 으로 온다 (실측)
+      if (input.type !== 'keyDown' && input.type !== 'rawKeyDown') return;
+      if (!input.control || input.alt || input.meta) return;
+      let want = null;
+      if (input.key === 'Tab') {
+        want = runtime.activeTab === 'postit' ? 'calendar' : 'postit'; // 2탭 — Shift 유무 무관 순환
+      } else if (!input.shift && input.key === '1') {
+        want = 'postit';   // 탭 순서와 동일 (1 = 포스트잇)
+      } else if (!input.shift && input.key === '2') {
+        want = 'calendar'; // 2 = 캘린더
+      }
+      if (!want) return;
+      event.preventDefault();
+      if (setActiveTab(want)) focusActiveView();
+    });
+  };
+  wireTabShortcuts(win.webContents);
+  wireTabShortcuts(views.calendar.webContents);
+  wireTabShortcuts(views.postit.webContents);
 
   // ── 뷰 배치: 탭바 아래 전체 영역 (드로어가 열리면 그 높이만큼 더 아래로) ──
   const layoutViews = () => {
@@ -413,6 +459,10 @@ function createMergedWindow(state, settings) {
 // 저장 경로(편집 확정·blur 저장)가 돌게 하고, 앱의 저장 디바운스(≤400ms)가
 // 비워질 여유를 준 뒤 웹콘텐츠를 정상 종료(unload/pagehide 발화)한다.
 // 전환은 창/뷰 재구성(재로드)으로 한다 — 병합 모드 "탭 전환"만은 무리로드 계약.
+//
+// 전환 순서(무창 깜빡임 제거): 저장 flush → "새 창 먼저 생성·표시" → 이전 창 정리.
+// 어느 순간에도 보이는 창이 0개가 되지 않는다 (겹침 구간에는 창이 잠시 3개 —
+// transitioning 가드가 이중 전환과 window-all-closed 종료를 계속 막는다).
 // ============================================================================
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -420,45 +470,65 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // 앱 저장 디바운스(포스트잇 250ms·창 상태 400ms)가 비워질 유예
 const TRANSITION_FLUSH_MS = 700;
 
+// 새 창의 ready-to-show(→show)까지 기다리는 상한 — 초과 시에도 정리는 계속한다 (교착 방지)
+const TRANSITION_SHOW_TIMEOUT_MS = 10000;
+
+/** 창이 실제 표시(show)될 때까지 대기 — 이미 보이면 즉시, 파괴/시간 초과면 그대로 통과 */
+function whenWindowShown(win, timeoutMs) {
+  return new Promise((resolve) => {
+    if (!win || win.isDestroyed() || win.isVisible()) { resolve(); return; }
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; resolve(); } };
+    win.once('show', finish);
+    setTimeout(finish, timeoutMs);
+  });
+}
+
 async function runTransition(targetMode) {
   try {
     runtime.settings.windowMode = targetMode;
     saveShellSettings(runtime.settings);
 
     if (targetMode === 'separate') {
-      // ── 병합 → 분리 ──
-      const win = runtime.mergedWin;
-      const views = runtime.views;
+      // ── 병합 → 분리: 새 창 2개를 먼저 표시한 뒤 병합 창을 정리 ──
+      const oldWin = runtime.mergedWin;
+      const oldViews = runtime.views;
       runtime.mergedWin = null;
       runtime.views = null;
       runtime.layoutViews = null;
-      if (win && !win.isDestroyed()) {
-        try { win.webContents.focus(); } catch (_err) { /* blur 유도 실패 무해 */ }
+      runtime.pendingAlarms = 0;
+      runtime.lastAlarmText = '';
+      if (oldWin && !oldWin.isDestroyed()) {
+        try { oldWin.webContents.focus(); } catch (_err) { /* blur 유도 실패 무해 */ }
         await delay(TRANSITION_FLUSH_MS);
-        if (views) {
-          for (const v of [views.postit, views.calendar]) {
-            try { win.contentView.removeChildView(v); } catch (_err) { /* 이미 분리됨 */ }
+      }
+      // 새 창의 preload 가 shell:state 로 분리 모드를 봐야 [data-merge] 를 주입한다 — 생성 전에 확정
+      runtime.mode = 'separate';
+      const newWins = openSeparateWindows();
+      await Promise.all(newWins.map((w) => whenWindowShown(w, TRANSITION_SHOW_TIMEOUT_MS)));
+      if (oldWin && !oldWin.isDestroyed()) {
+        if (oldViews) {
+          for (const v of [oldViews.postit, oldViews.calendar]) {
+            try { oldWin.contentView.removeChildView(v); } catch (_err) { /* 이미 분리됨 */ }
             try { v.webContents.close(); } catch (_err) { /* 이미 종료됨 */ }
           }
         }
         await delay(150);
-        try { win.close(); } catch (_err) { /* 이미 닫힘 */ }
+        try { oldWin.close(); } catch (_err) { /* 이미 닫힘 */ }
       }
-      runtime.mode = 'separate';
-      openSeparateWindows();
     } else {
-      // ── 분리 → 병합 ──
-      const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
-      for (const w of wins) {
+      // ── 분리 → 병합: 병합 창을 먼저 표시한 뒤 이전 창 2개를 정리 ──
+      const oldWins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+      for (const w of oldWins) {
         try { w.blur(); } catch (_err) { /* 무해 */ }
       }
       await delay(TRANSITION_FLUSH_MS);
-      for (const w of wins) {
-        try { w.close(); } catch (_err) { /* 이미 닫힘 */ }
-      }
-      await delay(150);
       runtime.mode = 'merged';
-      createMergedWindow(runtime.state, runtime.settings);
+      const newWin = createMergedWindow(runtime.state, runtime.settings);
+      await whenWindowShown(newWin, TRANSITION_SHOW_TIMEOUT_MS);
+      for (const w of oldWins) {
+        try { if (!w.isDestroyed()) w.close(); } catch (_err) { /* 이미 닫힘 */ }
+      }
     }
   } finally {
     runtime.transitioning = false;
@@ -485,7 +555,9 @@ function shellStatePayload() {
     mode: runtime.mode,
     activeTab: runtime.activeTab,
     windowMode: runtime.settings ? runtime.settings.windowMode : SHELL_SETTINGS_DEFAULTS.windowMode,
-    defaultTab: runtime.settings ? runtime.settings.defaultTab : SHELL_SETTINGS_DEFAULTS.defaultTab
+    defaultTab: runtime.settings ? runtime.settings.defaultTab : SHELL_SETTINGS_DEFAULTS.defaultTab,
+    // 병합 모드 백그라운드 캘린더의 일정 알림 누적 (탭바 배지·미니 스트립용 — additive 필드)
+    alarms: { count: runtime.pendingAlarms, text: runtime.lastAlarmText }
   };
 }
 
@@ -539,25 +611,40 @@ function registerShellIpc() {
     scheduleTransition('merged');
     return { ok: true };
   });
+
+  // 병합 모드 알림 릴레이 — 캘린더 preload 가 [data-toast][data-toast-kind="alarm"] 표출을
+  // 감지해 보낸다. 병합 모드 + 발신자가 캘린더 페이지 + 활성 탭이 캘린더가 아닐 때만
+  // 배지에 누적하고 탭바로 push 한다. 분리 모드는 현행 유지(창이 그대로 보임 — 릴레이 없음).
+  ipcMain.handle('petit:shell:alarm-relay', (event, text) => {
+    assertTrustedSender(event);
+    if (runtime.mode !== 'merged' || !runtime.mergedWin || runtime.mergedWin.isDestroyed()) {
+      return { ok: true, relayed: false };
+    }
+    if (windowAppKind({ webContents: event.sender }) !== 'calendar') return { ok: true, relayed: false };
+    if (runtime.activeTab === 'calendar') return { ok: true, relayed: false }; // 이미 보고 있다 — 생략
+    runtime.pendingAlarms += 1;
+    runtime.lastAlarmText = typeof text === 'string' ? text.slice(0, 200) : '';
+    pushTabbarUi();
+    return { ok: true, relayed: true };
+  });
+
+  // 온보딩 완료 통지(A47) — 완료 플래그의 정본은 렌더러 localStorage(postit-onboarded),
+  // main 은 상태를 갖지 않는다 (수신 확인만 반환).
+  ipcMain.handle('petit:onboarding:set-done', () => ({ ok: true }));
 }
 
 // ============================================================================
 // 앱 수명주기
 // ============================================================================
 
-// preload 화이트리스트 채널의 main 측 스텁 종단 (마이그레이션 채널은 migrate.js 담당).
-function registerStubIpc() {
-  ipcMain.handle('petit:license:import', () => ({ ok: false, reason: '미구현' }));
-  // 온보딩 완료 플래그의 정본은 렌더러 localStorage(postit-onboarded) — main 은 상태를 갖지 않는다
-  ipcMain.handle('petit:onboarding:get', () => ({ stub: true, source: 'localStorage:postit-onboarded' }));
-  ipcMain.handle('petit:onboarding:set-done', () => ({ ok: true, stub: true }));
-}
+// (사어 스텁 정리 — 2026-08-20: petit:license:import(앱 내 A45 경로와 중복, 호출 0건)·
+//  petit:onboarding:get(호출 0건) 스텁과 registerStubIpc 를 제거. 실사용이 남은
+//  petit:onboarding:set-done 은 registerShellIpc 로 이동 — grep 실증 후 정리.)
 
 function main() {
   registerMigrateIpc(); // 'petit:migrate:detect' / ':run' / ':status'
   registerBackupIpc();  // 'petit:backup:status' / ':choose-folder' / ':run-now' / ':set-auto' / ':set-include-images'
-  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':split' / ':merge'
-  registerStubIpc();
+  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':split' / ':merge' / ':alarm-relay' + 'petit:onboarding:set-done'
 
   app.whenReady().then(() => {
     // A44: 세션 수준 스펠체커 완전 차단 — webPreferences.spellcheck:false 만으로는

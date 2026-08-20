@@ -2636,7 +2636,12 @@ function checkAlarms(){
 setInterval(checkAlarms, ALARM_POLL_MS);
 
 /* ---------- init ---------- */
-renderGrid(true);
+/* 첫 렌더는 무애니메이션 — 창 자체가 이제 막 나타나는 시점이라 페이드가 보이지 않는 데다,
+ * Electron WebContentsView 는 첫 합성(컴포지트) 시점까지 CSS 애니메이션 시작을 미루므로
+ * 기동 페이드가 뒤늦게 재생되어 그리드가 opacity≈0 인 순간이 관찰될 수 있다
+ * (A42 defaultTab=calendar 병합 재기동 실측, 2026-08-20). 사용자 조작 페이드(fadeL/fadeR·
+ * 뷰 전환)는 합성 이후에만 발생하므로 현행 유지. */
+renderGrid(false);
 renderPanel();
 checkAlarms();
 </script>

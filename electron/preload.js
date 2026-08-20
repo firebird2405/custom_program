@@ -58,15 +58,11 @@ const petitApi = {
     run: migrateRun,
     status: migrateStatus
   },
-  license: {
-    // A45 스텁 — 2·3주차 발주에서 서명 검증 구현 (지금은 항상 미구현 사유 반환)
-    import: function (text) {
-      return ipcRenderer.invoke('petit:license:import', typeof text === 'string' ? text : '');
-    }
-  },
+  // (사어 스텁 정리 2026-08-20: license.import — 라이선스 적용의 실경로는 앱 내 A45
+  //  (postit.html verifyLicenseText)라 셸 스텁은 호출 0건 — 제거. onboarding.getState 도
+  //  호출 0건 제거 — 완료 플래그의 정본은 렌더러 localStorage(postit-onboarded).)
   onboarding: {
-    // A47 스텁 — 완료 플래그의 정본은 렌더러 localStorage(postit-onboarded)
-    getState: function () { return ipcRenderer.invoke('petit:onboarding:get'); },
+    // 완료 통지만 유지 — finish() 가 호출한다 (정본은 localStorage)
     setDone: function () { return ipcRenderer.invoke('petit:onboarding:set-done'); }
   },
   backup: {
@@ -775,10 +771,60 @@ function initBackupUi() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 병합 모드 알림 릴레이 (캘린더 페이지 전용)
+// 문제: 병합 1창 탭 모드에서 캘린더가 백그라운드 탭이면 일정 알림 토스트(A32)가
+// 다른 뷰에 가려져 유실된다. 캘린더 preload 가 [data-toast] 표출을 감지해 main 으로
+// 릴레이하고, main 이 병합 모드 + 캘린더 비활성일 때만 탭바 배지·미니 스트립으로 띄운다.
+//
+// "알림성 토스트만" 판정 휴리스틱 (명시 기준 — calendar.html showToastBase 계약):
+//   ① [data-toast] 의 data-toast-kind 속성이 "alarm" 일 때만 (showAlarmToast — A32 일정
+//      알림 전용 kind. 일반 안내는 "info", 실행 취소는 "undo" 로 구분된다).
+//   ② 이중 방어: 실행 취소 버튼([data-undo])이 hidden 이 아니면 undo류 → 릴레이 제외.
+// 앱 원본은 무수정(A42) — 감시는 MutationObserver(읽기 전용), DOM 조작 0건.
+// ────────────────────────────────────────────────────────────────────────────
+
+function initAlarmRelay() {
+  if (PAGE !== 'calendar') return;
+  const toast = document.querySelector('[data-toast]');
+  if (!toast) return;
+
+  let wasAlarmShowing = false;   // 같은 표출을 중복 릴레이하지 않기 위한 상태
+  let lastRelayedText = null;    // 표출 중 텍스트가 바뀐 새 알림(연속 알림)은 다시 릴레이
+
+  const check = function () {
+    try {
+      const showing = toast.classList.contains('show');
+      if (!showing) {
+        wasAlarmShowing = false;
+        lastRelayedText = null;
+        return;
+      }
+      const kind = toast.getAttribute('data-toast-kind') || '';
+      const undoBtn = toast.querySelector('[data-undo]');
+      const isUndoLike = !!(undoBtn && !undoBtn.hidden);
+      if (kind !== 'alarm' || isUndoLike) return;   // 알림성 토스트만 — undo/info 제외
+      const textEl = toast.querySelector('#toastText');
+      const text = String((textEl ? textEl.textContent : toast.textContent) || '').slice(0, 200);
+      if (wasAlarmShowing && text === lastRelayedText) return; // 같은 표출 — 중복 릴레이 없음
+      wasAlarmShowing = true;
+      lastRelayedText = text;
+      // main 이 모드·활성 탭을 판정한다 (분리 모드·캘린더 활성 탭이면 무시 — 현행 유지)
+      ipcRenderer.invoke('petit:shell:alarm-relay', text).catch(function () { /* 브리지 실패 무해 */ });
+    } catch (_err) { /* 감시 실패는 앱 무영향 */ }
+  };
+
+  try {
+    const mo = new MutationObserver(check);
+    mo.observe(toast, { attributes: true, attributeFilter: ['class', 'data-toast-kind'] });
+  } catch (_err) { /* Observer 불가 시 릴레이만 생략 */ }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 창 모드 UI (분리 모드 전용 — A42 rev.7 재병합 진입점)
 // 훅: [data-merge] — "🔗 한 창으로 합치기" 버튼. 분리 모드일 때만 양 앱 설정 패널에
 // 주입한다 (병합 모드에서는 탭바가 셸 UI 를 담당 — 계약상 [data-merge]는 분리
 // 상태에서 관찰되면 된다). 주입 관용구는 [백업] 섹션과 동일 — 원본 HTML 무수정(A42).
+// 위치: 설정 패널 "최상단" — 재병합 진입점의 발견성 (3차 점검 제안 반영, 2026-08-20).
 // ────────────────────────────────────────────────────────────────────────────
 
 async function injectMergeSection() {
@@ -813,7 +859,11 @@ async function injectMergeSection() {
   statusLine.className = smallCls;
   sec.appendChild(statusLine);
 
-  host.appendChild(sec);
+  // 최상단 삽입 — 캘린더는 .spBody 의 첫 섹션 앞, 포스트잇은 헤더(.sp-head) 다음의
+  // 첫 .sp-sec 앞. (기존 최하단 append 는 스크롤 아래에 묻혀 재병합 발견성이 낮았다.)
+  const firstSec = host.querySelector(isCal ? '.spSec' : '.sp-sec');
+  if (firstSec && firstSec.parentNode === host) host.insertBefore(sec, firstSec);
+  else host.insertBefore(sec, host.firstChild);
 
   btnMerge.addEventListener('click', async function () {
     btnMerge.disabled = true;
@@ -844,8 +894,9 @@ function initShellUi() {
   if (!PAGE || !document.body) return;
   initMigrateUi().catch(function () { /* 브리지 실패 시 셸 UI 만 생략 — 앱 무영향 */ });
   if (PAGE === 'postit') initOnboarding();
-  initBackupUi(); // 양 앱 설정 패널에 [백업] 섹션 주입
-  initMergeUi();  // 분리 모드에서만 양 앱 설정 패널에 [창 모드] 섹션([data-merge]) 주입
+  initBackupUi();   // 양 앱 설정 패널에 [백업] 섹션 주입
+  initMergeUi();    // 분리 모드에서만 양 앱 설정 패널 "최상단"에 [창 모드] 섹션([data-merge]) 주입
+  initAlarmRelay(); // 캘린더 페이지 — 병합 모드 백그라운드 탭 알림 릴레이 (탭바 배지)
 }
 
 if (document.readyState === 'loading') {

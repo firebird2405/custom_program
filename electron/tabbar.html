@@ -10,13 +10,27 @@
     - [data-shell-tabbar] 루트 / 탭 [data-tab="postit"]·[data-tab="calendar"] (활성 표시)
     - [data-split] 창 분리 버튼
     - [data-shell-settings] 설정 드로어: 창 모드(merged/separate) 세그 + 기본 탭 세그 — 변경 즉시 저장
+  셸 자체 훅 (채점 계약 아님 — 스모크·유지보수용):
+    - [data-alarm-badge] 캘린더 탭 알림 배지 (빨간 점 + 건수)
+    - [data-alarm-strip] 미니 알림 스트립 (클릭 = 캘린더 탭 전환) / [data-alarm-strip-text]
+    - [data-tab-indicator] 활성 탭 인디케이터 (transform 슬라이드)
   규칙:
-    - 오프라인 전용 — 외부 리소스 0 (시스템 폰트만), A44/A1 준수
+    - 오프라인 전용 — 외부 리소스 0. 손글씨 폰트(Gaegu)는 저장소 로컬 번들(../assets/,
+      OFL 1.1 — assets/ASSETS.md)만 상대 참조: 개발 트리(electron/../assets)와 패키지
+      (resources/app.asar/../assets = resources/assets — electron-builder extraResources)
+      양쪽에서 같은 상대 경로가 성립한다. A44/A1 준수.
     - 스크립트의 동적 텍스트는 textContent 만 사용 (innerHTML 계열 금지 조항)
+    - 장식 모션은 transform/opacity 전용 0.18s — prefers-reduced-motion 과 앱 [효과]
+      설정(postit-settings.anim ≠ "on")을 존중해 끈다 (body.motion 게이트)
     - 상단 header 높이 40px·드로어 높이 148px 은 main.js 의
       TABBAR_HEIGHT·SETTINGS_DRAWER_HEIGHT 와 동기 유지 (수동 관리)
 -->
 <style>
+  @font-face {
+    font-family: "Gaegu";
+    src: url("../assets/Gaegu-Regular.ttf") format("truetype");
+    font-display: swap;
+  }
   :root {
     --ink: #5e3e18;            /* 앱 공통 브라운 잉크 */
     --ink-soft: rgba(94, 62, 24, 0.72);
@@ -31,7 +45,7 @@
     margin: 0;
     padding: 0;
     height: 100%;
-    font-family: "Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif;
+    font-family: "Gaegu", "Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif;
     color: var(--ink);
     background: var(--cream-lo);
     overflow: hidden;
@@ -49,12 +63,12 @@
     background: linear-gradient(180deg, var(--cream-hi), var(--cream-lo));
     border-bottom: 2px solid var(--cork);
   }
-  .tabs { display: flex; align-items: flex-end; gap: 4px; }
+  .tabs { position: relative; display: flex; align-items: flex-end; gap: 4px; }
   .tabs button {
     font: inherit;
-    font-size: 13.5px;
+    font-size: 16px;
     color: var(--ink-soft);
-    padding: 6px 16px 7px;
+    padding: 5px 16px 6px;
     margin-bottom: -2px;                 /* 활성 탭이 하단 코르크 선과 이어지게 */
     border: 1px solid transparent;
     border-bottom: none;
@@ -69,14 +83,77 @@
     font-weight: 700;
     background: #fff;
     border-color: var(--cork);
-    box-shadow: inset 0 -3px 0 var(--accent);
   }
+  /* 활성 탭 인디케이터 — 노랑 밑줄이 활성 탭 아래로 슬라이드 (transform/opacity 전용) */
+  .tab-indicator {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100px;                        /* 기준 폭 — scaleX 로 실제 탭 폭에 맞춘다 */
+    height: 3px;
+    background: var(--accent);
+    transform-origin: left center;
+    transform: translateX(0) scaleX(0);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    margin-left: 6px;
+    border-radius: 8px;
+    background: #e05a4e;                 /* 빨간 점 + 건수 */
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    vertical-align: 1px;
+  }
+  .tab-badge[hidden] { display: none; }
+
+  /* ── 미니 알림 스트립 (클릭 = 캘린더 탭 전환) — 헤더 40px 안에 산다 ── */
+  .alarm-strip {
+    font: inherit;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 46%;
+    margin: 6px 0;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 12px;
+    font-size: 13.5px;
+    color: #7a3b32;
+    border: 1px solid #e0a49b;
+    border-radius: 9px;
+    background: #fdeeea;
+    cursor: pointer;
+    line-height: 1.2;
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  .alarm-strip.shown { transform: translateY(0); opacity: 1; }
+  .alarm-strip:hover { background: #fbe0da; }
+  .alarm-strip[hidden] { display: none; }
+  .alarm-strip .strip-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .actions { display: flex; align-items: center; gap: 6px; }
   .actions button {
     font: inherit;
-    font-size: 12.5px;
+    font-size: 14px;
     color: var(--ink);
-    padding: 5px 12px;
+    padding: 4px 12px;
     border: 1px solid rgba(94, 62, 24, 0.35);
     border-radius: 9px;
     background: rgba(255, 255, 255, 0.6);
@@ -90,22 +167,25 @@
   /* ── 설정 드로어 (고정 148px — main.js SETTINGS_DRAWER_HEIGHT 동기) ── */
   section[data-shell-settings] {
     height: 148px;
-    padding: 12px 16px 10px;
+    padding: 10px 16px 8px;
     background: var(--cream-hi);
     border-bottom: 2px solid var(--cork);
     display: flex;
     flex-direction: column;
     gap: 8px;
+    transform: translateY(0);
+    opacity: 1;
   }
   section[data-shell-settings][hidden] { display: none; }
+  section[data-shell-settings].anim-pre { transform: translateY(-10px); opacity: 0; }
   .seg-row { display: flex; align-items: center; gap: 10px; }
-  .seg-label { font-size: 12.5px; font-weight: 700; width: 70px; color: var(--ink); }
+  .seg-label { font-size: 14px; font-weight: 700; width: 70px; color: var(--ink); }
   .seg { display: inline-flex; border: 1px solid var(--cork); border-radius: 9px; overflow: hidden; }
   .seg button {
     font: inherit;
-    font-size: 12.5px;
+    font-size: 14px;
     color: var(--ink-soft);
-    padding: 5px 14px;
+    padding: 4px 14px;
     border: none;
     background: rgba(255, 255, 255, 0.55);
     cursor: pointer;
@@ -118,17 +198,32 @@
     font-weight: 700;
     background: var(--accent);
   }
-  .hint { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; line-height: 1.5; }
-  .status { font-size: 12px; color: #a04638; margin: 0; min-height: 15px; line-height: 1.4; }
+  .hint { font-size: 13px; color: var(--ink-soft); margin: 2px 0 0; line-height: 1.45; }
+  .status { font-size: 13px; color: #a04638; margin: 0; min-height: 15px; line-height: 1.35; }
+
+  /* ── 모션 게이트: body.motion 일 때만 전환 재생 (transform/opacity 전용, 0.18s) ── */
+  body.motion .tab-indicator,
+  body.motion .alarm-strip,
+  body.motion section[data-shell-settings] {
+    transition: transform 0.18s ease, opacity 0.18s ease;
+  }
+  /* OS 동작 축소 선호는 CSS 수준에서도 한 번 더 차단 (이중 방어) */
+  @media (prefers-reduced-motion: reduce) {
+    .tab-indicator, .alarm-strip, section[data-shell-settings] { transition: none !important; }
+  }
 </style>
 </head>
 <body>
 
 <header data-shell-tabbar>
   <div class="tabs">
-    <button type="button" data-tab="postit" title="포스트잇 월로 이동해요">🗒️ 포스트잇</button>
-    <button type="button" data-tab="calendar" title="캘린더로 이동해요">📅 캘린더</button>
+    <button type="button" data-tab="postit" title="포스트잇 월로 이동해요 (Ctrl+1)">🗒️ 포스트잇</button>
+    <button type="button" data-tab="calendar" title="캘린더로 이동해요 (Ctrl+2)">📅 캘린더<span class="tab-badge" data-alarm-badge hidden></span></button>
+    <span class="tab-indicator" data-tab-indicator></span>
   </div>
+  <button type="button" class="alarm-strip" data-alarm-strip hidden title="캘린더 탭으로 이동해 알림을 확인해요">
+    <span>🔔</span><span class="strip-text" data-alarm-strip-text></span>
+  </button>
   <div class="actions">
     <button type="button" data-split title="캘린더와 포스트잇을 두 창으로 나눠요">⧉ 창 분리</button>
     <button type="button" class="gear" data-shell-settings-open title="셸 설정을 열고 닫아요">⚙️ 설정</button>
@@ -150,7 +245,7 @@
       <button type="button" data-default-tab="calendar" title="한 창 모드에서 캘린더 탭으로 시작해요">캘린더</button>
     </span>
   </div>
-  <p class="hint">설정은 바로 저장돼요. 창 모드는 다음 실행부터 적용되고, 지금 바로 나누고 싶으면 위의 "창 분리"를 눌러 주세요.</p>
+  <p class="hint">설정은 바로 저장돼요. 창 모드는 다음 실행부터 적용되고, 지금 바로 나누고 싶으면 위의 "창 분리"를 눌러 주세요. (Ctrl+Tab으로 탭을 오갈 수 있어요)</p>
   <p class="status" data-shell-status></p>
 </section>
 
@@ -166,10 +261,41 @@
   var gearBtn = document.querySelector('[data-shell-settings-open]');
   var drawer = document.querySelector('[data-shell-settings]');
   var statusLine = document.querySelector('[data-shell-status]');
+  var indicator = document.querySelector('[data-tab-indicator]');
+  var badge = document.querySelector('[data-alarm-badge]');
+  var strip = document.querySelector('[data-alarm-strip]');
+  var stripText = document.querySelector('[data-alarm-strip-text]');
 
   function setStatus(msg) {
     statusLine.textContent = msg || '';
   }
+
+  /* ── 모션 게이트: OS 동작 축소 선호 또는 앱 [효과] 설정(postit-settings.anim ≠ "on")이면
+        전환을 끈다 — 탭바는 앱과 같은 file:// 오리진이라 설정을 읽기만 한다 (쓰기 0건) ── */
+  function calmMotion() {
+    try {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+    } catch (e) { /* matchMedia 불가 — 무해 */ }
+    try {
+      var raw = localStorage.getItem('postit-settings');
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && typeof s === 'object' && s.anim && s.anim !== 'on') return true;
+      }
+    } catch (e) { /* 부재·손상 — 기본(모션 켬) */ }
+    return false;
+  }
+  function refreshMotionGate() {
+    document.body.classList.toggle('motion', !calmMotion());
+  }
+  refreshMotionGate();
+  try {
+    window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', refreshMotionGate);
+  } catch (e) { /* 구형 API — 무해 */ }
+  /* 같은 오리진의 앱 창에서 [효과] 설정이 바뀌면 storage 이벤트로 따라간다 */
+  window.addEventListener('storage', function (ev) {
+    if (!ev || !ev.key || ev.key === 'postit-settings') refreshMotionGate();
+  });
 
   /* 브리지 부재(비정상 기동)에도 페이지는 조용히 유지 — 콘솔 오류 0 원칙 */
   if (!api) {
@@ -177,11 +303,30 @@
     return;
   }
 
-  /* ── 표시 갱신 (동적 텍스트 없음 — 클래스 토글만) ── */
+  /* ── 표시 갱신 (동적 텍스트는 배지 건수·알림 문구뿐 — 전부 textContent) ── */
+  var activeTabNow = null;
+
+  /* 활성 탭 인디케이터 배치 — 기준 폭 100px 를 translateX+scaleX 로 실제 탭에 맞춘다
+     (transform/opacity 전용 — 폭·위치 속성 애니메이션 없음) */
+  function placeIndicator() {
+    if (!indicator) return;
+    var btn = null;
+    for (var i = 0; i < tabButtons.length; i++) {
+      if (tabButtons[i].classList.contains('active')) { btn = tabButtons[i]; break; }
+    }
+    if (!btn) { indicator.style.opacity = '0'; return; }
+    var x = btn.offsetLeft + 8;                       /* 탭 좌우 8px 여백 안쪽 밑줄 */
+    var w = Math.max(12, btn.offsetWidth - 16);
+    indicator.style.transform = 'translateX(' + x + 'px) scaleX(' + (w / 100) + ')';
+    indicator.style.opacity = '1';
+  }
+
   function markActiveTab(tab) {
+    activeTabNow = tab;
     tabButtons.forEach(function (b) {
       b.classList.toggle('active', b.getAttribute('data-tab') === tab);
     });
+    placeIndicator();
   }
   function markSettings(st) {
     modeButtons.forEach(function (b) {
@@ -191,30 +336,91 @@
       b.classList.toggle('on', b.getAttribute('data-default-tab') === st.defaultTab);
     });
   }
+
+  /* ── 알림 배지 + 미니 스트립 (병합 모드 백그라운드 캘린더의 일정 알림 릴레이) ── */
+  function applyAlarms(al) {
+    var count = al && typeof al.count === 'number' && al.count > 0 ? al.count : 0;
+    var text = al && typeof al.text === 'string' ? al.text : '';
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.hidden = false;
+      var line = '일정 알림 ' + count + '건';
+      var first = text.split('\n')[0].trim();
+      if (first) line += ' — ' + first;
+      stripText.textContent = line;
+      if (strip.hidden) {
+        strip.hidden = false;
+        strip.classList.remove('shown');
+        /* 다음 프레임에 shown — transform/opacity 페이드 인 (body.motion 게이트) */
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { strip.classList.add('shown'); });
+        });
+      }
+    } else {
+      badge.hidden = true;
+      strip.hidden = true;
+      strip.classList.remove('shown');
+    }
+  }
+
   function applyState(st) {
     if (!st || st.ok !== true) return;
     if (st.activeTab) markActiveTab(st.activeTab);
     markSettings(st);
+    applyAlarms(st.alarms);
   }
 
-  /* ── 설정 드로어 개폐 — main 이 앱 뷰를 내려 드로어 공간을 비워 준다 ── */
+  /* ── 설정 드로어 개폐 — main 이 앱 뷰를 내려 드로어 공간을 비워 준다.
+        개폐 모션 0.18s (transform/opacity) — 닫기는 애니메이션 뒤에 hidden + 뷰 복귀 ── */
   var drawerOpen = false;
+  var drawerCloseTimer = null;
   function setDrawer(open) {
     drawerOpen = open === true;
-    drawer.hidden = !drawerOpen;
     gearBtn.classList.toggle('open', drawerOpen);
     setStatus('');
-    api.setSettings({ panelOpen: drawerOpen }).catch(function () { /* 표시만 유지 */ });
+    if (drawerCloseTimer) { clearTimeout(drawerCloseTimer); drawerCloseTimer = null; }
+    var motion = document.body.classList.contains('motion');
+    if (drawerOpen) {
+      drawer.hidden = false;
+      if (motion) {
+        drawer.classList.add('anim-pre');
+        void drawer.offsetHeight; /* reflow — 시작 상태 확정 */
+        drawer.classList.remove('anim-pre');
+      }
+      api.setSettings({ panelOpen: true }).catch(function () { /* 표시만 유지 */ });
+    } else {
+      var finishClose = function () {
+        drawerCloseTimer = null;
+        drawer.hidden = true;
+        drawer.classList.remove('anim-pre');
+        api.setSettings({ panelOpen: false }).catch(function () { /* 표시만 유지 */ });
+      };
+      if (motion && !drawer.hidden) {
+        drawer.classList.add('anim-pre'); /* 위로 슬라이드 아웃 */
+        drawerCloseTimer = setTimeout(finishClose, 180);
+      } else {
+        finishClose();
+      }
+    }
   }
 
   /* ── 탭 전환 (병합 내 전환은 z순서 재배치만 — 리로드 없음) ── */
+  function requestTab(tab) {
+    api.switchTab(tab).then(applyState).catch(function () {
+      setStatus('탭을 전환하지 못했어요. 다시 시도해 주세요.');
+    });
+  }
   tabButtons.forEach(function (b) {
     b.addEventListener('click', function () {
       if (drawerOpen) setDrawer(false);
-      api.switchTab(b.getAttribute('data-tab')).then(applyState).catch(function () {
-        setStatus('탭을 전환하지 못했어요. 다시 시도해 주세요.');
-      });
+      requestTab(b.getAttribute('data-tab'));
     });
+  });
+
+  /* 미니 알림 스트립 — 클릭 = 캘린더 탭 전환 (main 이 배지를 비우고 상태를 push) */
+  strip.addEventListener('click', function () {
+    if (drawerOpen) setDrawer(false);
+    requestTab('calendar');
   });
 
   /* ── 창 분리 — 성공하면 이 창은 곧 닫히고 두 창이 열린다 ── */
@@ -250,6 +456,19 @@
       });
     });
   });
+
+  /* ── main push 구독 — 단축키 탭 전환·알림 배지 등 탭바 요청 없이 바뀐 상태 반영 ── */
+  if (typeof api.onUiPush === 'function') {
+    api.onUiPush(applyState);
+  }
+
+  /* 폰트 로드·창 리사이즈 후 인디케이터 재배치 (탭 폭이 달라진다) */
+  try {
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { placeIndicator(); });
+    }
+  } catch (e) { /* 무해 */ }
+  window.addEventListener('resize', placeIndicator);
 
   /* ── 초기 상태 반영 ── */
   api.getState().then(applyState).catch(function () {

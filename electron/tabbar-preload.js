@@ -48,6 +48,19 @@ const petitShellApi = {
     if (p.defaultTab === 'postit' || p.defaultTab === 'calendar') clean.defaultTab = p.defaultTab;
     if (typeof p.panelOpen === 'boolean') clean.panelOpen = p.panelOpen;
     return ipcRenderer.invoke('petit:shell:set-settings', clean);
+  },
+
+  /**
+   * main → 탭바 상태 push 구독 — 탭바 요청 없이 바뀐 셸 상태(단축키 탭 전환,
+   * 백그라운드 캘린더의 일정 알림 배지 누적/해제)를 받아 표시를 갱신한다.
+   * 핸들러에는 getState 와 동형의 페이로드({ ok, mode, activeTab, …, alarms })가 온다.
+   * (수신 전용 — 페이지가 채널을 지정할 수 없다: 채널 인자는 문자열 리터럴, A49③)
+   */
+  onUiPush: function (handler) {
+    if (typeof handler !== 'function') return;
+    ipcRenderer.on('petit:shell:ui-push', function (_event, payload) {
+      handler(payload && typeof payload === 'object' ? payload : null);
+    });
   }
 };
 

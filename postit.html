@@ -428,6 +428,66 @@ body.font-gothic .ntext, body.font-gothic .nedit { font-family: "Malgun Gothic",
 .ntext::-webkit-scrollbar-thumb:hover,
 .nedit::-webkit-scrollbar-thumb:hover { background: rgba(94,62,24,0.5); background-clip: padding-box; }
 
+/* ── 넘침 어포던스 (발주 #12): "아래에 더 있다"를 보이게 ──
+   .ovf(넘침) / .at-top / .at-bottom 은 JS 가 실측(scrollHeight vs clientHeight)으로만 붙인다.
+   넘치지 않는 짧은 메모에는 아래 규칙이 하나도 걸리지 않아 fresh 렌더가 현행 그대로다 (A2·A17).
+   장식은 전부 mask/opacity/transform — 레이아웃·색·저장에는 손대지 않는다. */
+
+/* 스크롤바를 실제로 보이게: 오버레이 스크롤바 환경에서도 8px 자리가 남는다
+   (offsetWidth-clientWidth > 0). 넘치는 노트에만 적용하므로 짧은 메모 폭은 불변. */
+.pnote.ovf .ntext { scrollbar-gutter: stable; }
+
+/* 잘린 쪽 가장자리를 은은히 흐린다 — 세 상태는 서로 배타적이다 */
+.pnote.ovf.at-top:not(.at-bottom) .ntext {
+  -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 30px), rgba(0,0,0,0.12) 100%);
+          mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 30px), rgba(0,0,0,0.12) 100%);
+}
+.pnote.ovf:not(.at-top):not(.at-bottom) .ntext {
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.12) 0, #000 22px, #000 calc(100% - 30px), rgba(0,0,0,0.12) 100%);
+          mask-image: linear-gradient(180deg, rgba(0,0,0,0.12) 0, #000 22px, #000 calc(100% - 30px), rgba(0,0,0,0.12) 100%);
+}
+.pnote.ovf:not(.at-top).at-bottom .ntext {
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.12) 0, #000 22px);
+          mask-image: linear-gradient(180deg, rgba(0,0,0,0.12) 0, #000 22px);
+}
+
+/* 아래 화살표 힌트 — 텍스트 노드가 아니라 CSS 삼각형이라 노트 textContent 는 불변 (A2·A24) */
+.nhint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  text-align: center;
+  line-height: 0;
+  opacity: 0;
+  pointer-events: none;   /* 장식은 클릭·드래그를 절대 가로채지 않는다 */
+  z-index: 2;
+  transition: opacity 0.16s ease;
+}
+.nhint::after {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(67,48,31,0.55);
+}
+.pnote.ovf:not(.at-bottom) .nhint { opacity: 1; animation: hint-nudge 1.7s ease-in-out infinite; }
+/* 편집 중에는 힌트를 걷는다 (.ovf 규칙보다 구체적이어야 이긴다) */
+.pnote.editing .nhint,
+.pnote.editing.ovf:not(.at-bottom) .nhint { opacity: 0; animation: none; }
+@keyframes hint-nudge {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(2px); }
+}
+/* [효과] 설정·동작 축소 선호에서는 화살표를 가만히 둔다 (표시 여부는 그대로) */
+body.fx-calm .pnote.ovf:not(.at-bottom) .nhint,
+body.fx-off .pnote.ovf:not(.at-bottom) .nhint { animation: none; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pnote.ovf:not(.at-bottom) .nhint { animation: none; transition: none; }
+}
+
 /* ── 체크리스트 줄 (A22): "- [ ] " 마커 줄만 앱이 파싱해 createElement 로 렌더 ── */
 .check-line { display: flex; align-items: flex-start; gap: 7px; }
 .clbox {
@@ -511,6 +571,8 @@ body.font-gothic .ntext, body.font-gothic .nedit { font-family: "Malgun Gothic",
   cursor: pointer;
 }
 .size-opt:hover, .move-opt:hover { background: #fff; }
+/* 프리셋 옆의 "내용에 맞추기" (발주 #12) — 같은 생김새에 점선 테두리로만 구분한다 */
+.size-opt.fit-opt { border-style: dashed; }
 .move-none { font-size: 14px; opacity: 0.65; }
 .ctx-item.soon .size-opt, .ctx-item.soon .move-opt { cursor: default; }
 /* 항목 전체가 목록형이라 위/아래 여백을 조금 더 준다 */
@@ -1312,6 +1374,13 @@ html[data-pro-theme="lavender"] #board {
       </span>
     </div>
     <p class="sp-small">기본값은 앞으로 만드는 새 노트에만 적용돼요. 이미 붙인 노트는 그대로예요.</p>
+    <div class="sp-row"><span class="sp-lab">입력하면 자동으로 크기 맞추기</span>
+      <span class="seg" id="spAutoFit">
+        <button type="button" data-val="off">끔</button>
+        <button type="button" data-val="on">켬</button>
+      </span>
+    </div>
+    <p class="sp-small">켜면 내용 입력을 마칠 때(다른 곳 클릭·Esc) 그 노트만 내용에 맞는 크기로 바뀌어요. 우클릭 메뉴의 "내용에 맞추기"와 같은 계산이에요.</p>
   </div>
 
   <div class="sp-sec">
@@ -1610,6 +1679,7 @@ html[data-pro-theme="lavender"] #board {
     defColor: 'auto',     /* auto(현행 순환) | 팔레트 hex */
     defSize: 'normal',    /* normal(현행 150) | large(210) */
     tilt: 'natural',      /* natural(현행 랜덤 기울임) | straight — 신규 노트에만 적용 */
+    autoFit: 'off',       /* off(현행 — 크기 그대로) | on(편집 종료 시 내용에 맞춰 크기 조정) */
     arrange: 'default',   /* default(현행 알고리즘) | grid3 | grid2 | masonry | time */
     anim: 'on',           /* on(현행) | reduced | off */
     tapeColor: 'default', /* default(현행 반투명 흰 테이프) | sun | rose | mint | sky — 꾸미기 */
@@ -1637,6 +1707,7 @@ html[data-pro-theme="lavender"] #board {
     if (v.defColor === 'auto' || PALETTE.indexOf(v.defColor) !== -1) s.defColor = v.defColor;
     if (v.defSize === 'normal' || v.defSize === 'large') s.defSize = v.defSize;
     if (v.tilt === 'natural' || v.tilt === 'straight') s.tilt = v.tilt;
+    if (v.autoFit === 'on' || v.autoFit === 'off') s.autoFit = v.autoFit;
     if (v.arrange === 'default' || v.arrange === 'grid3' || v.arrange === 'grid2' || v.arrange === 'masonry' || v.arrange === 'time') s.arrange = v.arrange;
     if (v.anim === 'on' || v.anim === 'reduced' || v.anim === 'off') s.anim = v.anim;
     if (v.tapeColor === 'sun' || v.tapeColor === 'rose' || v.tapeColor === 'mint' || v.tapeColor === 'sky') s.tapeColor = v.tapeColor;
@@ -1673,6 +1744,8 @@ html[data-pro-theme="lavender"] #board {
     b.classList.toggle('frame-rose', SETTINGS.frameColor === 'rose');
     syncPanelUI();
     syncDecorUI();
+    /* 글자 크기·폰트가 바뀌면 넘침 여부도 바뀐다 — 어포던스 상태를 다시 칠한다 (발주 #12) */
+    refreshAllOverflow();
   }
 
   function uid() {
@@ -2827,11 +2900,17 @@ html[data-pro-theme="lavender"] #board {
     grip.setAttribute('data-resize-handle', '');
     grip.title = '모서리를 끌어 크기 조절';
 
+    /* 넘침 힌트(발주 #12) — 순수 장식: 텍스트 노드 없음(CSS 삼각형), pointer-events 없음 */
+    var hint = document.createElement('div');
+    hint.className = 'nhint';
+    hint.setAttribute('aria-hidden', 'true');
+
     root.appendChild(handle);
     root.appendChild(textEl);
     root.appendChild(ta);
     root.appendChild(grip);
-    return { root: root, del: del, textEl: textEl, ta: ta, grip: grip };
+    root.appendChild(hint);
+    return { root: root, del: del, textEl: textEl, ta: ta, grip: grip, hint: hint };
   }
 
   /* 노트 이벤트 배선 — 드래그·리사이즈·삭제·편집기 (터치·펜 공용 포인터 이벤트, P10) */
@@ -2842,6 +2921,12 @@ html[data-pro-theme="lavender"] #board {
 
     root.addEventListener('pointerdown', onNoteDown);
     parts.grip.addEventListener('pointerdown', function (e) { startResize(e, n.id); });
+
+    /* 휠 위임 (발주 #12): 노트의 어느 지점(드래그 띠·사진·여백 포함)에서 굴려도 본문이 스크롤된다.
+       passive:false — 끝에 닿기 전까지만 preventDefault 하고, 끝에서는 기본 동작으로 넘긴다. */
+    root.addEventListener('wheel', onNoteWheel, { passive: false });
+    /* 스크롤 위치가 바뀔 때마다 페이드·화살표 상태를 다시 칠한다 */
+    parts.textEl.addEventListener('scroll', function () { updateNoteOverflow(els[n.id]); });
 
     del.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     del.addEventListener('click', function (e) {
@@ -2858,7 +2943,7 @@ html[data-pro-theme="lavender"] #board {
       m.text = ta.value;
       m.updatedAt = Date.now();
       var ref2 = els[n.id];
-      if (ref2) renderNoteText(m, ref2);
+      if (ref2) { renderNoteText(m, ref2); updateNoteOverflow(ref2); }
       applySearch();
       scheduleSave();
     });
@@ -2867,6 +2952,12 @@ html[data-pro-theme="lavender"] #board {
       var m = findNote(n.id);
       if (m && m.date) syncNoteToCalendar(m.id, m.date, noteFirstLine(m.text));   /* 연동 일정 제목 최신화 (S1) */
       saveNow();
+      /* [노트 기본값] 자동 맞춤 (발주 #12, 기본 꺼짐) — 켜져 있고 내용이 있을 때만.
+         조용히(소리·토스트 없이) 우클릭 "내용에 맞추기"와 같은 계산을 그 노트에만 적용한다. */
+      if (m && SETTINGS.autoFit === 'on' && ((m.text && m.text.trim()) || m.img)) {
+        fitNoteToContent(m.id, { silent: true, quiet: true });
+      }
+      updateNoteOverflow(els[n.id]);
     });
     ta.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') ta.blur();
@@ -2883,6 +2974,7 @@ html[data-pro-theme="lavender"] #board {
     applyNoteSize(n, ref);
     applySkin(n, ref);
     applyNoteImage(n, ref);
+    updateNoteOverflow(ref);
     return parts.root;
   }
 
@@ -2941,6 +3033,7 @@ html[data-pro-theme="lavender"] #board {
     n.text = lines.join('\n');
     n.updatedAt = Date.now();
     renderNoteText(n, ref);
+    updateNoteOverflow(ref);
     playTick();   /* 직접 제스처(체크) 내부 */
     applySearch();
     saveNow();
@@ -2951,6 +3044,51 @@ html[data-pro-theme="lavender"] #board {
     ref.root.style.width = typeof n.w === 'number' ? n.w + 'px' : '';
     ref.root.style.height = typeof n.h === 'number' ? n.h + 'px' : '';
     ref.root.classList.toggle('sized', typeof n.h === 'number');
+    updateNoteOverflow(ref);
+  }
+
+  /* ── 넘침 어포던스 상태 (발주 #12) ──
+     실측만으로 판정한다: 넘치면 .ovf, 스크롤 양 끝이면 .at-top/.at-bottom.
+     넘치지 않는 노트에는 세 클래스가 다 붙거나(at-top+at-bottom) 안 붙어도 .ovf 가 없어
+     어떤 어포던스 규칙도 발동하지 않는다 — 짧은 메모의 렌더는 현행 그대로. */
+  function updateNoteOverflow(ref) {
+    if (!ref || !ref.root || !ref.textEl) return;
+    var el = ref.textEl;
+    var max = el.scrollHeight - el.clientHeight;
+    var ovf = max > 1;
+    ref.root.classList.toggle('ovf', ovf);
+    ref.root.classList.toggle('at-top', !ovf || el.scrollTop <= 1);
+    ref.root.classList.toggle('at-bottom', !ovf || el.scrollTop >= max - 1);
+  }
+
+  function refreshAllOverflow() {
+    if (!els) return;
+    Object.keys(els).forEach(function (id) { updateNoteOverflow(els[id]); });
+  }
+
+  /* 노트 위 휠 → 본문 위임. 상단 드래그 띠·사진·여백 어디서 굴려도 같은 결과가 나온다.
+     편집 중(textarea)에는 손대지 않고, 스크롤 끝에 닿으면 preventDefault 하지 않아
+     바깥(보드)의 기본 동작으로 자연스럽게 넘어간다. */
+  function onNoteWheel(e) {
+    var root = e.currentTarget;
+    if (root.classList.contains('editing')) return;              /* 편집 모드는 기존 동작 유지 */
+    var t = e.target;
+    if (t && t.closest && t.closest('.nedit')) return;
+    var ref = els[root.getAttribute('data-id')];
+    if (!ref || !ref.textEl) return;
+    var el = ref.textEl;
+    var max = el.scrollHeight - el.clientHeight;
+    if (max <= 1) return;                                        /* 넘치지 않는 노트: 그냥 통과 */
+    var dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;                             /* DOM_DELTA_LINE */
+    else if (e.deltaMode === 2) dy *= el.clientHeight;           /* DOM_DELTA_PAGE */
+    if (!dy) return;
+    var before = el.scrollTop;
+    var next = Math.max(0, Math.min(max, before + dy));
+    if (next === before) return;                                 /* 이미 그 끝 — 기본 동작에 양보 */
+    el.scrollTop = next;
+    updateNoteOverflow(ref);
+    e.preventDefault();
   }
 
   /* 노트별 스킨 클래스 반영 (A27 — background-image 레이어만 바뀐다) */
@@ -2970,10 +3108,13 @@ html[data-pro-theme="lavender"] #board {
       img.alt = '';
       img.draggable = false;
       img.src = n.img;
+      /* 사진이 자리를 잡으면 본문 높이가 바뀐다 — 넘침 어포던스를 다시 계산 (발주 #12) */
+      img.addEventListener('load', function () { updateNoteOverflow(ref); });
       ref.root.insertBefore(img, ref.textEl);
       ref.imgEl = img;
       ref.root.classList.add('has-img');
     }
+    updateNoteOverflow(ref);
   }
 
   function activate(n) {
@@ -3854,6 +3995,92 @@ html[data-pro-theme="lavender"] #board {
     saveNow();
   }
 
+  /* ── 내용에 맞추기 (발주 #12) ──
+     지금 내용이 잘리지 않고 들어가는 가장 작은 크기를 실측으로 구해 적용한다.
+     폭은 절대 줄이지 않고(현재 폭 유지), 높이가 상한을 넘을 때만 240 → 300 까지 완만히 넓혀
+     높이를 낮춘다. 결과는 setNoteSize 와 같은 clampSize(120~480)를 통과하고 좌상단은 불변. */
+  var FIT_WIDTH_STEPS = [240, 300];   /* 폭 확장 단계 — 이 이상으로는 넓히지 않는다 */
+  var FIT_SLACK_PX = 2;               /* 서브픽셀·반올림 여유 */
+
+  /* 후보 폭 w 에서 필요한 노트 높이(px) — 화면 밖 클론을 실제로 레이아웃해 잰다.
+     살아 있는 노트와 같은 클래스(스킨·사진·글자 크기 설정)를 그대로 써야 값이 맞는다. */
+  function measureNoteHeight(n, ref, w) {
+    var host = document.createElement('div');
+    var keep = [];
+    Array.prototype.forEach.call(ref.root.classList, function (c) {
+      /* 순간 상태 클래스는 뺀다 — 크기 계산과 무관하고 어포던스 규칙이 끼어들면 안 된다 */
+      if (c === 'dragging' || c === 'active' || c === 'editing' || c === 'pop-in' ||
+          c === 'removing' || c === 'dimmed' || c === 'ovf' || c === 'at-top' || c === 'at-bottom') return;
+      keep.push(c);
+    });
+    host.className = keep.join(' ');
+    host.setAttribute('aria-hidden', 'true');
+    host.style.left = '-99999px';
+    host.style.top = '0';
+    host.style.width = w + 'px';
+    host.style.height = 'auto';
+    host.style.minHeight = '0';
+    host.style.maxHeight = 'none';
+    host.style.transform = 'none';
+    host.style.visibility = 'hidden';
+    host.style.pointerEvents = 'none';
+
+    var imClone = null;
+    if (ref.imgEl) {
+      imClone = ref.imgEl.cloneNode(false);
+      host.appendChild(imClone);
+    }
+    var tx = document.createElement('div');
+    tx.className = 'ntext';
+    tx.style.flex = '0 0 auto';     /* 내용 높이 그대로 (상한 없는 자연 높이) */
+    tx.style.overflow = 'visible';
+    host.appendChild(tx);
+    renderNoteText(n, { textEl: tx });   /* 본문과 같은 렌더 경로 — 체크리스트 줄도 같은 높이 */
+
+    document.body.appendChild(host);
+    /* 사진 클론이 아직 크기를 못 잡았으면 살아 있는 사진의 렌더 높이를 폭 비율로 환산해 채운다 */
+    if (imClone && !imClone.offsetHeight && ref.imgEl.offsetHeight) {
+      var liveInner = Math.max(1, ref.root.offsetWidth - 18);
+      var cloneInner = Math.max(1, w - 18);
+      imClone.style.height = Math.round(ref.imgEl.offsetHeight * (cloneInner / liveInner)) + 'px';
+    }
+    var h = host.offsetHeight;
+    document.body.removeChild(host);
+    return h;
+  }
+
+  /* opts.silent = 상한 안내 토스트 생략, opts.quiet = 효과음 생략 (자동 맞춤용) */
+  function fitNoteToContent(id, opts) {
+    var o = opts || {};
+    var n = findNote(id);
+    var ref = els[id];
+    if (!n || !ref) return false;
+    var curW = clampSize(ref.root.offsetWidth || NOTE_W);
+    var widths = [curW];
+    FIT_WIDTH_STEPS.forEach(function (step) {
+      var v = clampSize(step);
+      if (v > curW) widths.push(v);
+    });
+    var w = curW;
+    var h = 0;
+    var fits = false;
+    for (var i = 0; i < widths.length; i++) {
+      w = widths[i];
+      h = measureNoteHeight(n, ref, w) + FIT_SLACK_PX;
+      if (h <= NOTE_MAX_PX) { fits = true; break; }
+    }
+    n.w = clampSize(w);
+    n.h = clampSize(h);
+    n.updatedAt = Date.now();
+    applyNoteSize(n, ref);   /* 크기만 — 좌상단(left/top) 불변 (A23 관용구) */
+    if (!o.quiet) playTick();
+    saveNow();
+    if (!fits && !o.silent) {
+      showNotice('내용이 많아 최대 크기로 맞췄어요. 나머지는 노트 안에서 굴려 볼 수 있어요.');
+    }
+    return fits;
+  }
+
   /* ── 다른 보드로 보내기 (우클릭 메뉴) ──
      현 보드에서는 즉시 사라지고(모델·DOM·저장소), 대상 보드 저장소에는 병합 기록으로 들어간다.
      노트 사진은 데이터 URI 로 노트 안에 들어 있으므로(A26 — IndexedDB 는 꾸미기 전용) 그대로 따라간다.
@@ -4175,6 +4402,19 @@ html[data-pro-theme="lavender"] #board {
       });
       opts.appendChild(ob);
     });
+    /* 내용에 맞추기 (발주 #12) — 프리셋과 같은 자리·같은 클램프를 쓰는 또 하나의 크기 입구 */
+    var fit = document.createElement('button');
+    fit.type = 'button';
+    fit.className = 'size-opt fit-opt';
+    fit.setAttribute('data-size-fit', '');
+    fit.textContent = '내용에 맞추기';
+    fit.title = '지금 내용이 잘리지 않는 가장 작은 크기로 맞춰요 (붙인 자리는 그대로예요)';
+    fit.addEventListener('click', function (e) {
+      e.stopPropagation();
+      fitNoteToContent(id);
+      closeCtxMenu();
+    });
+    opts.appendChild(fit);
     row.appendChild(opts);
     return row;
   }
@@ -5537,6 +5777,7 @@ html[data-pro-theme="lavender"] #board {
     paintSeg(document.getElementById('spFont'), SETTINGS.font);
     paintSeg(document.getElementById('spDefSize'), SETTINGS.defSize);
     paintSeg(document.getElementById('spTilt'), SETTINGS.tilt);
+    paintSeg(document.getElementById('spAutoFit'), SETTINGS.autoFit);
     paintSeg(document.getElementById('spAnim'), SETTINGS.anim);
     paintSeg(document.getElementById('spConfirmDelete'), SETTINGS.confirmDelete);
     var colWrap = document.getElementById('spDefColor');
@@ -5566,6 +5807,7 @@ html[data-pro-theme="lavender"] #board {
   bindSeg('spFont', 'font');
   bindSeg('spDefSize', 'defSize');
   bindSeg('spTilt', 'tilt');
+  bindSeg('spAutoFit', 'autoFit');
   bindSeg('spAnim', 'anim');
   bindSeg('spConfirmDelete', 'confirmDelete');
 

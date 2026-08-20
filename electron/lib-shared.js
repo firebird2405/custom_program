@@ -5,7 +5,9 @@
 //   - 경로 해석: REPO_ROOT(저장소 루트 — 패키지에서는 resources\), POWERSHELL_EXE
 //   - 안전 JSON 파일 IO: readJsonFile / writeJsonFile — 부재·손상 시 크래시 없이 강등
 //     (아키텍처 원칙 5 준용)
-//   - 창 식별: windowAppKind / appWindows — 로드 URL 기준 (창 생성 코드와 결합도 없음)
+//   - 앱 페이지 식별: windowAppKind / appWindows — 로드 URL 기준 (창 생성 코드와 결합도
+//     없음). 병합 모드(1창 탭, WebContentsView)와 분리 모드(창 2개) 어느 쪽이든
+//     webContents 단위로 잡는다 — 호출측은 .webContents 만 쓴다.
 //   - IPC 방어: assertTrustedSender — 우리 앱 창(file://)의 요청만 허용
 //   - 자식 프로세스 환경 정돈: cleanChildEnv — 부모 환경 오염 방어
 //
@@ -18,7 +20,7 @@
 
 'use strict';
 
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, webContents } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -62,40 +64,65 @@ function writeJsonFile(filePath, value) {
 }
 
 /**
- * 창이 어느 앱 창인지 로드 URL 로 판별한다 (main.js 창 생성과 결합도 없음).
- * @param {Electron.BrowserWindow} win
+ * webContents 가 어느 앱 페이지인지 로드 URL 로 판별한다.
+ * @param {Electron.WebContents} wc
  * @returns {'calendar'|'postit'|null}
  */
-function windowAppKind(win) {
+function wcAppKind(wc) {
   let u = '';
-  try { u = String(win.webContents.getURL()).toLowerCase(); } catch (_err) { return null; }
+  try { u = String(wc.getURL()).toLowerCase(); } catch (_err) { return null; }
   if (u.endsWith('/calendar.html') || u.endsWith('\\calendar.html')) return 'calendar';
   if (u.endsWith('/postit.html') || u.endsWith('\\postit.html')) return 'postit';
   return null;
 }
 
 /**
- * 살아 있는 앱 창 목록. preferred 를 주면 그 창을 맨 앞으로 정렬한다.
- * (두 창은 같은 file:// 오리진 저장소를 공유한다 — 아무 창에서나 읽으면 전체가 보인다.)
- * @param {Electron.BrowserWindow|null} [preferred] 우선 창
- * @returns {Electron.BrowserWindow[]}
+ * 창(또는 webContents 를 가진 앱 타깃)이 어느 앱인지 로드 URL 로 판별한다
+ * (main.js 창 생성과 결합도 없음). 분리 모드의 BrowserWindow 와
+ * 병합 모드의 appWindows() 타깃 둘 다 받는다 — 판별 기준은 .webContents 의 URL.
+ * @param {Electron.BrowserWindow|{webContents: Electron.WebContents}} win
+ * @returns {'calendar'|'postit'|null}
  */
-function appWindows(preferred) {
-  const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && windowAppKind(w));
-  if (preferred) {
-    wins.sort((a, b) => (a === preferred ? -1 : 0) - (b === preferred ? -1 : 0));
-  }
-  return wins;
+function windowAppKind(win) {
+  if (!win || !win.webContents) return null;
+  return wcAppKind(win.webContents);
 }
 
 /**
- * IPC 호출자 검증 — 우리 앱 창(file://)의 요청만 처리한다. 그 외는 한국어 오류 throw.
+ * 살아 있는 앱 페이지 타깃 목록 — 각 항목은 { webContents } 형태.
+ * 분리 모드에서는 앱 BrowserWindow 의 webContents, 병합 모드(1창 탭)에서는
+ * WebContentsView 의 webContents 가 잡힌다 — 호출측(backup/migrate)은
+ * .webContents.executeJavaScript 만 쓰므로 두 모드에서 동일하게 동작한다.
+ * preferred(BrowserWindow 또는 타깃)를 주면 같은 webContents 항목을 맨 앞으로 정렬한다.
+ * (모든 앱 페이지는 같은 file:// 오리진 저장소를 공유한다 — 아무 페이지에서나 읽으면 전체가 보인다.)
+ * @param {Electron.BrowserWindow|{webContents: Electron.WebContents}|null} [preferred] 우선 타깃
+ * @returns {{webContents: Electron.WebContents}[]}
+ */
+function appWindows(preferred) {
+  const targets = [];
+  for (const wc of webContents.getAllWebContents()) {
+    try {
+      if (!wc.isDestroyed() && wcAppKind(wc)) targets.push({ webContents: wc });
+    } catch (_err) { /* 파괴 중인 webContents — 건너뛴다 */ }
+  }
+  const prefWc = preferred && preferred.webContents ? preferred.webContents : null;
+  if (prefWc) {
+    targets.sort((a, b) => (a.webContents === prefWc ? -1 : 0) - (b.webContents === prefWc ? -1 : 0));
+  }
+  return targets;
+}
+
+/**
+ * IPC 호출자 검증 — 우리 앱 페이지(file://)의 요청만 처리한다. 그 외는 한국어 오류 throw.
+ * 허용 호출자: ① 우리 BrowserWindow 소속 webContents(분리 창·병합 탭바),
+ * ② 병합 모드의 앱 WebContentsView(calendar/postit URL) — 둘 다 file:// 필수.
  * @param {Electron.IpcMainInvokeEvent} event
  */
 function assertTrustedSender(event) {
   const frameUrl = String((event.senderFrame && event.senderFrame.url) || '');
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || !frameUrl.startsWith('file://')) {
+  const isAppView = wcAppKind(event.sender) !== null;
+  if ((!win && !isAppView) || !frameUrl.startsWith('file://')) {
     throw new Error('허용되지 않은 호출자입니다.');
   }
 }

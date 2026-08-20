@@ -1048,3 +1048,276 @@ Object.assign(module.exports, {
   waitForAppWindows,
   withShell,
 });
+
+/* ════════════════════════════════════════════════════════════════════
+ * rev.7 추가 공용 유틸 (A42 병합 1창 탭 모드) — 추가 전용 (기존 수출·시그니처 무변경)
+ *
+ * 실측 기록 (2026-08-20, Electron 41.7.1 + @playwright/test 1.49, Windows 10 — 별도
+ * 실험 앱으로 WebContentsView 노출 방식을 실증한 결과. 본 유틸들은 이 실측에 근거한다):
+ *  - WebContentsView 가 로드한 페이지는 electronApp.windows() 에 Page 로 노출된다
+ *    (electronApp.context().pages() 와 동일 목록, 신규 페이지엔 'window' 이벤트 발화 —
+ *    launchElectronShell 의 dialog/pageerror 감시 부착이 뷰 페이지에도 그대로 적용됨).
+ *  - BrowserWindow.getAllWindows() 는 뷰를 세지 않는다 (병합 셸 = 정확히 1).
+ *  - 뷰 트리는 win.contentView 재귀(children)로 걷고, View.getVisible()/getBounds() 로
+ *    활성 탭을 판정할 수 있다. 숨긴 뷰(setVisible(false))의 DOM 은 페이지 내부 관점에선
+ *    여전히 '보임'(visibilityState=visible, rect>0)이라 DOM 단독으로는 활성 판정 불가 —
+ *    활성 판정은 반드시 main 프로세스 뷰 정보로 한다.
+ *  - 숨긴 뷰 페이지에도 evaluate·클릭이 동작하고, window 전역 마커는 setVisible 토글에
+ *    잔존하며 reload() 시 소거된다 (→ 마커 잔존 = 무리로드 증명으로 유효).
+ *  - 병합 창 자체(호스트) webContents 가 아무 문서도 로드하지 않으면 _electron.launch 가
+ *    타임아웃한다 — 셸은 호스트 webContents 에 최소 문서를 로드해야 한다.
+ * ════════════════════════════════════════════════════════════════════ */
+
+const ELECTRON_TABBAR_HTML = path.join(ELECTRON_DIR, 'tabbar.html');
+const ELECTRON_TABBAR_PRELOAD = path.join(ELECTRON_DIR, 'tabbar-preload.js');
+
+/** URL 경로의 쿼리·해시 제거 + 소문자 정규화 (파일명 판별 공용) */
+function cleanUrl(u) {
+  return String(u || '').split(/[?#]/)[0].toLowerCase();
+}
+
+/**
+ * URL 정규식으로 페이지 획득 — BrowserWindow 페이지와 WebContentsView 페이지 모두
+ * app.windows() 에서 찾는다 (실측 근거 위 참조). 폴링 포함, 시간 초과 시 현재 페이지
+ * URL 목록을 담은 한국어 FAIL.
+ */
+async function pageByUrl(app, re, timeoutMs = 30000, itemLabel = 'rev.7') {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    for (const w of app.windows()) {
+      let u = '';
+      try {
+        u = cleanUrl(w.url());
+      } catch (e) {
+        u = '';
+      }
+      if (u && re.test(u)) {
+        try {
+          await w.waitForLoadState('domcontentloaded', { timeout: 10000 });
+        } catch (e) {
+          /* 이미 로드됨 */
+        }
+        return w;
+      }
+    }
+    if (Date.now() > deadline) {
+      const urls = app.windows().map((w) => {
+        try {
+          return w.url();
+        } catch (e) {
+          return '(url 조회 불가)';
+        }
+      });
+      throw new Error(
+        `${itemLabel}: ${timeoutMs}ms 내 ${re} 에 일치하는 페이지를 찾지 못했습니다 ` +
+          `(현재 페이지 ${urls.length}개: ${urls.join(', ') || '없음'}) — rev.7 병합 셸 계약 미충족 (fail-closed)`
+      );
+    }
+    await sleep(200);
+  }
+}
+
+/** main 프로세스 관점 BrowserWindow 개수 (뷰는 세지 않는다 — 실측) */
+async function browserWindowCount(app) {
+  return app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
+}
+
+/** BrowserWindow 개수가 want 가 될 때까지 폴링 — 실패 메시지에 현재 개수 포함 */
+async function pollBrowserWindowCount(app, want, timeoutMs, failMsgBase) {
+  const deadline = Date.now() + timeoutMs;
+  let n = -1;
+  for (;;) {
+    try {
+      n = await browserWindowCount(app);
+    } catch (e) {
+      n = -1;
+    }
+    if (n === want) return;
+    if (Date.now() > deadline) {
+      throw new Error(`${failMsgBase} (기대 BrowserWindow ${want}개, 현재 ${n}개)`);
+    }
+    await sleep(150);
+  }
+}
+
+/**
+ * 전 BrowserWindow 의 contentView 트리를 **부착 순서 그대로**(in-order 재귀) 걸어
+ * webContents 를 가진 뷰 정보를 수집한다: [{winId, url, visible, bounds}].
+ * 창 자체(호스트) webContents 는 contentView 트리에 나타나지 않는다 (실측) — 뷰만 반환.
+ * 순서 보존이 중요하다: Electron 의 View.addChildView 는 재호출 시 해당 뷰를 형제 목록
+ * 맨 뒤(= z순서 맨 위)로 옮기므로, 같은 창에서 나중에 나오는 뷰가 위에 그려진다
+ * (셸의 탭 전환 = addChildView 재호출에 의한 z순서 재배치 — judgeActiveAppView 가 사용).
+ */
+async function shellViewsInfo(app) {
+  return app.evaluate(({ BrowserWindow }) => {
+    const out = [];
+    for (const w of BrowserWindow.getAllWindows()) {
+      const walk = (v) => {
+        if (!v) return;
+        if (v.webContents) {
+          let url = '';
+          let visible = null;
+          let bounds = null;
+          try {
+            url = v.webContents.getURL();
+          } catch (e) {
+            url = '';
+          }
+          try {
+            visible = typeof v.getVisible === 'function' ? v.getVisible() : null;
+          } catch (e) {
+            visible = null;
+          }
+          try {
+            bounds = v.getBounds();
+          } catch (e) {
+            bounds = null;
+          }
+          out.push({ winId: w.id, url, visible, bounds });
+        }
+        let kids = [];
+        try {
+          kids = v.children || [];
+        } catch (e) {
+          kids = [];
+        }
+        for (const k of kids) walk(k);
+      };
+      walk(w.contentView);
+    }
+    return out;
+  });
+}
+
+/**
+ * 병합 모드 활성 앱 뷰 판정 (rev.7 A42 활성 판정 계약 — main 프로세스 뷰 관찰, 실측 근거).
+ * 표시 = visible !== false 이고 bounds 폭·높이 > 0.
+ *  ① 표시 중인 앱 뷰가 정확히 1개 → 그 앱이 활성 (숨김 방식: setVisible(false)·0 bounds).
+ *  ② 표시 중인 앱 뷰가 2개라도 같은 창에서 bounds 가 실질 동일하게 겹치면(교차 면적 ≥
+ *     작은 쪽의 80%) 스택 구성이다 — 부착 순서 맨 뒤(= z순서 맨 위, addChildView 재호출
+ *     의미론)가 사용자에게 보이는 활성 뷰다 (아래 뷰는 완전히 가려짐 = "활성만 표시" 충족).
+ *  그 외(서로 다른 영역에 동시 표시 등)는 active:null + 한국어 사유(problem) 반환.
+ * views 는 shellViewsInfo 의 반환값(부착 순서 보존)이어야 한다.
+ */
+function judgeActiveAppView(views) {
+  const nameOf = (u) => {
+    const c = cleanUrl(u);
+    if (c.endsWith('/calendar.html') || c.endsWith('\\calendar.html')) return 'calendar';
+    if (c.endsWith('/postit.html') || c.endsWith('\\postit.html')) return 'postit';
+    return null;
+  };
+  const apps = (views || []).map((v) => ({ v, app: nameOf(v.url) })).filter((x) => x.app);
+  if (apps.length === 0) {
+    return {
+      active: null,
+      problem: '앱 뷰(calendar.html·postit.html)가 뷰 트리에 없습니다 — 병합 탭 모드 미구현 (rev.7 진행 중)',
+    };
+  }
+  const displayed = apps.filter(
+    (x) => x.v.visible !== false && x.v.bounds && x.v.bounds.width > 0 && x.v.bounds.height > 0
+  );
+  const names = Array.from(new Set(displayed.map((x) => x.app)));
+  if (names.length === 1) return { active: names[0], problem: null };
+  if (names.length === 0) return { active: null, problem: '표시 중인 앱 뷰가 없습니다 (전부 숨김 또는 0 크기 bounds)' };
+
+  // ② 동일 창 + 실질 동일 bounds 스택 → z순서 맨 위(배열 맨 뒤)가 활성
+  const sameWin = displayed.every((x) => x.v.winId === displayed[0].v.winId);
+  const overlapEnough = (a, b) => {
+    const ix = Math.max(a.x, b.x);
+    const iy = Math.max(a.y, b.y);
+    const iw = Math.min(a.x + a.width, b.x + b.width) - ix;
+    const ih = Math.min(a.y + a.height, b.y + b.height) - iy;
+    const inter = Math.max(0, iw) * Math.max(0, ih);
+    const minArea = Math.min(a.width * a.height, b.width * b.height);
+    return minArea > 0 && inter >= 0.8 * minArea;
+  };
+  const allOverlap = displayed.every((x, i) =>
+    displayed.every((y, j) => i === j || overlapEnough(x.v.bounds, y.v.bounds))
+  );
+  if (sameWin && allOverlap) {
+    return { active: displayed[displayed.length - 1].app, problem: null };
+  }
+  return {
+    active: null,
+    problem:
+      '앱 뷰 2개가 서로 다른 영역에 동시 표시 상태입니다 — 비활성 뷰는 setVisible(false)·0 크기 ' +
+      'bounds 로 숨기거나, 동일 bounds 스택(z순서 맨 위 = 활성)이어야 판정 가능합니다 (rev.7 활성 판정 계약)',
+  };
+}
+
+/**
+ * 해당 앱 HTML 을 (창 자체 webContents 또는 하위 뷰로) 호스팅하는 BrowserWindow id.
+ * 분리 모드가 뷰 재부착이든 직접 loadFile 이든 모두 커버한다. 없으면 null.
+ */
+async function windowIdForApp(app, fileName) {
+  return app.evaluate(({ BrowserWindow }, want) => {
+    const matches = (u) => {
+      const c = String(u || '').split(/[?#]/)[0].toLowerCase();
+      return c.endsWith('/' + want) || c.endsWith('\\' + want);
+    };
+    for (const w of BrowserWindow.getAllWindows()) {
+      try {
+        if (matches(w.webContents.getURL())) return w.id;
+      } catch (e) {
+        /* 파괴된 창 — 무시 */
+      }
+      const stack = [w.contentView];
+      while (stack.length) {
+        const v = stack.pop();
+        if (!v) continue;
+        try {
+          if (v.webContents && matches(v.webContents.getURL())) return w.id;
+        } catch (e) {
+          /* 무시 */
+        }
+        try {
+          for (const k of v.children || []) stack.push(k);
+        } catch (e) {
+          /* 무시 */
+        }
+      }
+    }
+    return null;
+  }, String(fileName).toLowerCase());
+}
+
+/** id 로 BrowserWindow close() — 창을 찾았으면 true (독립 종료 검증용) */
+async function closeWindowById(app, id) {
+  return app.evaluate(({ BrowserWindow }, wantId) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.id === wantId);
+    if (w) w.close();
+    return !!w;
+  }, id);
+}
+
+/**
+ * launchElectronShell 의 한국어 래퍼 — 기동 실패·타임아웃을 rev.7 진단 힌트가 담긴
+ * 한국어 메시지로 변환한다 (셸 미구축의 기존 한국어 메시지는 그대로 통과).
+ */
+async function launchShellChecked(userDataDir, opts = {}) {
+  try {
+    return await launchElectronShell(userDataDir, opts);
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    if (msg.includes('셸 미구축')) throw e;
+    throw new Error(
+      `${opts.label || 'rev.7'}: electron 셸 기동 실패 — ${msg} ` +
+        '(참고: 병합 창의 호스트 webContents 가 아무 문서도 로드하지 않으면 Playwright 연결이 ' +
+        '타임아웃한다 — 실측. 호스트에 최소 문서를 로드해야 한다)'
+    );
+  }
+}
+
+Object.assign(module.exports, {
+  ELECTRON_TABBAR_HTML,
+  ELECTRON_TABBAR_PRELOAD,
+  cleanUrl,
+  pageByUrl,
+  browserWindowCount,
+  pollBrowserWindowCount,
+  shellViewsInfo,
+  judgeActiveAppView,
+  windowIdForApp,
+  closeWindowById,
+  launchShellChecked,
+});

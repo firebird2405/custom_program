@@ -18,6 +18,9 @@
 //     → 스티커 실제 드래그 부착(drag:#board) → 완료(자동) — 사용자 액션 4회 (≤8 계약).
 //     [data-onboarding-skip] 상시 표시 + 설정 패널에 [data-onboarding-replay] 주입.
 //     스텝 전진은 "사용자 발행 입력 액션"(isTrusted)만 계수한다 (자동 전진 계수 금지).
+//   A42 rev.7 — 분리 모드에서만 양 앱 설정 패널에 [창 모드] 섹션을 주입해
+//     재병합 진입점 [data-merge]("🔗 한 창으로 합치기")를 제공한다. 병합 모드의
+//     셸 UI(탭바·[data-split]·[data-shell-settings])는 tabbar.html 소관.
 //   A49③ — contextBridge 로 이름 붙은 채널 화이트리스트 API(window.petit)만 노출.
 //     ipcRenderer 원본·require·Node 모듈 노출 0건, 채널 인자는 전부 문자열 리터럴.
 //
@@ -42,6 +45,11 @@ const SHELL_VERSION = '0.9.0';
 const migrateDetect = function () { return ipcRenderer.invoke('petit:migrate:detect'); };
 const migrateRun = function () { return ipcRenderer.invoke('petit:migrate:run'); };
 const migrateStatus = function () { return ipcRenderer.invoke('petit:migrate:status'); };
+
+// A42 rev.7 — 셸 창 구성 브리지 (분리 모드의 재병합 진입점 [data-merge]가 쓴다).
+// 탭바 페이지의 전체 API 는 tabbar-preload.js — 앱 페이지에는 필요한 두 채널만 노출.
+const shellGetState = function () { return ipcRenderer.invoke('petit:shell:state'); };
+const shellMerge = function () { return ipcRenderer.invoke('petit:shell:merge'); };
 
 const petitApi = {
   version: SHELL_VERSION,
@@ -68,6 +76,11 @@ const petitApi = {
     runNow: function () { return ipcRenderer.invoke('petit:backup:run-now'); },
     setAuto: function (on) { return ipcRenderer.invoke('petit:backup:set-auto', on === true); },
     setIncludeImages: function (on) { return ipcRenderer.invoke('petit:backup:set-include-images', on === true); }
+  },
+  shell: {
+    // 셸 창 구성 (main: main.js) — 상태 조회 + 분리 상태에서 병합 복귀 (A42 rev.7)
+    getState: shellGetState,
+    merge: shellMerge
   }
 };
 contextBridge.exposeInMainWorld('petit', petitApi);
@@ -386,6 +399,25 @@ function startOnboarding() {
     currentAction = null;
   }
 
+  // 안내 카드가 지목 대상을 덮으면 카드를 위쪽으로 옮긴다 — 병합 1창 탭 모드(A42 rev.7)
+  // 에서는 뷰 높이가 탭바(40px)만큼 줄어 하단 고정 카드가 꾸미기 팔레트와 겹칠 수 있다.
+  // 카드는 pointerEvents:auto 라 겹치면 드래그 pointerdown 을 가로챈다 (실측 회귀).
+  function repositionCardAwayFromTarget() {
+    try {
+      if (!currentTarget || !card.isConnected) return;
+      const cr = card.getBoundingClientRect();
+      const tr = currentTarget.getBoundingClientRect();
+      const overlap = !(
+        tr.right < cr.left - 8 || tr.left > cr.right + 8 ||
+        tr.bottom < cr.top - 8 || tr.top > cr.bottom + 8
+      );
+      if (overlap) {
+        card.style.bottom = 'auto';
+        card.style.top = '24px';
+      }
+    } catch (_err) { /* 측정 실패 시 기본 위치 유지 */ }
+  }
+
   function showStep(i) {
     clearTimers();
     clearTargetMark();                          // 이전 target 제거 — "정확히 1개" 계약
@@ -395,6 +427,8 @@ function startOnboarding() {
     const st = ONBOARD_STEPS[i];
     counter.textContent = (i + 1) + ' / ' + ONBOARD_STEPS.length;
     textLine.textContent = st.text;
+    card.style.top = 'auto';                    // 단계마다 기본 위치(하단 중앙)로 복귀
+    card.style.bottom = '24px';
 
     if (st.auto) {                              // 자동 안내 슬라이드 — target 0개, 자진 전진
       autoTimer = setTimeout(function () {
@@ -415,6 +449,7 @@ function startOnboarding() {
         currentTarget = t;
         currentAction = st.action === 'fill' ? 'fill' : (st.action.indexOf('drag:') === 0 ? 'drag' : 'click');
         try { t.setAttribute('data-onboarding-target', st.action === 'click' ? '' : st.action); } catch (_err) { /* 무해 */ }
+        repositionCardAwayFromTarget();         // 카드가 대상을 덮지 않게 (드래그 가로채기 방지)
         if (currentAction === 'fill') startFillWatch();
       };
       if (st.markDelay) markTimer = setTimeout(mark, st.markDelay);
@@ -740,6 +775,68 @@ function initBackupUi() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 창 모드 UI (분리 모드 전용 — A42 rev.7 재병합 진입점)
+// 훅: [data-merge] — "🔗 한 창으로 합치기" 버튼. 분리 모드일 때만 양 앱 설정 패널에
+// 주입한다 (병합 모드에서는 탭바가 셸 UI 를 담당 — 계약상 [data-merge]는 분리
+// 상태에서 관찰되면 된다). 주입 관용구는 [백업] 섹션과 동일 — 원본 HTML 무수정(A42).
+// ────────────────────────────────────────────────────────────────────────────
+
+async function injectMergeSection() {
+  let st = null;
+  try { st = await shellGetState(); } catch (_err) { return; }
+  if (!st || st.ok !== true || st.mode !== 'separate') return; // 병합 모드 — 주입 없음
+
+  const panel = document.getElementById('settingsPanel');
+  if (!panel || panel.querySelector('[data-merge]')) return;
+  const isCal = PAGE === 'calendar';
+  const host = isCal ? (panel.querySelector('.spBody') || panel) : panel;
+  const smallCls = isCal ? 'spSmall' : 'sp-small'; // 앱별 안내문 관용 클래스
+
+  const sec = el(isCal ? 'section' : 'div');
+  sec.className = isCal ? 'spSec' : 'sp-sec';
+  sec.setAttribute('data-shell-window-section', '');
+  sec.appendChild(el('h3', undefined, '창 모드'));
+
+  const row = el('div', { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '6px 0' });
+  const btnMerge = btnEl(undefined, '🔗 한 창으로 합치기');
+  if (!isCal) btnMerge.className = 'tool-btn';
+  btnMerge.title = '캘린더와 포스트잇을 탭이 있는 한 창으로 합쳐요';
+  btnMerge.setAttribute('data-merge', '');
+  row.appendChild(btnMerge);
+  sec.appendChild(row);
+
+  const hint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '5px 0 0' },
+    '두 창을 하나로 합치고 위쪽 탭으로 오가요. 합친 뒤에는 탭바의 "창 분리"로 언제든 되돌릴 수 있어요.');
+  hint.className = smallCls;
+  sec.appendChild(hint);
+  const statusLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '5px 0 0', minHeight: '0' }, '');
+  statusLine.className = smallCls;
+  sec.appendChild(statusLine);
+
+  host.appendChild(sec);
+
+  btnMerge.addEventListener('click', async function () {
+    btnMerge.disabled = true;
+    statusLine.textContent = '한 창으로 합치는 중…';
+    let res = null;
+    try {
+      res = await shellMerge();
+    } catch (err) {
+      res = { ok: false, reason: String(err && err.message || err) };
+    }
+    if (!res || res.ok !== true) {
+      statusLine.textContent = '합치지 못했어요: ' + String((res && res.reason) || '알 수 없는 오류');
+      btnMerge.disabled = false;
+    }
+    // 성공 시 이 창은 곧 닫히고 병합 창이 열린다 — 추가 처리 불요
+  });
+}
+
+function initMergeUi() {
+  injectMergeSection().catch(function () { /* 브리지 실패 시 셸 UI 만 생략 — 앱 무영향 */ });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 진입점 — 앱 DOM 준비 후 셸 UI 부착
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -747,7 +844,8 @@ function initShellUi() {
   if (!PAGE || !document.body) return;
   initMigrateUi().catch(function () { /* 브리지 실패 시 셸 UI 만 생략 — 앱 무영향 */ });
   if (PAGE === 'postit') initOnboarding();
-  initBackupUi(); // 양 창 설정 패널에 [백업] 섹션 주입
+  initBackupUi(); // 양 앱 설정 패널에 [백업] 섹션 주입
+  initMergeUi();  // 분리 모드에서만 양 앱 설정 패널에 [창 모드] 섹션([data-merge]) 주입
 }
 
 if (document.readyState === 'loading') {

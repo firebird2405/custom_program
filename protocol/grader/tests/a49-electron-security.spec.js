@@ -18,6 +18,13 @@
  *
  * fail-closed: 셸/preload 부재 = 크래시 없이 "electron 셸 미구축 (2단계 진행 중)" 류
  * 한국어 메시지로 즉시 FAIL — skip-pass 금지.
+ *
+ * rev.7 추가 (기존 검사 약화 없음 — 검사 대상 확대만):
+ *  - ①에 탭바 렌더러 검사 추가: 병합 셸의 탭바(WebContentsView, electron/tabbar.html)
+ *    페이지가 열려 있으면 동일하게 typeof require/process === "undefined" 를 관찰한다
+ *    (뷰 페이지는 app.windows() 에 노출 — electron-helpers rev.7 실측 주석 참조).
+ *  - ③의 preload 검사 대상에 electron/tabbar-preload.js 를 추가한다 (존재 시 —
+ *    화이트리스트·채널 리터럴·원본 노출 금지 규칙 동일 적용).
  */
 const fs = require('fs');
 const path = require('path');
@@ -26,6 +33,7 @@ const {
   ELECTRON_DIR,
   ELECTRON_MAIN_JS,
   ELECTRON_PRELOAD_JS,
+  ELECTRON_TABBAR_PRELOAD,
   SHELL_MISSING_MSG,
   stripJsComments,
   withShell,
@@ -39,10 +47,11 @@ function requireMainJs() {
   return stripJsComments(fs.readFileSync(ELECTRON_MAIN_JS, 'utf8'));
 }
 
-/** preload 후보: electron/preload.js + main.js 가 preload: 로 참조하는 *.js (실존만) */
+/** preload 후보: electron/preload.js + tabbar-preload.js(rev.7) + main.js 가 preload: 로 참조하는 *.js (실존만) */
 function findPreloadFiles() {
   const found = new Set();
   if (fs.existsSync(ELECTRON_PRELOAD_JS)) found.add(ELECTRON_PRELOAD_JS);
+  if (fs.existsSync(ELECTRON_TABBAR_PRELOAD)) found.add(ELECTRON_TABBAR_PRELOAD); // rev.7 추가 (존재 시)
   if (fs.existsSync(ELECTRON_MAIN_JS)) {
     const src = stripJsComments(fs.readFileSync(ELECTRON_MAIN_JS, 'utf8'));
     const re = /['"`]([^'"`]*preload[^'"`]*\.js)['"`]/gi;
@@ -98,7 +107,20 @@ test.describe('A49 Electron 보안 3중 검증', () => {
         '포스트잇 창(postit.html)을 찾지 못했습니다 — 열린 창: ' + win.all.map((p) => p.url()).join(', ')
       ).toBeTruthy();
 
-      for (const [label, pg] of [['캘린더', win.calendar], ['포스트잇', win.postit]]) {
+      // rev.7 추가: 탭바 렌더러(WebContentsView, electron/tabbar.html)가 열려 있으면 동일 검사
+      // (병합 셸 여부는 A42 가 판정 — 여기서는 '노출된 렌더러 전부의 격리'만 판정한다)
+      const tabbarPage =
+        app.windows().find((p) => {
+          try {
+            return /\/tabbar\.html$/i.test((p.url() || '').split(/[?#]/)[0]);
+          } catch (e) {
+            return false;
+          }
+        }) || null;
+      const targets = [['캘린더', win.calendar], ['포스트잇', win.postit]];
+      if (tabbarPage) targets.push(['탭바', tabbarPage]);
+
+      for (const [label, pg] of targets) {
         const r = await pg.evaluate(() => ({ req: typeof require, proc: typeof process }));
         expect(
           r.req,

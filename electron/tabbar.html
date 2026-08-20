@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>쁘띠캘린더</title>
+<!--
+  쁘띠캘린더 — 셸 탭바 페이지 (병합 1창 탭 모드의 창 기본 페이지, 셸 소유 — 앱 원본 아님)
+
+  계약 (protocol/SCORECARD.md rev.7 A42):
+    - [data-shell-tabbar] 루트 / 탭 [data-tab="postit"]·[data-tab="calendar"] (활성 표시)
+    - [data-split] 창 분리 버튼
+    - [data-shell-settings] 설정 드로어: 창 모드(merged/separate) 세그 + 기본 탭 세그 — 변경 즉시 저장
+  규칙:
+    - 오프라인 전용 — 외부 리소스 0 (시스템 폰트만), A44/A1 준수
+    - 스크립트의 동적 텍스트는 textContent 만 사용 (innerHTML 계열 금지 조항)
+    - 상단 header 높이 40px·드로어 높이 148px 은 main.js 의
+      TABBAR_HEIGHT·SETTINGS_DRAWER_HEIGHT 와 동기 유지 (수동 관리)
+-->
+<style>
+  :root {
+    --ink: #5e3e18;            /* 앱 공통 브라운 잉크 */
+    --ink-soft: rgba(94, 62, 24, 0.72);
+    --cork: #B08968;           /* 코르크 브라운 포인트 (브랜드 타일색) */
+    --cork-deep: #7a5433;
+    --accent: #FFD966;         /* 앱 공통 노랑 포인트 */
+    --cream-hi: #fffbf0;
+    --cream-lo: #f6ecd6;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: "Segoe UI", "Malgun Gothic", "맑은 고딕", sans-serif;
+    color: var(--ink);
+    background: var(--cream-lo);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── 탭바 (고정 40px — main.js TABBAR_HEIGHT 동기) ── */
+  header[data-shell-tabbar] {
+    height: 40px;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 8px;
+    background: linear-gradient(180deg, var(--cream-hi), var(--cream-lo));
+    border-bottom: 2px solid var(--cork);
+  }
+  .tabs { display: flex; align-items: flex-end; gap: 4px; }
+  .tabs button {
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    padding: 6px 16px 7px;
+    margin-bottom: -2px;                 /* 활성 탭이 하단 코르크 선과 이어지게 */
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    background: transparent;
+    cursor: pointer;
+    line-height: 1.2;
+  }
+  .tabs button:hover { background: rgba(94, 62, 24, 0.08); }
+  .tabs button.active {
+    color: var(--ink);
+    font-weight: 700;
+    background: #fff;
+    border-color: var(--cork);
+    box-shadow: inset 0 -3px 0 var(--accent);
+  }
+  .actions { display: flex; align-items: center; gap: 6px; }
+  .actions button {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--ink);
+    padding: 5px 12px;
+    border: 1px solid rgba(94, 62, 24, 0.35);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    line-height: 1.2;
+  }
+  .actions button:hover { background: #fff; }
+  .actions button:disabled { opacity: 0.55; cursor: default; }
+  .actions button.gear.open { background: var(--accent); border-color: var(--cork-deep); }
+
+  /* ── 설정 드로어 (고정 148px — main.js SETTINGS_DRAWER_HEIGHT 동기) ── */
+  section[data-shell-settings] {
+    height: 148px;
+    padding: 12px 16px 10px;
+    background: var(--cream-hi);
+    border-bottom: 2px solid var(--cork);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  section[data-shell-settings][hidden] { display: none; }
+  .seg-row { display: flex; align-items: center; gap: 10px; }
+  .seg-label { font-size: 12.5px; font-weight: 700; width: 70px; color: var(--ink); }
+  .seg { display: inline-flex; border: 1px solid var(--cork); border-radius: 9px; overflow: hidden; }
+  .seg button {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    padding: 5px 14px;
+    border: none;
+    background: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    line-height: 1.2;
+  }
+  .seg button + button { border-left: 1px solid rgba(94, 62, 24, 0.25); }
+  .seg button:hover { background: #fff; }
+  .seg button.on {
+    color: #4a2f12;
+    font-weight: 700;
+    background: var(--accent);
+  }
+  .hint { font-size: 12px; color: var(--ink-soft); margin: 2px 0 0; line-height: 1.5; }
+  .status { font-size: 12px; color: #a04638; margin: 0; min-height: 15px; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<header data-shell-tabbar>
+  <div class="tabs">
+    <button type="button" data-tab="postit" title="포스트잇 월로 이동해요">🗒️ 포스트잇</button>
+    <button type="button" data-tab="calendar" title="캘린더로 이동해요">📅 캘린더</button>
+  </div>
+  <div class="actions">
+    <button type="button" data-split title="캘린더와 포스트잇을 두 창으로 나눠요">⧉ 창 분리</button>
+    <button type="button" class="gear" data-shell-settings-open title="셸 설정을 열고 닫아요">⚙️ 설정</button>
+  </div>
+</header>
+
+<section data-shell-settings hidden>
+  <div class="seg-row">
+    <span class="seg-label">창 모드</span>
+    <span class="seg">
+      <button type="button" data-mode="merged" title="탭이 있는 한 창으로 시작해요">한 창(탭)</button>
+      <button type="button" data-mode="separate" title="캘린더·포스트잇 두 창으로 시작해요">두 창(분리)</button>
+    </span>
+  </div>
+  <div class="seg-row">
+    <span class="seg-label">기본 탭</span>
+    <span class="seg">
+      <button type="button" data-default-tab="postit" title="한 창 모드에서 포스트잇 탭으로 시작해요">포스트잇</button>
+      <button type="button" data-default-tab="calendar" title="한 창 모드에서 캘린더 탭으로 시작해요">캘린더</button>
+    </span>
+  </div>
+  <p class="hint">설정은 바로 저장돼요. 창 모드는 다음 실행부터 적용되고, 지금 바로 나누고 싶으면 위의 "창 분리"를 눌러 주세요.</p>
+  <p class="status" data-shell-status></p>
+</section>
+
+<script>
+(function () {
+  'use strict';
+
+  var api = window.petitShell;
+  var tabButtons = Array.prototype.slice.call(document.querySelectorAll('[data-tab]'));
+  var modeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-mode]'));
+  var defaultTabButtons = Array.prototype.slice.call(document.querySelectorAll('[data-default-tab]'));
+  var splitBtn = document.querySelector('[data-split]');
+  var gearBtn = document.querySelector('[data-shell-settings-open]');
+  var drawer = document.querySelector('[data-shell-settings]');
+  var statusLine = document.querySelector('[data-shell-status]');
+
+  function setStatus(msg) {
+    statusLine.textContent = msg || '';
+  }
+
+  /* 브리지 부재(비정상 기동)에도 페이지는 조용히 유지 — 콘솔 오류 0 원칙 */
+  if (!api) {
+    setStatus('셸과 연결하지 못했어요. 앱을 다시 실행해 주세요.');
+    return;
+  }
+
+  /* ── 표시 갱신 (동적 텍스트 없음 — 클래스 토글만) ── */
+  function markActiveTab(tab) {
+    tabButtons.forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+    });
+  }
+  function markSettings(st) {
+    modeButtons.forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-mode') === st.windowMode);
+    });
+    defaultTabButtons.forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-default-tab') === st.defaultTab);
+    });
+  }
+  function applyState(st) {
+    if (!st || st.ok !== true) return;
+    if (st.activeTab) markActiveTab(st.activeTab);
+    markSettings(st);
+  }
+
+  /* ── 설정 드로어 개폐 — main 이 앱 뷰를 내려 드로어 공간을 비워 준다 ── */
+  var drawerOpen = false;
+  function setDrawer(open) {
+    drawerOpen = open === true;
+    drawer.hidden = !drawerOpen;
+    gearBtn.classList.toggle('open', drawerOpen);
+    setStatus('');
+    api.setSettings({ panelOpen: drawerOpen }).catch(function () { /* 표시만 유지 */ });
+  }
+
+  /* ── 탭 전환 (병합 내 전환은 z순서 재배치만 — 리로드 없음) ── */
+  tabButtons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (drawerOpen) setDrawer(false);
+      api.switchTab(b.getAttribute('data-tab')).then(applyState).catch(function () {
+        setStatus('탭을 전환하지 못했어요. 다시 시도해 주세요.');
+      });
+    });
+  });
+
+  /* ── 창 분리 — 성공하면 이 창은 곧 닫히고 두 창이 열린다 ── */
+  splitBtn.addEventListener('click', function () {
+    splitBtn.disabled = true;
+    api.split().then(function (res) {
+      if (!res || res.ok !== true) {
+        splitBtn.disabled = false;
+        if (!drawerOpen) setDrawer(true);
+        setStatus((res && res.reason) || '창을 나누지 못했어요. 다시 시도해 주세요.');
+      }
+    }).catch(function () {
+      splitBtn.disabled = false;
+    });
+  });
+
+  /* ── 설정 세그 — 변경 즉시 저장 ── */
+  gearBtn.addEventListener('click', function () { setDrawer(!drawerOpen); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && drawerOpen) setDrawer(false);
+  });
+  modeButtons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      api.setSettings({ windowMode: b.getAttribute('data-mode') }).then(applyState).catch(function () {
+        setStatus('설정을 저장하지 못했어요.');
+      });
+    });
+  });
+  defaultTabButtons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      api.setSettings({ defaultTab: b.getAttribute('data-default-tab') }).then(applyState).catch(function () {
+        setStatus('설정을 저장하지 못했어요.');
+      });
+    });
+  });
+
+  /* ── 초기 상태 반영 ── */
+  api.getState().then(applyState).catch(function () {
+    setStatus('셸 상태를 읽지 못했어요.');
+  });
+})();
+</script>
+
+</body>
+</html>

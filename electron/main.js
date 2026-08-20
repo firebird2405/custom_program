@@ -246,7 +246,9 @@ function createAppWindow(state, key, htmlFile, windowTitle, defaults) {
   // 믹스드 DPI 보정: 배율이 다른 모니터(예: 150% 노트북 + 100% 외장)의 음수 좌표로
   // 생성자 x/y 를 주면 크기가 배율 오염되는 Electron/Chromium 이슈가 있어,
   // 생성 직후 목표 사각형을 한 번 더 확정 적용한다.
-  if (fresh) win.setBounds(fresh);
+  // 저장 bounds 복원도 동일하게 재확정한다 — fresh 만 보정하면 혼성 DPI(150%+100%)에서
+  // 재기동마다 생성자 크기가 1/배율로 오염돼 창이 점점 줄어드는 붕괴가 발생한다(3차 점검 실증).
+  win.setBounds(fresh || saved);
 
   if (state[key] && state[key].maximized) win.maximize();
 
@@ -333,7 +335,9 @@ function createMergedWindow(state, settings) {
   });
 
   win.removeMenu();
-  if (fresh) win.setBounds(fresh); // 믹스드 DPI 보정 (createAppWindow 와 동일 사유)
+  // 믹스드 DPI 보정 — 저장 bounds 복원 경로 포함 (createAppWindow 와 동일 사유:
+  // saved 미보정 시 재기동마다 1/배율 축소 붕괴, 3차 점검 실증)
+  win.setBounds(fresh || saved);
   if (state.merged && state.merged.maximized) win.maximize();
 
   win.on('page-title-updated', (event) => {

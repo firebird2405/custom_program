@@ -20,6 +20,10 @@
 //     흡수했다 — 사용자 액션은 그대로 4회 (≤8 계약).
 //     [data-onboarding-skip] 상시 표시 + 설정 패널에 [data-onboarding-replay] 주입.
 //     스텝 전진은 "사용자 발행 입력 액션"(isTrusted)만 계수한다 (자동 전진 계수 금지).
+//     지목은 스포트라이트 오버레이([data-shell-spotlight] — 딤·맥동 링·삼각 포인터·
+//     드래그 도착지 힌트)가 맡는다. rAF 로 대상 rect 를 실시간 추종하고, 단계 전환·종료
+//     시 rAF 와 노드를 함께 정리한다. 전부 pointerEvents:none 이라 채점기가 그 대상을
+//     실제로 클릭·드래그하는 경로를 가로채지 않는다.
 //     대체 장치(셸 레이어): 완료·건너뛰기 토스트와 "첫 우클릭" 힌트 칩 — 전부
 //     pointerEvents:none 비상호작용 오버레이라 앱 조작 경로를 건드리지 않는다.
 //   A42 rev.7 — 분리 모드에서만 양 앱 설정 패널에 [창 모드] 섹션을 주입해
@@ -441,9 +445,14 @@ function startOnboarding() {
   onboardingActive = true;
 
   // 지목 하이라이트 스타일 (정적 문자열만 — textContent 주입)
+  // · 대상 요소 자체의 아웃라인 = 최후의 정적 강조 (스포트라이트가 못 뜨는 프레임에도 남는다)
+  // · @keyframes = 링의 은은한 맥동 (transform/opacity 전용 — 레이아웃 무유발)
+  // · reduced-motion 에서는 맥동을 CSS 로도 끈다 (JS 판정 motionOk() 와 이중 안전)
   const styleEl = document.createElement('style');
   styleEl.textContent =
-    '[data-onboarding-target] { outline: 3px solid #ff8fab !important; outline-offset: 3px; border-radius: 8px; }';
+    '[data-onboarding-target] { outline: 2px solid #ff8fab !important; outline-offset: 2px; border-radius: 8px; }' +
+    '@keyframes petit-ob-pulse { 0%, 100% { transform: scale(1); opacity: .82 } 50% { transform: scale(1.045); opacity: 1 } }' +
+    '@media (prefers-reduced-motion: reduce) { [data-shell-spotlight="ring"] { animation: none !important; transform: none !important } }';
   document.head.appendChild(styleEl);
 
   const root = el('div', {
@@ -474,6 +483,65 @@ function startOnboarding() {
   card.appendChild(counter);
   card.appendChild(textLine);
   card.appendChild(btnSkip);
+
+  // ── 스포트라이트 레이어 ("지금 눌러야 할 것"을 눈으로 찾게 해 주는 강조) ──
+  // 구성: 딤(주변만 옅게) + 링(대상 사각형 + 여백, 맥동) + 삼각 포인터 +
+  //       드래그 단계의 도착지 테두리·점선 경로.
+  // 절대 규칙: 전부 [data-onboarding] 루트(pointerEvents:none) 안쪽의 비상호작용
+  //   장식이다 — 각 노드도 pointerEvents:none 을 명시한다. 대상 위를 덮되 클릭·드래그를
+  //   가로채면 안 된다 (채점기가 지목된 그 요소를 실제로 클릭·드래그한다).
+  // 모션 규칙: transform/opacity 전용. reduced-motion·앱 [효과](fx-calm/fx-off)에서는
+  //   맥동을 끄고 테두리를 두껍게·대비를 키운 정적 강조로 강등한다 (위치 표시는 유지).
+  const SPOT_PAD = 8;                           // 대상 사각형 여백 (6~10px)
+  const SPOT_HUE = '#ff8fab';                   // 셸 공통 지목색 (아웃라인과 동일 계열)
+  const SPOT_BASE = { position: 'fixed', left: '0', top: '0', pointerEvents: 'none', display: 'none' };
+
+  const spotDim = el('div', {
+    ...SPOT_BASE,
+    width: '0', height: '0', borderRadius: '12px',
+    boxShadow: '0 0 0 9999px rgba(58, 44, 26, 0.18)',   // 대상만 뚫린 옅은 딤 (알파 ≤0.25)
+    transform: 'translate3d(0px, 0px, 0)'
+  });
+  const spotRing = el('div', {
+    ...SPOT_BASE, width: '0', height: '0', transform: 'translate3d(0px, 0px, 0)', willChange: 'transform'
+  });
+  const spotRingIn = el('div', {
+    width: '100%', height: '100%', boxSizing: 'border-box',
+    border: '3px solid ' + SPOT_HUE, borderRadius: '12px',
+    boxShadow: '0 0 0 1px rgba(255, 255, 255, .6), 0 0 16px rgba(255, 143, 171, .5)',
+    transformOrigin: '50% 50%'
+  });
+  spotRingIn.setAttribute('data-shell-spotlight', 'ring');
+  spotRing.appendChild(spotRingIn);
+  const spotArrow = el('div', {                 // 위를 가리키는 삼각형 (배치에 따라 rotate)
+    ...SPOT_BASE, width: '0', height: '0',
+    borderLeft: '9px solid transparent', borderRight: '9px solid transparent',
+    borderBottom: '12px solid ' + SPOT_HUE,
+    filter: 'drop-shadow(0 1px 2px rgba(80, 60, 20, .35))',
+    transform: 'translate3d(0px, 0px, 0)', transformOrigin: '50% 50%'
+  });
+  const spotDrop = el('div', {                  // 드래그 도착지 영역
+    ...SPOT_BASE, width: '0', height: '0', boxSizing: 'border-box',
+    border: '2px dashed rgba(255, 143, 171, .8)', borderRadius: '16px',
+    boxShadow: 'inset 0 0 40px rgba(255, 143, 171, .10)',
+    transform: 'translate3d(0px, 0px, 0)'
+  });
+  const spotPath = el('div', {                  // 출발 → 도착 점선 경로
+    ...SPOT_BASE, width: '0', height: '3px', borderRadius: '2px', opacity: '.72',
+    background: 'repeating-linear-gradient(90deg, rgba(255,143,171,.95) 0 7px, rgba(255,143,171,0) 7px 15px)',
+    transform: 'translate3d(0px, 0px, 0)', transformOrigin: '0 50%'
+  });
+  const spotNodes = [spotDim, spotDrop, spotPath, spotRing, spotArrow];
+  spotDim.setAttribute('data-shell-spotlight', 'dim');
+  spotRing.setAttribute('data-shell-spotlight', 'ringbox');
+  spotArrow.setAttribute('data-shell-spotlight', 'arrow');
+  spotDrop.setAttribute('data-shell-spotlight', 'drop');
+  spotPath.setAttribute('data-shell-spotlight', 'path');
+  spotNodes.forEach(function (n) {
+    n.setAttribute('aria-hidden', 'true');      // 장식 — 보조기술에는 카드 문구만 남긴다
+    root.appendChild(n);                        // 카드보다 먼저 = 카드가 항상 위에 그려진다
+  });
+
   root.appendChild(card);
   document.body.appendChild(root);
 
@@ -487,6 +555,11 @@ function startOnboarding() {
   let fillLastVal = null;
   let dragArm = null;                           // { el, x, y } — 드래그 시작 스냅숏
   let finished = false;
+  let spotRaf = null;                           // 스포트라이트 추적 rAF 핸들 (단계 종료 시 취소)
+  let spotDest = null;                          // 드래그 도착지 요소 (drag 단계에서만)
+  let spotMotion = null;                        // 현재 적용된 모션 모드 (true=맥동 / false=정적)
+  let spotSig = '';                             // 마지막 배치 서명 — 변화 없는 프레임은 무기록
+  let spotFrame = 0;
 
   function clearTimers() {
     if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
@@ -501,6 +574,7 @@ function startOnboarding() {
     }
     currentTarget = null;
     currentAction = null;
+    spotStop();                                 // 강조 오버레이·추적 rAF 도 함께 내린다
   }
 
   // 안내 카드가 지목 대상을 덮으면 카드를 위쪽으로 옮긴다 — 병합 1창 탭 모드(A42 rev.7)
@@ -520,6 +594,163 @@ function startOnboarding() {
         card.style.top = '24px';
       }
     } catch (_err) { /* 측정 실패 시 기본 위치 유지 */ }
+  }
+
+  // ── 스포트라이트 추적 엔진 ────────────────────────────────────────────────
+  // 대상은 스크롤·리사이즈·패널 개폐(슬라이드 0.28s)·노트 드래그로 계속 움직인다.
+  // 이벤트를 하나씩 듣는 대신 단계가 살아 있는 동안만 rAF 로 실측 rect 를 따라간다
+  // (transform 애니메이션 중인 요소도 프레임 단위로 정확히 따라잡는다). 배치 서명이
+  // 같은 프레임은 스타일을 쓰지 않아 불필요한 페인트를 만들지 않는다.
+
+  /** 맥동 ↔ 정적 강등 전환 (reduced-motion·앱 [효과] 설정 존중) */
+  function spotSetMotion(on) {
+    if (spotMotion === on) return;
+    spotMotion = on;
+    if (on) {
+      spotRingIn.style.animation = 'petit-ob-pulse 1.6s ease-in-out infinite';
+      spotRingIn.style.transform = '';
+      spotRingIn.style.borderWidth = '3px';
+      spotRingIn.style.opacity = '';
+      spotRingIn.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, .6), 0 0 16px rgba(255, 143, 171, .5)';
+      spotDim.style.boxShadow = '0 0 0 9999px rgba(58, 44, 26, 0.18)';
+    } else {
+      // 강등: 움직임 없이 테두리·대비만으로 지목한다 (위치 표시는 그대로 유지)
+      spotRingIn.style.animation = 'none';
+      spotRingIn.style.transform = 'none';
+      spotRingIn.style.borderWidth = '4px';
+      spotRingIn.style.opacity = '1';
+      spotRingIn.style.boxShadow = '0 0 0 2px rgba(255, 255, 255, .85), 0 0 0 5px rgba(255, 143, 171, .3)';
+      spotDim.style.boxShadow = '0 0 0 9999px rgba(58, 44, 26, 0.22)';   // 대비만 조금 더 (≤0.25)
+    }
+  }
+
+  function spotHideAll() {
+    spotNodes.forEach(function (n) { n.style.display = 'none'; });
+    spotSig = '';
+  }
+
+  /** 단계 종료·온보딩 종료 공용 정리 — rAF 취소 + 전 노드 숨김 (누수 금지) */
+  function spotStop() {
+    if (spotRaf) { cancelAnimationFrame(spotRaf); spotRaf = null; }
+    spotDest = null;
+    spotHideAll();
+  }
+
+  /** 현재 단계의 대상 추적 시작 (destSel = drag 단계의 도착지 셀렉터, 없으면 null) */
+  function spotStart(destSel) {
+    spotDest = null;
+    if (destSel) {
+      try { spotDest = document.querySelector(destSel); } catch (_err) { spotDest = null; }
+    }
+    spotSig = '';
+    spotFrame = 0;
+    spotSetMotion(motionOk());
+    if (!spotRaf) spotRaf = requestAnimationFrame(spotLoop);
+  }
+
+  function spotLoop() {
+    spotRaf = requestAnimationFrame(spotLoop);
+    try {
+      if (finished || !currentTarget || !currentTarget.isConnected) {
+        if (spotSig) spotHideAll();
+        return;
+      }
+      if ((spotFrame++ % 30) === 0) spotSetMotion(motionOk());   // 설정·미디어 변경 추종 (약 0.5s)
+      const r = currentTarget.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) {                       // 접힌 패널 안 등 — 표시할 자리 없음
+        if (spotSig) spotHideAll();
+        return;
+      }
+      spotPlace(r);
+    } catch (_err) { /* 한 프레임 측정 실패는 다음 프레임에 회복 */ }
+  }
+
+  function spotPlace(r) {
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    const x = Math.round(r.left - SPOT_PAD);
+    const y = Math.round(r.top - SPOT_PAD);
+    const w = Math.round(r.width + SPOT_PAD * 2);
+    const h = Math.round(r.height + SPOT_PAD * 2);
+    const rad = Math.max(8, Math.min(16, Math.round(Math.min(w, h) / 3)));
+    let dr = null;
+    if (currentAction === 'drag' && spotDest && spotDest.isConnected) {
+      const d = spotDest.getBoundingClientRect();
+      if (d.width > 24 && d.height > 24) dr = d;
+    }
+    const sig = [x, y, w, h, vw, vh, dr ? Math.round(dr.left) : -1, dr ? Math.round(dr.top) : -1,
+      dr ? Math.round(dr.width) : -1, dr ? Math.round(dr.height) : -1].join(',');
+    if (sig === spotSig) return;                 // 움직임 없음 — 이 프레임은 아무것도 쓰지 않는다
+    spotSig = sig;
+
+    const tx = 'translate3d(' + x + 'px, ' + y + 'px, 0)';
+    spotDim.style.width = w + 'px';
+    spotDim.style.height = h + 'px';
+    spotDim.style.borderRadius = rad + 'px';
+    spotDim.style.transform = tx;
+    spotDim.style.display = 'block';
+    spotRing.style.width = w + 'px';
+    spotRing.style.height = h + 'px';
+    spotRing.style.transform = tx;
+    spotRing.style.display = 'block';
+    spotRingIn.style.borderRadius = rad + 'px';
+
+    // 삼각 포인터: 화면 안이면서 안내 카드와 겹치지 않는 첫 자리 (아래→위→오른쪽→왼쪽)
+    const cr = card.isConnected ? card.getBoundingClientRect() : null;
+    const usable = function (px, py) {
+      if (px < 16 || py < 16 || px > vw - 16 || py > vh - 16) return false;
+      if (cr && px > cr.left - 10 && px < cr.right + 10 && py > cr.top - 10 && py < cr.bottom + 10) return false;
+      return true;
+    };
+    const gap = 12;
+    const spots = [
+      { x: x + w / 2, y: y + h + gap, deg: 0 },   // 아래에 두고 위(대상)를 가리킨다
+      { x: x + w / 2, y: y - gap, deg: 180 },
+      { x: x + w + gap, y: y + h / 2, deg: 270 },
+      { x: x - gap, y: y + h / 2, deg: 90 }
+    ];
+    let put = null;
+    for (let i = 0; i < spots.length && !put; i++) {
+      if (usable(spots[i].x, spots[i].y)) put = spots[i];
+    }
+    if (put) {
+      spotArrow.style.transform =
+        'translate3d(' + Math.round(put.x - 9) + 'px, ' + Math.round(put.y - 6) + 'px, 0) rotate(' + put.deg + 'deg)';
+      spotArrow.style.display = 'block';
+    } else {
+      spotArrow.style.display = 'none';
+    }
+
+    // 드래그 단계: 도착지 테두리 + 출발→도착 점선 경로 (링 바깥에서 시작해 겹치지 않게)
+    if (dr) {
+      spotDrop.style.width = Math.max(0, Math.round(dr.width - 20)) + 'px';
+      spotDrop.style.height = Math.max(0, Math.round(dr.height - 20)) + 'px';
+      spotDrop.style.transform =
+        'translate3d(' + Math.round(dr.left + 10) + 'px, ' + Math.round(dr.top + 10) + 'px, 0)';
+      spotDrop.style.display = 'block';
+      const ax = r.left + r.width / 2;
+      const ay = r.top + r.height / 2;
+      const bx = dr.left + dr.width / 2;
+      const by = dr.top + dr.height / 2;
+      const len = Math.hypot(bx - ax, by - ay);
+      const off = Math.min(len * 0.4, Math.hypot(w, h) / 2 + 8);
+      const plen = Math.round(len - off - 16);
+      if (plen > 24) {
+        const ux = (bx - ax) / len;
+        const uy = (by - ay) / len;
+        const deg = (Math.atan2(by - ay, bx - ax) * 180) / Math.PI;
+        spotPath.style.width = plen + 'px';
+        spotPath.style.transform =
+          'translate3d(' + Math.round(ax + ux * off) + 'px, ' + Math.round(ay + uy * off - 1.5) + 'px, 0) ' +
+          'rotate(' + deg.toFixed(2) + 'deg)';
+        spotPath.style.display = 'block';
+      } else {
+        spotPath.style.display = 'none';
+      }
+    } else {
+      spotDrop.style.display = 'none';
+      spotPath.style.display = 'none';
+    }
   }
 
   function showStep(i) {
@@ -554,6 +785,8 @@ function startOnboarding() {
         currentAction = st.action === 'fill' ? 'fill' : (st.action.indexOf('drag:') === 0 ? 'drag' : 'click');
         try { t.setAttribute('data-onboarding-target', st.action === 'click' ? '' : st.action); } catch (_err) { /* 무해 */ }
         repositionCardAwayFromTarget();         // 카드가 대상을 덮지 않게 (드래그 가로채기 방지)
+        // 지목과 동시에 스포트라이트 추적 시작 (drag 단계는 도착지까지 함께 표시)
+        spotStart(currentAction === 'drag' ? st.action.slice(5).trim() : null);
         if (currentAction === 'fill') startFillWatch();
       };
       if (st.markDelay) markTimer = setTimeout(mark, st.markDelay);
@@ -591,7 +824,8 @@ function startOnboarding() {
     if (finished) return;
     finished = true;
     clearTimers();
-    clearTargetMark();
+    clearTargetMark();                          // 내부에서 spotStop() — rAF·오버레이 정리
+    spotStop();                                 // 대상 없이 끝난 경로(자동 슬라이드 중 skip)도 확실히
     document.removeEventListener('click', onDocClick, true);
     document.removeEventListener('pointerdown', onDocPointerDown, true);
     document.removeEventListener('pointerup', onDocPointerUp, true);

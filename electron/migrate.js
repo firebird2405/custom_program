@@ -67,11 +67,45 @@ function argvValue(name) {
   return null;
 }
 
+/**
+ * 레거시 Edge 프로필(.edge\<앱>)의 기본 탐색 위치.
+ *
+ * REPO_ROOT 는 "앱 리소스(HTML)"의 뿌리라 패키지에서는 resources\ 를 가리킨다 —
+ * 거기에는 사용자의 실사용 프로필이 없다(설치본이 자기 안에 사용자 데이터를 두지 않는다).
+ * 그래서 실사용 프로필은 별도 후보 목록에서 **실제 존재하는 첫 경로**로 정한다:
+ *   ① REPO_ROOT (개발 트리에서 저장소 루트 — 기존 동작 유지, A43 채점 계약 경로)
+ *   ② 패키지 설치 위치 기준 상위들 (win-unpacked\resources → win-unpacked → dist → electron → 저장소)
+ *   ③ 최후 폴백: 기존 배포 경로 D:\custom_program
+ * 후보가 모두 없으면 ①을 그대로 돌려준다(감지 실패 = 카드 미표시, 크래시 없음).
+ */
+function legacyRootCandidates() {
+  const roots = [REPO_ROOT];
+  let up = REPO_ROOT;
+  for (let i = 0; i < 4; i++) {
+    const parent = path.dirname(up);
+    if (!parent || parent === up) break;
+    roots.push(parent);
+    up = parent;
+  }
+  roots.push('D:\\custom_program');
+  return roots;
+}
+
+function defaultLegacyProfile(appKey) {
+  for (const root of legacyRootCandidates()) {
+    const candidate = path.join(root, '.edge', appKey);
+    try {
+      if (fs.existsSync(path.join(candidate, 'Default'))) return candidate;
+    } catch (_err) { /* 접근 불가 후보는 건너뛴다 */ }
+  }
+  return path.join(REPO_ROOT, '.edge', appKey);
+}
+
 function resolveSources() {
   const cal = argvValue('--source-cal') || process.env.PETIT_SOURCE_CAL ||
-    path.join(REPO_ROOT, '.edge', 'calendar');
+    defaultLegacyProfile('calendar');
   const postit = argvValue('--source-postit') || process.env.PETIT_SOURCE_POSTIT ||
-    path.join(REPO_ROOT, '.edge', 'postit');
+    defaultLegacyProfile('postit');
   return { cal: path.resolve(cal), postit: path.resolve(postit) };
 }
 

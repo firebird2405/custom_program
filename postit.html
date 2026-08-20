@@ -232,8 +232,13 @@ body {
 /* ── 포스트잇 ── */
 .pnote {
   position: absolute;
+  display: flex;
+  flex-direction: column;
   width: 150px;
   min-height: 150px;
+  /* 자동 성장 상한 — 내용이 길어도 여기서 멈추고 안쪽 세로 스크롤로 본다.
+     값은 JS 의 NOTE_MAX_PX(수동 리사이즈 상한, A23) 를 --note-max 로 내려받아 한 곳에서만 정한다. */
+  max-height: var(--note-max, 480px);
   border-radius: 2px;
   /* 그림자 x오프셋을 회전 부호(--rotn, 단위 없는 각도값)와 연동해 광원이 일관돼 보이게 */
   box-shadow: calc(var(--rotn, 0) * 1.4px + 2px) 7px 14px rgba(46,26,9,0.34), 0 1px 3px rgba(0,0,0,0.22);
@@ -348,14 +353,17 @@ body {
 .pnote:hover .ndel, .pnote.active:hover .ndel { opacity: 1; }
 .ndel:hover { background: rgba(67,48,31,0.24); }
 .ntext {
+  flex: 1 1 auto;                /* 짧은 메모는 노트를 채우고, 긴 메모는 상한 안에서 줄어든다 */
+  min-height: 0;                 /* 상한(480px)까지 자란 뒤에는 이 칸이 스크롤 영역이 된다 */
   padding: 30px 15px 18px;
-  min-height: 104px;
   font-size: 19px;
   line-height: 1.42;
   color: #43301f;
   white-space: pre-wrap;
   word-break: keep-all;          /* 한글 어절 중간 줄바꿈 방지 (특히 고딕 폰트) */
   overflow-wrap: break-word;     /* 한 어절이 노트보다 길면 그때만 끊는다 */
+  overflow-y: auto;              /* 넘치는 만큼만 노트 안에서 스크롤 (짧은 메모는 스크롤바 없음) */
+  overflow-x: hidden;
 }
 .pnote.editing .ntext { visibility: hidden; }
 .nedit {
@@ -367,6 +375,8 @@ body {
   bottom: 7px;
   padding: 4px 6px;
   resize: none;
+  overflow-y: auto;   /* 편집기도 노트 상한 안에 갇힌다 — 긴 글은 여기서 스크롤 */
+  overflow-x: hidden;
   border: 0;
   border-radius: 2px;
   outline: 1px dashed rgba(93,69,46,0.45);
@@ -400,9 +410,23 @@ body.font-gothic .ntext, body.font-gothic .nedit { font-family: "Malgun Gothic",
   transition: opacity 0.12s ease;
 }
 .pnote:hover .rgrip, .pnote.active .rgrip { opacity: 0.9; }
-/* 크기가 지정된 노트: 기본 최소 높이 해제 + 내용 넘침 정리 (위치·회전 규약은 그대로) */
-.pnote.sized { min-height: 0; display: flex; flex-direction: column; }
-.pnote.sized .ntext { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+/* 크기가 지정된 노트: 기본 최소 높이 해제 (레이아웃·넘침 규칙은 기본 노트와 동일) */
+.pnote.sized { min-height: 0; }
+
+/* ── 노트 안쪽 스크롤바: 코르크 톤의 얇은 막대 (본문·편집기 공용) ── */
+.ntext::-webkit-scrollbar,
+.nedit::-webkit-scrollbar { width: 8px; }
+.ntext::-webkit-scrollbar-track,
+.nedit::-webkit-scrollbar-track { background: transparent; }
+.ntext::-webkit-scrollbar-thumb,
+.nedit::-webkit-scrollbar-thumb {
+  background: rgba(94,62,24,0.3);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.ntext::-webkit-scrollbar-thumb:hover,
+.nedit::-webkit-scrollbar-thumb:hover { background: rgba(94,62,24,0.5); background-clip: padding-box; }
 
 /* ── 체크리스트 줄 (A22): "- [ ] " 마커 줄만 앱이 파싱해 createElement 로 렌더 ── */
 .check-line { display: flex; align-items: flex-start; gap: 7px; }
@@ -426,7 +450,10 @@ body.font-gothic .ntext, body.font-gothic .nedit { font-family: "Malgun Gothic",
   border: 3px solid rgba(255,255,255,0.9);
   border-radius: 2px;
   box-shadow: 0 2px 6px rgba(46,26,9,0.28);
-  flex: none;
+  /* 세로로 긴 사진도 노트 상한(480px) 안에 담기게 — 비율은 contain 으로 지킨다 */
+  flex: 0 1 auto;
+  min-height: 0;
+  object-fit: contain;
 }
 .pnote.has-img .ntext { padding-top: 8px; }
 
@@ -458,6 +485,36 @@ body.font-gothic .ntext, body.font-gothic .nedit { font-family: "Malgun Gothic",
   cursor: pointer;
 }
 .skin-opt:hover { background: #fff; }
+
+/* ── 노트 메뉴의 크기 프리셋 · 다른 보드로 보내기 (발주 #11 — 스킨 행과 같은 생김새) ── */
+.size-opts, .move-opts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-left: auto;
+  max-width: 240px;
+}
+.size-opt, .move-opt {
+  flex: none;
+  max-width: 118px;
+  overflow: hidden;
+  border: 1px solid rgba(94,62,24,0.35);
+  background: rgba(255,255,255,0.7);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #4a3421;
+  padding: 2px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.size-opt:hover, .move-opt:hover { background: #fff; }
+.move-none { font-size: 14px; opacity: 0.65; }
+.ctx-item.soon .size-opt, .ctx-item.soon .move-opt { cursor: default; }
+/* 항목 전체가 목록형이라 위/아래 여백을 조금 더 준다 */
+.ctx-item.ctx-row-wrap { align-items: flex-start; padding-top: 6px; padding-bottom: 6px; }
 
 /* ── 테마 프리셋 (A36): 기본=코르크(assets 질감 유지 — A10), 다크, 미니멀 화이트 ── */
 html[data-theme-preset="dark"] body { background: #232130; }
@@ -630,6 +687,14 @@ html[data-theme-preset="dark"] .seg button:hover { background: rgba(172,162,215,
 html[data-theme-preset="dark"] .board-add { border-color: rgba(160,150,200,0.55); color: #cfc8e6; }
 html[data-theme-preset="dark"] .sep,
 html[data-theme-preset="dark"] .ctx-sep { background: rgba(160,150,200,0.3); }
+html[data-theme-preset="dark"] .size-opt,
+html[data-theme-preset="dark"] .move-opt {
+  color: #e8e4f4;
+  background: rgba(172,162,215,0.16);
+  border-color: rgba(160,150,200,0.4);
+}
+html[data-theme-preset="dark"] .size-opt:hover,
+html[data-theme-preset="dark"] .move-opt:hover { background: rgba(172,162,215,0.3); }
 html[data-theme-preset="dark"] .sp-sec { border-top-color: rgba(160,150,200,0.3); }
 html[data-theme-preset="dark"] .seg,
 html[data-theme-preset="dark"] .gauge { background: rgba(172,162,215,0.14); }
@@ -1469,13 +1534,19 @@ html[data-pro-theme="lavender"] #board {
 
   /* 크기 클램프 (px) */
   var NOTE_MIN_PX = 120;             // 노트 한 변 최소 (A23)
-  var NOTE_MAX_PX = 480;             // 노트 한 변 최대 (A23)
+  var NOTE_MAX_PX = 480;             // 노트 한 변 최대 (A23) — 자동 성장 상한도 같은 값
+  /* 우클릭 [크기] 프리셋 — 모두 NOTE_MIN_PX~NOTE_MAX_PX 안의 정사각 값 */
+  var NOTE_SIZE_PRESETS = [['작게', 150], ['보통', 210], ['크게', 300], ['아주 크게', 420]];
   var EMOJI_ST_MIN_PX = 24;          // 이모지 스티커 font-size 클램프
   var EMOJI_ST_MAX_PX = 200;
   var PHOTO_ST_MIN_PX = 64;          // 사진 스티커 너비 클램프
   var PHOTO_ST_MAX_PX = 420;
 
   var LS_QUOTA_BYTES = 5 * 1024 * 1024;   // localStorage 용량 게이지 기준 (file:// 오리진 추정치)
+
+  /* 노트 자동 성장 상한(CSS max-height)을 수동 리사이즈 상한과 한 값으로 묶는다 —
+     상한 숫자는 NOTE_MAX_PX 한 곳에만 있고 CSS 는 --note-max 로 받아 쓴다. */
+  try { document.documentElement.style.setProperty('--note-max', NOTE_MAX_PX + 'px'); } catch (err) { /* 무시 */ }
 
   var board = document.getElementById('board');
   var welcomeEl = document.getElementById('welcome');
@@ -1611,6 +1682,7 @@ html[data-pro-theme="lavender"] #board {
   }
 
   function showNoticeCore(msg, withUndo, dur) {
+    undoBoardSafe = false;   /* 새 안내가 뜨면 보드 전환 유지 자격은 초기화 */
     noticeTextEl.textContent = msg;
     if (withUndo) noticeUndoEl.removeAttribute('hidden');
     else noticeUndoEl.setAttribute('hidden', '');
@@ -1624,11 +1696,16 @@ html[data-pro-theme="lavender"] #board {
   /* 삭제·정리 직후 안내 — "실행 취소" 단추 포함, 최소 5초 이상 유지 (A20).
      handler 를 주면 그 동작을, 없으면 기본(노트 삭제 되돌리기)을 실행한다. */
   var undoHandler = null;
-  function showUndoNotice(msg, handler) {
+  /* 이 토스트의 실행 취소가 보드를 가리지 않고(=bid-aware) 안전한가.
+     기본값 false — 되돌리기가 활성 보드 몫이면 보드를 옮길 때 토스트를 걷는다 (switchBoard). */
+  var undoBoardSafe = false;
+  function showUndoNotice(msg, handler, boardSafe) {
     undoHandler = typeof handler === 'function' ? handler : null;
     showNoticeCore(msg, true, UNDO_NOTICE_MS);
+    undoBoardSafe = !!boardSafe;
   }
   function hideNotice() {
+    undoBoardSafe = false;
     noticeEl.classList.remove('show');
     noticeUndoEl.setAttribute('hidden', '');
   }
@@ -1636,6 +1713,7 @@ html[data-pro-theme="lavender"] #board {
   noticeUndoEl.addEventListener('click', function () {
     var h = undoHandler;
     undoHandler = null;
+    undoBoardSafe = false;
     if (h) h();
     else undoLastDelete();
   });
@@ -2924,10 +3002,14 @@ html[data-pro-theme="lavender"] #board {
     } catch (err) { /* 무시 */ }
   }
 
-  function removeNote(id) {
+  /* 떼어내기 공통 경로 — 모델·DOM·저장소에서 즉시 없앤다 (안내 토스트는 부르는 쪽 몫).
+     opts.undo   = 되돌리기 버퍼(메모리)에 쌓는다 — 삭제만 해당, 보드 이동은 자체 되돌리기를 쓴다.
+     opts.unlink = 연동 일정(📌)도 함께 뗀다 — 삭제만 해당, 보드 이동은 노트가 살아 있으니 유지한다. */
+  function detachNote(id, opts) {
+    var o = opts || {};
     /* 되돌리기 버퍼는 메모리에만 둔다 — 저장소에서는 즉시 사라져야 한다 (A20 지연 삭제 금지) */
     var removed = findNote(id);
-    if (removed) {
+    if (removed && o.undo) {
       undoStack.push(noteToPlain(removed));
       if (undoStack.length > 20) undoStack.shift();
     }
@@ -2955,9 +3037,14 @@ html[data-pro-theme="lavender"] #board {
         setTimeout(drop, 400);
       }
     }
-    if (removed && removed.date) syncNoteToCalendar(id, '', '');   /* 연동 일정도 함께 떼기 (S1) */
+    if (removed && removed.date && o.unlink) syncNoteToCalendar(id, '', '');   /* 연동 일정도 함께 떼기 (S1) */
     updateWelcome();
     saveNow();
+    return removed;
+  }
+
+  function removeNote(id) {
+    var removed = detachNote(id, { undo: true, unlink: true });
     if (removed) showUndoNotice('포스트잇을 떼어냈어요.');
   }
 
@@ -3750,6 +3837,135 @@ html[data-pro-theme="lavender"] #board {
     saveNow();
   }
 
+  /* ── 크기 프리셋 (우클릭 [크기]) ──
+     손잡이 드래그(A23)와 같은 자리에 같은 값을 써 넣는 또 하나의 입구다.
+     클램프도 같은 clampSize(120~480), 좌상단(left/top)은 건드리지 않는다. */
+
+  function setNoteSize(id, px) {
+    var n = findNote(id);
+    var ref = els[id];
+    if (!n || !ref) return;
+    var v = clampSize(px);
+    n.w = v;
+    n.h = v;
+    n.updatedAt = Date.now();
+    applyNoteSize(n, ref);   /* 크기만 바꾼다 — 리사이즈 ≠ 이동 */
+    playTick();              /* 직접 제스처(메뉴 클릭) 내부 */
+    saveNow();
+  }
+
+  /* ── 다른 보드로 보내기 (우클릭 메뉴) ──
+     현 보드에서는 즉시 사라지고(모델·DOM·저장소), 대상 보드 저장소에는 병합 기록으로 들어간다.
+     노트 사진은 데이터 URI 로 노트 안에 들어 있으므로(A26 — IndexedDB 는 꾸미기 전용) 그대로 따라간다.
+     되돌리기는 보드를 가리지 않는다(bid-aware): 어느 보드를 보고 있든 원 보드·원 자리로 돌아간다. */
+
+  /* 보드 저장소의 노트 목록 (손상돼 있으면 A9 규약대로 백업하고 빈 목록으로 본다) */
+  function readBoardList(bid) {
+    var sk = storeKey(bid);
+    var st = readStore(sk);
+    if (!st.ok) backupCorrupt(sk, st.raw);
+    var out = [];
+    if (st.ok) {
+      st.list.forEach(function (sn) {
+        if (sn && typeof sn === 'object' && typeof sn.id === 'string' && sn.id) out.push(sn);
+      });
+    }
+    return out;
+  }
+
+  /* 활성 보드가 아닌 보드의 저장소에만 쓴다 (활성 보드는 언제나 saveNow 병합 경로를 탄다) */
+  function writeBoardList(bid, list) {
+    try {
+      localStorage.setItem(storeKey(bid), JSON.stringify(list));
+      return true;
+    } catch (err) {
+      showNotice('저장 공간이 가득 차서 메모를 옮기지 못했어요.');
+      return false;
+    }
+  }
+
+  /* 그 보드의 '떼어냄' 표시를 지운다 — 안 지우면 다음 저장 때 병합에서 도로 걸러진다 */
+  function clearBoardDeleted(bid, id) {
+    if (bid === boardId) { delete deletedIds[id]; return; }
+    if (deletedIdsCache[bid]) delete deletedIdsCache[bid][id];
+  }
+
+  function boardDisplayName(bid) {
+    var i = boards.indexOf(bid);
+    return boardLabel(bid, i === -1 ? 0 : i);
+  }
+
+  function moveNoteToBoard(id, targetBid) {
+    var n = findNote(id);
+    if (!n || targetBid === boardId || boards.indexOf(targetBid) === -1) return;
+    var srcBid = boardId;
+    var snap = noteToPlain(n);        /* 원래 자리·순서 그대로 — 되돌리기의 원본 */
+    var ref = els[id];
+    var w = ref ? ref.root.offsetWidth : (typeof n.w === 'number' ? n.w : NOTE_W);
+    var h = ref ? ref.root.offsetHeight : (typeof n.h === 'number' ? n.h : NOTE_H);
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+
+    /* 대상 보드 목록을 읽어 같은 id 는 비우고, 맨 위 z 를 알아낸다 */
+    var list = readBoardList(targetBid);
+    var topZ = 10;
+    var kept = [];
+    list.forEach(function (sn) {
+      if (typeof sn.z === 'number' && isFinite(sn.z) && sn.z > topZ) topZ = sn.z;
+      if (sn.id !== id) kept.push(sn);
+    });
+
+    var landed = {};
+    Object.keys(snap).forEach(function (k) { landed[k] = snap[k]; });
+    landed.x = Math.max(8, Math.min(snap.x, Math.max(8, bw - w - 8)));   /* 대상 보드에서도 보이는 자리로 */
+    landed.y = Math.max(0, Math.min(snap.y, Math.max(0, bh - h - 8)));
+    landed.z = topZ + 1;                                                 /* 대상 보드 맨 앞 */
+    landed.updatedAt = Date.now();
+    kept.push(landed);
+    if (!writeBoardList(targetBid, kept)) return;   /* 쓰기 실패 = 원 보드에 그대로 둔다 */
+    clearBoardDeleted(targetBid, id);
+
+    detachNote(id, {});   /* 현 보드에서 즉시 제거 — 저장소 반영도 이 안에서 (A20 관용구) */
+    applySearch();
+    playDrop();           /* 직접 제스처(메뉴 클릭) 내부 */
+    var nm = boardDisplayName(targetBid);
+    showUndoNotice('메모를 "' + nm + '" 보드로 보냈어요.', function () {
+      undoMoveNote(id, srcBid, targetBid, snap);
+    }, true);   /* boardSafe — 대상 보드로 옮겨 간 뒤에 눌러도 안전하다 */
+  }
+
+  /* 이동 되돌리기: 대상 보드에서 빼고 원 보드·원 자리·원 z 로 되돌린다 (어느 보드에서 눌러도 동일) */
+  function undoMoveNote(id, srcBid, dstBid, snap) {
+    /* 1) 대상 보드에서 제거 — 그 보드를 보고 있으면 화면·모델까지, 아니면 저장소만 */
+    if (dstBid === boardId) {
+      detachNote(id, {});
+      applySearch();
+    } else if (boards.indexOf(dstBid) !== -1) {
+      writeBoardList(dstBid, readBoardList(dstBid).filter(function (sn) { return sn.id !== id; }));
+    }
+    /* 2) 원 보드에 복원 */
+    clearBoardDeleted(srcBid, id);
+    if (srcBid === boardId) {
+      if (!findNote(id)) {
+        var n = sanitizeList([snap])[0];
+        if (n) {
+          data.push(n);
+          renderNote(n);
+          if (n.z > zCounter) zCounter = n.z;
+        }
+      }
+      updateWelcome();
+      applySearch();
+      saveNow();
+    } else if (boards.indexOf(srcBid) !== -1) {
+      var back = readBoardList(srcBid).filter(function (sn) { return sn.id !== id; });
+      back.push(snap);
+      writeBoardList(srcBid, back);
+    }
+    playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
+    showNotice('메모를 "' + boardDisplayName(srcBid) + '" 보드로 되돌렸어요.');
+  }
+
   /* ── 노트 스킨 선택 (A27) ── */
 
   function setSkin(id, skin) {
@@ -3933,6 +4149,77 @@ html[data-pro-theme="lavender"] #board {
     return skinRow;
   }
 
+  /* 크기 행 (발주 #11): 라벨 + 정사각 프리셋 4종 — [data-note-size] / [data-size-option] */
+  function buildMenuSizeRow(id) {
+    var row = document.createElement('div');
+    row.className = 'ctx-item ctx-row-wrap';
+    row.setAttribute('data-ctx-item', '');
+    row.setAttribute('data-note-size', '');
+    var lab = document.createElement('span');
+    lab.textContent = '크기';
+    row.appendChild(lab);
+    var opts = document.createElement('span');
+    opts.className = 'size-opts';
+    NOTE_SIZE_PRESETS.forEach(function (pair) {
+      var ob = document.createElement('button');
+      ob.type = 'button';
+      ob.className = 'size-opt';
+      ob.setAttribute('data-size-option', '');
+      ob.setAttribute('data-size-px', String(pair[1]));
+      ob.textContent = pair[0];
+      ob.title = pair[1] + '×' + pair[1] + ' 로 바꿔요 (모서리를 끌어도 같은 크기가 돼요)';
+      ob.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setNoteSize(id, pair[1]);
+        closeCtxMenu();
+      });
+      opts.appendChild(ob);
+    });
+    row.appendChild(opts);
+    return row;
+  }
+
+  /* 보드 이동 행 (발주 #11): 현재 보드를 뺀 보드 목록 — [data-move-note] / [data-move-target] */
+  function buildMenuMoveRow(id) {
+    var row = document.createElement('div');
+    row.className = 'ctx-item ctx-row-wrap';
+    row.setAttribute('data-ctx-item', '');
+    row.setAttribute('data-move-note', '');
+    var lab = document.createElement('span');
+    lab.textContent = '다른 보드로 보내기';
+    row.appendChild(lab);
+    var opts = document.createElement('span');
+    opts.className = 'move-opts';
+    var others = boards.filter(function (b) { return b !== boardId; });
+    if (!others.length) {
+      row.classList.add('soon');
+      row.title = '보드가 하나뿐이에요. 새 보드를 만들면 메모를 옮길 수 있어요.';
+      var none = document.createElement('span');
+      none.className = 'move-none';
+      none.textContent = '보드 1개';
+      opts.appendChild(none);
+    } else {
+      others.forEach(function (bid) {
+        var nm = boardDisplayName(bid);
+        var ob = document.createElement('button');
+        ob.type = 'button';
+        ob.className = 'move-opt';
+        ob.setAttribute('data-move-target', '');
+        ob.setAttribute('data-bid', bid);
+        ob.textContent = nm;
+        ob.title = '이 메모를 "' + nm + '" 보드로 보내요 (토스트의 실행 취소로 되돌릴 수 있어요)';
+        ob.addEventListener('click', function (e) {
+          e.stopPropagation();
+          closeCtxMenu();
+          moveNoteToBoard(id, bid);
+        });
+        opts.appendChild(ob);
+      });
+    }
+    row.appendChild(opts);
+    return row;
+  }
+
   /* 날짜 행 (S1/A41): 날짜를 고르면 캘린더 그 날짜에 "📌 첫 줄" 일정으로 붙는다 */
   function buildMenuDateRow(id, noteForDate) {
     var dateRow = document.createElement('div');
@@ -3960,6 +4247,7 @@ html[data-pro-theme="lavender"] #board {
     ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () { bringToFront(id); }));
     ctxMenuEl.appendChild(ctxSep());
     ctxMenuEl.appendChild(buildMenuSkinRow(id));
+    ctxMenuEl.appendChild(buildMenuSizeRow(id));
     ctxMenuEl.appendChild(ctxItem('사진 넣기', function () {
       imageTargetId = id;
       noteImageInput.click();   /* 직접 제스처 — 파일 선택 창 (A26) */
@@ -3970,6 +4258,7 @@ html[data-pro-theme="lavender"] #board {
     if (noteForDate && noteForDate.date) {
       ctxMenuEl.appendChild(ctxItem('날짜 해제', function () { setNoteDate(id, ''); }));
     }
+    ctxMenuEl.appendChild(buildMenuMoveRow(id));
     ctxMenuEl.appendChild(ctxSep());
     ctxMenuEl.appendChild(ctxItem('삭제', function () {
       confirmThen(null, function () {   /* 메뉴는 이미 닫혀 앵커가 없다 — 마지막 제스처 좌표 사용 */
@@ -4393,7 +4682,9 @@ html[data-pro-theme="lavender"] #board {
     if (id === boardId) return;
     if (saveTimer) saveNow();   /* 떠나기 전 이 보드의 미저장분만 반영 */
     closeCtxMenu();
-    hideNotice();
+    /* 활성 보드 몫의 되돌리기(떼어낸 포스트잇 등)는 보드를 옮기면 무의미하므로 걷는다.
+       보드를 가리지 않는 되돌리기(다른 보드로 보내기)는 그대로 남겨 둔다. */
+    if (!undoBoardSafe) hideNotice();
     Array.prototype.forEach.call(board.querySelectorAll('.pnote'), function (el) {
       if (el.parentNode) el.parentNode.removeChild(el);
     });

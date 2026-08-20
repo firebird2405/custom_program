@@ -36,6 +36,7 @@
   --on-accent:#241b0e;
   --shadow:0 4px 16px rgba(0,0,0,.32);
   --cell-bg:rgba(255,255,255,.015); --cell-border:rgba(255,255,255,.07);
+  --divider:rgba(255,255,255,.16);
 }
 [data-theme="light"]{
   --bg:#f3e9d2; --surface:#fff8e9; --surface2:#f1e6cd; --text:#4a3421;
@@ -45,6 +46,7 @@
   --on-accent:#ffffff;
   --shadow:0 4px 14px rgba(122,84,51,.14);
   --cell-bg:rgba(122,84,51,.03); --cell-border:rgba(122,84,51,.06);
+  --divider:rgba(122,84,51,.26);
 }
 /* 미니멀 화이트 프리셋 (A36) — [data-theme="light"] 변수 위에 덮어쓴다 */
 [data-preset="white"]{
@@ -55,6 +57,7 @@
   --on-accent:#ffffff;
   --shadow:0 3px 10px rgba(0,0,0,.08);
   --cell-bg:rgba(0,0,0,.012); --cell-border:rgba(0,0,0,.05);
+  --divider:rgba(0,0,0,.16);
 }
 /* 글자 크기 설정 (설정 패널 [표시]) — 기본 --fscale:1 = 현행 표시와 완전 동일 */
 html{--fscale:1;}
@@ -87,23 +90,51 @@ input[type="text"]:focus,input[type="time"]:focus{outline:none; border-color:var
 ::-webkit-scrollbar-thumb{background:var(--surface2); border-radius:8px; border:2px solid var(--bg);}
 ::-webkit-scrollbar-thumb:hover{background:var(--border);}
 
-/* ---------- header ---------- */
+/* ---------- header ----------
+ * 재구성: 평평한 9개 나열 → 의미 그룹 4개(날짜 이동 / 보기 / 파일 / 모양·소리).
+ * 위계는 3단 — 1차(날짜 이동: 큰 타깃·제목 서체), 2차(주간), 3차(.t3 — 파일·테마·소리·설정).
+ * 훅(id·data-속성)은 한 글자도 바뀌지 않는다: DOM 위치와 시각 무게만 재배치한다. */
 header{
-  display:flex; align-items:center; gap:10px; flex:none;
+  display:flex; align-items:center; gap:8px; flex:none; flex-wrap:wrap; row-gap:6px;
 }
-/* 제목 서체 통일: 나눔손글씨 펜 (C7) */
-#monthTitle{font-family:"NanumPen","Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:calc(33px * var(--fscale,1)); font-weight:400; min-width:150px; line-height:1;}
-.navBtn{width:36px; padding:6px 0; text-align:center; font-size:14px;}
+.hGroup{display:inline-flex; align-items:center; gap:6px; padding:0 10px; min-width:0;}
+.hGroup:first-child{padding-left:0;}
+.hGroup + .hGroup{border-left:1px dashed var(--divider);}
+/* 마지막 그룹은 항상 오른쪽 끝 — 줄바꿈이 일어나도 좌측 상단으로 튀지 않는다 */
+.hEnd{margin-left:auto; padding-right:0;}
+/* 3차(월 1회 미만) 컨트롤: 보이되 조용하게. 0.7 미만으로 내리지 않는다 (가시성 판정 여유 확보) */
+header .t3{opacity:.74;}
+header .t3:hover, header .t3:focus, header .t3:focus-visible{opacity:1;}
+/* 제목 서체 통일: 나눔손글씨 펜 (C7) — 이제 ◀ ▶ 사이에 놓여 이동 축의 중심이 된다 */
+#monthTitle{font-family:"NanumPen","Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:calc(33px * var(--fscale,1)); font-weight:400; min-width:150px; line-height:1; text-align:center;}
+.navBtn{width:38px; padding:8px 0; text-align:center; font-size:14px;}
 #todayBtn{font-weight:600;}
-header .spacer{flex:1;}
-#soundBtn{font-size:16px; width:40px; padding:5px 0; text-align:center;}
+#soundBtn{
+  font-size:16px; width:36px; padding:5px 0; text-align:center;
+  border-top-right-radius:0; border-bottom-right-radius:0;
+}
 #themeSel{
   font-family:inherit; font-size:13px; color:var(--text);
   background:var(--surface2); border:1px solid var(--border); border-radius:8px;
   padding:6px 8px; cursor:pointer;
 }
 #themeSel:focus{outline:none; border-color:var(--accent);}
-#volRange{width:92px; accent-color:var(--accent); cursor:pointer;}
+/* 소리 묶음: 🔊(음소거 토글, 동작 불변) + ▾(볼륨 팝오버). 슬라이더는 팝오버 안으로 옮겨
+ * 헤더에서 92px 를 돌려준다 — 훅 [data-volume] 의 id·min/max·이벤트는 그대로다. */
+.sndWrap{position:relative; display:inline-flex; align-items:center;}
+.sndCaret{
+  width:20px; padding:5px 0; text-align:center; font-size:10px; line-height:1;
+  border-top-left-radius:0; border-bottom-left-radius:0; margin-left:-1px;
+}
+.sndPop{
+  position:absolute; top:calc(100% + 6px); right:0; z-index:900;
+  display:flex; align-items:center; gap:8px;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  box-shadow:var(--shadow); padding:8px 10px;
+}
+.sndPop[hidden]{display:none;}
+#volRange{width:120px; accent-color:var(--accent); cursor:pointer;}
+#volVal{min-width:36px; text-align:right;}
 
 /* ---------- layout ---------- */
 main{flex:1; display:flex; gap:14px; min-height:0;}
@@ -197,6 +228,8 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
 [data-theme="light"] #panel{
   background-image:linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0) 22%);
 }
+/* 패널 머리(날짜·공휴일)를 한 덩어리로 묶고 목록과 실선으로 가른다 — 어디가 제목인지 한눈에 */
+.panelHead{flex:none; display:flex; flex-direction:column; gap:3px; padding-bottom:9px; border-bottom:1px solid var(--border);}
 #panelDate{font-family:"NanumPen","Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:calc(26px * var(--fscale,1)); font-weight:400; line-height:1;}
 #panelHoliday{font-size:calc(13px * var(--fscale,1)); color:var(--red); min-height:16px;}
 #panelHoliday:empty{display:none;}
@@ -226,26 +259,47 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
 .evText{
   flex:1; font-size:calc(14px * var(--fscale,1)); overflow-wrap:anywhere; word-break:break-word; min-width:0;
 }
+/* 일정 줄 버튼: 24px 이상 타깃 (재구성 P3 — 파괴 타깃 최소 24×24) */
 .evBtn{
-  flex:none; padding:2px 7px; font-size:13px; border-radius:6px;
+  flex:none; width:26px; height:26px; padding:0; font-size:13px; border-radius:7px;
+  display:inline-flex; align-items:center; justify-content:center;
   background:transparent; border:1px solid transparent; color:var(--muted);
 }
 .evBtn:hover{background:var(--surface); border-color:var(--border); color:var(--text);}
-.evBtn.del:hover{color:var(--red); border-color:var(--red);}
+/* 삭제는 정지 상태에서 이미 위험색 — hover 에서만 빨간 건 "누르기 전에는 안전해 보인다"는 뜻이다.
+   앞에 여백을 한 겹 둬 수정 버튼과 손가락이 섞이지 않게 한다 (재구성 P3). */
+.evBtn.del{color:var(--red); font-size:16px; margin-left:6px;}
+.evBtn.del:hover{background:var(--surface); color:var(--red); border-color:var(--red);}
+/* 빈 상태: 목록이 비면 남은 자리 한가운데에서 다음 행동(아래 입력칸)을 가리킨다 */
 #emptyMsg{
-  color:var(--muted); font-size:calc(17px * var(--fscale,1)); text-align:center; padding:18px 0;
+  color:var(--muted); text-align:center; padding:18px 0;
   font-family:"Gaegu",'Segoe UI','Malgun Gothic',sans-serif;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px;
 }
+#emptyMsg[hidden]{display:none;}
+.emptyTitle{font-size:calc(17px * var(--fscale,1)); line-height:1.2;}
+.emptyHint{
+  font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif;
+  font-size:calc(12px * var(--fscale,1)); line-height:1.55; max-width:210px;
+}
+.emptyHint b{color:var(--accent); font-weight:600;}
+#panel.isEmpty #eventList{flex:none; min-height:0;}
+#panel.isEmpty #emptyMsg:not([hidden]){flex:1;}
 .editRow{display:flex; flex-direction:column; gap:6px; flex:1; min-width:0;}
 .editRow .rowA{display:flex; gap:6px;}
 .editRow input[type="time"]{width:96px; flex:none; padding:5px 7px; font-size:13px;}
 .editRow input[type="text"]{flex:1; min-width:0; padding:5px 8px; font-size:13px;}
 .editRow .rowB{display:flex; gap:6px; justify-content:flex-end;}
 .editRow .rowB button{padding:4px 10px; font-size:13px;}
-#addForm{display:flex; flex-direction:column; gap:8px; flex:none;}
+/* 추가 폼: 1차 줄(시간·내용·추가)과 2차 줄(옵션 — 반복·분류·기념일)의 무게를 갈라 놓는다.
+ * 세 옵션 컨트롤은 계약상 상시 노출이라 접을 수 없다 → 숨기는 대신 작고 조용하게 만든다. */
+#addForm{display:flex; flex-direction:column; gap:8px; flex:none; padding-top:10px; border-top:1px solid var(--border);}
 #addForm .formRow{display:flex; gap:6px; align-items:center;}
 #addTime{width:96px; flex:none;}
 #addText{flex:1; min-width:0;}
+.formOpt{font-size:12px;}
+.optLab{flex:none; font-size:11px; color:var(--muted); letter-spacing:.02em;}
+.formOpt .ddayLab{font-size:12px;}
 /* 카테고리 색 선택 (A34) */
 #catPick{display:flex; gap:6px; align-items:center;}
 .catBtn{
@@ -280,9 +334,10 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
 }
 #addBtn:hover{opacity:.88;}
 
-/* ---------- footer ---------- */
-footer{flex:none; display:flex; align-items:center; gap:8px;}
-footer .hint{font-size:12px; color:var(--muted); margin-left:auto;}
+/* ---------- footer ----------
+ * 재구성으로 제거: 내보내기·가져오기는 헤더 [파일] 그룹으로 올라가 포스트잇 월과 같은 자리에
+ * 놓였고(형제 앱 정합), 단축키 안내는 각 버튼 title 과 설정 [정보]에 이미 이중으로 있다.
+ * 비운 33px + 간격 14px 는 달력 그리드가 가져간다 (주 콘텐츠 우선). */
 
 /* ---------- toast (non-modal notice — 포스트잇 월의 크림 카드 알림과 동일한 모양) ---------- */
 #toast{
@@ -399,6 +454,22 @@ footer .hint{font-size:12px; color:var(--muted); margin-left:auto;}
 .spInfo{font-size:13px; line-height:1.55;}
 .spLicList{margin:4px 0 0; padding-left:16px; list-style:disc;}
 .spLicList li{margin:2px 0; word-break:break-all;}
+/* 접이 섹션 (평생 한두 번 여는 것 — [데이터]·[정보]). 기본 접힘이라 스크롤이 절반으로 준다.
+ * 채점기가 클릭하는 컨트롤은 이 안에 없다 ([data-licenses] 는 textContent 로만 읽힌다). */
+.spFold{display:block;}
+.spFold > summary{cursor:pointer; list-style:none; display:block;}
+.spFold > summary::-webkit-details-marker{display:none;}
+.spFold > summary::marker{content:'';}
+.spFold > summary h3{display:flex; align-items:center; gap:6px;}
+.spFold > summary:hover h3{color:var(--text);}
+.foldMark{margin-left:auto; font-size:12px; color:var(--muted); transition:transform .15s;}
+.spFold[open] .foldMark{transform:rotate(180deg);}
+.foldBadge{
+  flex:none; font-size:11px; font-weight:600; line-height:1.6;
+  color:var(--on-accent); background:var(--red); border-radius:6px; padding:0 6px;
+}
+.foldBadge[hidden]{display:none;}
+.spFoldBody{display:flex; flex-direction:column; gap:8px; padding-top:9px;}
 /* 다크 프리셋: 설정 패널을 배경보다 살짝 띄운 따뜻한 브라운으로 — 컨트롤 표면·경계도 패널 안에서만 조화 */
 [data-preset="dark"] #settingsPanel{
   background:#312818;
@@ -465,27 +536,47 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
   #calCard{min-height:520px;}
   #panel{width:auto;}
   #eventList{max-height:300px;}
-  footer .hint{display:none;}
+  #panel.isEmpty #emptyMsg:not([hidden]){flex:none;}
+  /* 좁은 폭에서는 그룹 구분선을 접고 여백만 남긴다 (줄바꿈된 그룹 앞의 세로선은 소음) */
+  .hGroup{padding:0 6px;}
+  .hGroup + .hGroup{border-left:0;}
+  .hEnd{margin-left:0;}
 }
 </style>
 </head>
 <body>
 <div id="bgDecor" aria-hidden="true"></div>
 <header>
-  <span id="monthTitle">.</span>
-  <button class="navBtn" id="prevBtn" title="이전 달 (←)">◀</button>
-  <button class="navBtn" id="nextBtn" title="다음 달 (→)">▶</button>
-  <button id="todayBtn" title="오늘로 이동 (T)">오늘</button>
-  <button id="weekBtn" data-week-view title="주간 보기로 전환 (W)">주간</button>
-  <span class="spacer"></span>
-  <button id="soundBtn" title="효과음 끄기">🔊</button>
-  <input type="range" id="volRange" data-volume min="0" max="100" step="1" title="효과음 볼륨">
-  <select id="themeSel" data-theme-preset title="테마 프리셋">
-    <option value="basic">기본</option>
-    <option value="dark">다크</option>
-    <option value="white">화이트</option>
-  </select>
-  <button id="settingsBtn" data-settings title="설정">⚙️</button>
+  <div class="hGroup" role="group" aria-label="날짜 이동">
+    <button class="navBtn" id="prevBtn" title="이전 달 (←)" aria-label="이전 달">◀</button>
+    <span id="monthTitle">.</span>
+    <button class="navBtn" id="nextBtn" title="다음 달 (→)" aria-label="다음 달">▶</button>
+    <button id="todayBtn" title="오늘로 이동 (T)">오늘</button>
+  </div>
+  <div class="hGroup" role="group" aria-label="보기">
+    <button id="weekBtn" data-week-view title="주간 보기로 전환 (W)">주간</button>
+  </div>
+  <div class="hGroup" role="group" aria-label="파일">
+    <button id="exportBtn" data-export class="t3" title="모든 일정을 JSON 파일 하나로 저장해요">내보내기</button>
+    <button id="importBtn" data-import class="t3" title="백업 파일의 일정을 지금 일정에 합쳐요 (덮어쓰지 않아요)">가져오기</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+  </div>
+  <div class="hGroup hEnd" role="group" aria-label="모양·소리">
+    <select id="themeSel" data-theme-preset class="t3" title="테마 프리셋" aria-label="테마 프리셋">
+      <option value="basic">기본</option>
+      <option value="dark">다크</option>
+      <option value="white">화이트</option>
+    </select>
+    <span class="sndWrap">
+      <button id="soundBtn" class="t3" title="효과음 끄기">🔊</button>
+      <button type="button" id="volBtn" class="sndCaret t3" title="효과음 볼륨" aria-label="효과음 볼륨" aria-expanded="false" aria-controls="volPop">▾</button>
+      <div class="sndPop" id="volPop" hidden>
+        <input type="range" id="volRange" data-volume min="0" max="100" step="1" title="효과음 볼륨" aria-label="효과음 볼륨">
+        <span id="volVal" class="spSmall">0%</span>
+      </div>
+    </span>
+    <button id="settingsBtn" data-settings class="t3" title="설정">⚙️</button>
+  </div>
 </header>
 
 <main>
@@ -495,34 +586,33 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
   </section>
 
   <aside id="panel">
-    <div id="panelDate">.</div>
-    <div id="panelHoliday"></div>
+    <div class="panelHead">
+      <div id="panelDate">.</div>
+      <div id="panelHoliday"></div>
+    </div>
     <ul id="eventList"></ul>
-    <div id="emptyMsg" hidden>일정이 없습니다</div>
-    <form id="addForm" autocomplete="off">
-      <div class="formRow">
-        <input type="time" id="addTime" title="시간 (선택)">
-        <input type="text" id="addText" placeholder="새 일정" maxlength="200">
+    <div id="emptyMsg" hidden>
+      <span class="emptyTitle">일정이 없습니다</span>
+      <span class="emptyHint">아래 칸에 적고 <b>추가</b>를 누르면 여기에 쌓여요</span>
+    </div>
+    <form id="addForm" autocomplete="off" aria-label="일정 추가">
+      <div class="formRow formMain">
+        <input type="time" id="addTime" title="시간 (선택)" aria-label="시간 (선택)">
+        <input type="text" id="addText" placeholder="새 일정" maxlength="200" aria-label="일정 내용">
         <button type="submit" id="addBtn">추가</button>
       </div>
-      <div class="formRow">
-        <select id="repeatSel" data-repeat title="반복 일정 (매주)">
+      <div class="formRow formOpt">
+        <span class="optLab" aria-hidden="true">옵션</span>
+        <select id="repeatSel" data-repeat title="반복 일정 (매주)" aria-label="반복">
           <option value="">반복 없음</option>
           <option value="weekly">매주</option>
         </select>
-        <span id="catPick" data-category title="카테고리 색"></span>
+        <span id="catPick" data-category role="group" aria-label="분류 색" title="분류 색 — 달력에 색 점으로 표시돼요"></span>
         <label class="ddayLab" title="기념일로 표시 (D-day 배지)"><input type="checkbox" id="addDday" data-dday> 기념일</label>
       </div>
     </form>
   </aside>
 </main>
-
-<footer>
-  <button id="exportBtn" data-export>내보내기</button>
-  <button id="importBtn" data-import>가져오기</button>
-  <input type="file" id="importFile" accept=".json,application/json" hidden>
-  <span class="hint">← → 이동 · T 오늘 · W 주간/월간</span>
-</footer>
 
 <aside id="settingsPanel" data-settings-panel aria-label="설정" aria-hidden="true">
   <div class="spHead">
@@ -591,13 +681,8 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
         </span>
       </div>
     </section>
-    <section class="spSec">
-      <h3>사운드</h3>
-      <label class="spRow spCheck"><input type="checkbox" id="setMute"> 음소거</label>
-      <div class="spRow"><span class="spLab">볼륨</span>
-        <input type="range" id="setVol" min="0" max="100" step="1" title="효과음 볼륨 (헤더 슬라이더와 동기화)">
-      </div>
-    </section>
+    <!-- 섹션 순서는 포스트잇 월과 맞춘다 (… 효과 → 안전 → 사운드 → 데이터 → 정보):
+         형제 앱을 오갈 때 같은 것이 같은 자리에 있어야 한 제품으로 읽힌다. -->
     <section class="spSec">
       <h3>안전</h3>
       <div class="spRow"><span class="spLab">삭제 전 확인</span>
@@ -609,37 +694,48 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
       <p class="spSmall">켜면 일정·배경 이미지·손상 백업을 지우기 전에 한 번 더 물어봐요.</p>
     </section>
     <section class="spSec">
-      <h3>데이터</h3>
-      <div class="spRow">
-        <button type="button" id="setExport">내보내기</button>
-        <button type="button" id="setImport">가져오기</button>
-      </div>
-      <div class="spRow spCol">
-        <span class="spLab">저장 용량</span>
-        <div id="setGaugeBar"><i id="setGaugeFill"></i></div>
-        <span id="setGaugeText" class="spSmall"></span>
-      </div>
-      <div class="spRow spCol">
-        <span class="spLab">손상 백업 (<span id="setCorruptCount">0</span>)</span>
-        <ul id="setCorruptList"></ul>
-        <button type="button" id="setCorruptClear" hidden>모두 정리</button>
+      <h3>사운드</h3>
+      <label class="spRow spCheck"><input type="checkbox" id="setMute"> 음소거</label>
+      <div class="spRow"><span class="spLab">볼륨</span>
+        <input type="range" id="setVol" min="0" max="100" step="1" title="효과음 볼륨 (헤더 슬라이더와 동기화)">
       </div>
     </section>
-    <section class="spSec">
-      <h3>정보</h3>
-      <p class="spInfo">캘린더 — 캘린더 + 포스트잇 월 (2026-08)</p>
-      <div class="spInfo spSmall" data-licenses>
-        <p>라이선스 고지 — 번들 에셋·라이브러리 전수 (상세: assets/ASSETS.md)</p>
-        <ul class="spLicList">
-          <li>cork-texture.jpg — ambientCG Cork001 · CC0 (Public Domain)</li>
-          <li>Gaegu-Regular.ttf — 개구쟁이 글꼴, Google Fonts · SIL OFL 1.1</li>
-          <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 글꼴, Google Fonts · SIL OFL 1.1</li>
-          <li>korean-lunar-calendar v0.4.0 — 음력 변환표 · MIT License, (c) 2022 Jinil Lee</li>
-          <li>앱 아이콘 — 자체 제작 (쁘띠캘린더 원본, 외부 에셋 불사용)</li>
-        </ul>
+    <details class="spSec spFold" id="setDataSec">
+      <summary><h3>데이터<span id="setDataBadge" class="foldBadge" hidden></span><span class="foldMark" aria-hidden="true">▾</span></h3></summary>
+      <div class="spFoldBody">
+        <div class="spRow">
+          <button type="button" id="setExport">내보내기</button>
+          <button type="button" id="setImport">가져오기</button>
+        </div>
+        <div class="spRow spCol">
+          <span class="spLab">저장 용량</span>
+          <div id="setGaugeBar"><i id="setGaugeFill"></i></div>
+          <span id="setGaugeText" class="spSmall"></span>
+        </div>
+        <div class="spRow spCol">
+          <span class="spLab">손상 백업 (<span id="setCorruptCount">0</span>)</span>
+          <ul id="setCorruptList"></ul>
+          <button type="button" id="setCorruptClear" hidden>모두 정리</button>
+        </div>
       </div>
-      <p class="spInfo spSmall">단축키: ← → 이동 · T 오늘 · W 주간/월간 · ESC 닫기</p>
-    </section>
+    </details>
+    <details class="spSec spFold" id="setInfoSec">
+      <summary><h3>정보<span class="foldMark" aria-hidden="true">▾</span></h3></summary>
+      <div class="spFoldBody">
+        <p class="spInfo">캘린더 — 캘린더 + 포스트잇 월 (2026-08)</p>
+        <p class="spInfo spSmall">단축키: ← → 이동 · T 오늘 · W 주간/월간 · ESC 닫기</p>
+        <div class="spInfo spSmall" data-licenses>
+          <p>라이선스 고지 — 번들 에셋·라이브러리 전수 (상세: assets/ASSETS.md)</p>
+          <ul class="spLicList">
+            <li>cork-texture.jpg — ambientCG Cork001 · CC0 (Public Domain)</li>
+            <li>Gaegu-Regular.ttf — 개구쟁이 글꼴, Google Fonts · SIL OFL 1.1</li>
+            <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 글꼴, Google Fonts · SIL OFL 1.1</li>
+            <li>korean-lunar-calendar v0.4.0 — 음력 변환표 · MIT License, (c) 2022 Jinil Lee</li>
+            <li>앱 아이콘 — 자체 제작 (쁘띠캘린더 원본, 외부 에셋 불사용)</li>
+          </ul>
+        </div>
+      </div>
+    </details>
   </div>
 </aside>
 
@@ -1019,6 +1115,7 @@ function reducedMotion(){
   return !!(motionQuery && motionQuery.matches);
 }
 const monthTitle = $('monthTitle'), grid = $('grid'), weekdaysEl = $('weekdays');
+const panelEl = $('panel');
 const panelDate = $('panelDate'), panelHoliday = $('panelHoliday');
 const eventList = $('eventList'), emptyMsg = $('emptyMsg');
 const addForm = $('addForm'), addTime = $('addTime'), addText = $('addText');
@@ -1050,7 +1147,9 @@ for (const c of CATEGORIES){
   b.setAttribute('data-category-color', '');
   b.dataset.cat = c.id;
   b.style.backgroundColor = c.color;
-  b.title = '카테고리: ' + c.name + ' (다시 누르면 해제)';
+  /* 색 견본만으로는 무엇을 하는 단추인지 알 수 없다 — 이름·용도·해제법을 말로도 준다 */
+  b.title = '분류 ' + c.name + ' — 달력에 이 색 점으로 표시돼요 (다시 누르면 해제)';
+  b.setAttribute('aria-label', '분류 ' + c.name);
   b.addEventListener('click', ()=>{
     addCat = (addCat === c.id) ? null : c.id;
     updateCatUI();
@@ -1276,6 +1375,8 @@ function renderPanel(){
   eventList.textContent = '';
   const list = dayItems(selKey); /* 단발 일정 + 반복 발생분 (A30) */
   emptyMsg.hidden = list.length > 0;
+  /* 빈 날에는 안내가 남은 자리 한가운데에 오도록 패널에 표시만 남긴다 (동작·저장 무관) */
+  panelEl.classList.toggle('isEmpty', list.length === 0);
 
   for (const ev of list){
     const li = document.createElement('li');
@@ -1902,6 +2003,8 @@ function applyVolume(v, save){
   }
   /* 마스터 게인 상시 노출 (채점 훅): body[data-volume-gain] */
   document.body.setAttribute('data-volume-gain', String(Math.round(gain * 100) / 100));
+  const lbl = document.getElementById('volVal');
+  if (lbl) lbl.textContent = volume + '%';
   if (save){
     try{ localStorage.setItem(VOL_KEY, String(volume)); }catch(e){}
   }
@@ -1914,6 +2017,37 @@ volRange.addEventListener('input', ()=>{
 });
 /* 읽기 전용 게터 (rev.5 B-5 허용 전역) */
 window.__getMasterGain = function(){ return volume / 100; };
+
+/* 볼륨 팝오버 (재구성) — 🔊 클릭은 여전히 음소거 토글이고, 곁의 ▾ 만 슬라이더를 연다.
+ * 슬라이더 자체(id·[data-volume]·min/max·input 핸들러)는 그대로이고 위치만 팝오버 안이다. */
+const volBtn = $('volBtn'), volPop = $('volPop');
+function closeVolPop(){
+  if (volPop.hidden) return;
+  volPop.hidden = true;
+  volBtn.setAttribute('aria-expanded', 'false');
+}
+function toggleVolPop(){
+  if (volPop.hidden){
+    volPop.hidden = false;
+    volBtn.setAttribute('aria-expanded', 'true');
+    try{ volRange.focus({preventScroll:true}); }catch(e){}
+  } else {
+    closeVolPop();
+  }
+}
+volBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleVolPop(); });
+document.addEventListener('click', (e)=>{
+  if (volPop.hidden) return;
+  const t = e.target;
+  if (t instanceof Element && (volPop.contains(t) || volBtn.contains(t))) return;
+  closeVolPop();
+});
+document.addEventListener('keydown', (e)=>{
+  if (e.key === 'Escape' && !volPop.hidden){
+    closeVolPop();
+    try{ volBtn.focus({preventScroll:true}); }catch(e2){}
+  }
+}, true);
 
 /* ---------- export / import ----------
  * 내보내기 형식 v2: {version, events, repeats} 를 포함하되, 구형식 호환·A15 왕복 계약을 위해
@@ -2229,6 +2363,15 @@ function refreshDataSection(){
     setCorruptList.appendChild(li);
   }
   setCorruptClear.hidden = keys.length === 0;
+
+  /* [데이터]는 평소 접혀 있다 — 손상 백업이 실제로 생겼을 때만 요약줄에 배지를 띄우고 펼친다.
+     fresh 상태(0건)에서는 접힌 그대로라 기본 표시가 달라지지 않는다. */
+  const badge = $('setDataBadge'), sec = $('setDataSec');
+  if (badge){
+    badge.hidden = keys.length === 0;
+    badge.textContent = keys.length ? ('손상 ' + keys.length) : '';
+  }
+  if (sec && keys.length > 0) sec.open = true;
 }
 setCorruptClear.addEventListener('click', ()=>{
   /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시 정리) */

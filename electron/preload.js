@@ -14,10 +14,14 @@
 //     기계 구동 스텝 엔진을 주입한다. 각 사용자 액션 단계는 엄격 가시
 //     [data-onboarding-target] 정확히 1개가 "지금 조작할 실제 앱 UI"를 지목하고,
 //     속성값이 액션을 선언한다 (click/fill/press:<Key>/drag:<CSS셀렉터>).
-//     여정: 환영(자동) → ＋ 새 포스트잇 클릭 → 노트 실제 타이핑(fill) → 꾸미기 열기
-//     → 스티커 실제 드래그 부착(drag:#board) → 완료(자동) — 사용자 액션 4회 (≤8 계약).
+//     여정(최소화 후 4단계 — 전부 "직접 해 보는" 단계): ＋ 새 포스트잇 클릭 →
+//     노트 실제 타이핑(fill) → 꾸미기 열기 → 스티커 실제 드래그 부착(drag:#board).
+//     읽기만 하는 자동 슬라이드(환영·축하)는 제거하고 각각 첫 단계 문구·완료 토스트로
+//     흡수했다 — 사용자 액션은 그대로 4회 (≤8 계약).
 //     [data-onboarding-skip] 상시 표시 + 설정 패널에 [data-onboarding-replay] 주입.
 //     스텝 전진은 "사용자 발행 입력 액션"(isTrusted)만 계수한다 (자동 전진 계수 금지).
+//     대체 장치(셸 레이어): 완료·건너뛰기 토스트와 "첫 우클릭" 힌트 칩 — 전부
+//     pointerEvents:none 비상호작용 오버레이라 앱 조작 경로를 건드리지 않는다.
 //   A42 rev.7 — 분리 모드에서만 양 앱 설정 패널에 [창 모드] 섹션을 주입해
 //     재병합 진입점 [data-merge]("🔗 한 창으로 합치기")를 제공한다. 병합 모드의
 //     셸 UI(탭바·[data-split]·[data-shell-settings])는 tabbar.html 소관.
@@ -139,6 +143,96 @@ function lsGet(key) {
 }
 function lsSet(key, value) {
   try { localStorage.setItem(key, value); } catch (_err) { /* 저장 불가 시 UI만 유지 */ }
+}
+
+// ── 셸 비상호작용 힌트 오버레이 (토스트·칩) ─────────────────────────────────
+// 온보딩을 4단계로 줄이면서 "읽기 전용 슬라이드"가 하던 일을 넘겨받은 대체 장치.
+// 규칙: (1) pointerEvents:none — 앱의 클릭·드래그 경로를 절대 가로채지 않는다,
+//       (2) 모션은 transform/opacity 뿐, (3) prefers-reduced-motion 과 앱의
+//       [효과] 설정(body.fx-calm / body.fx-off)을 존중해 즉시 표시로 강등,
+//       (4) 채점 훅과 겹치지 않는 자체 속성([data-shell-hint])만 쓴다.
+
+/** 모션을 써도 되는가 — reduced-motion·앱 [효과] 설정 존중 */
+function motionOk() {
+  try {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+  } catch (_err) { /* matchMedia 불가 환경 — 모션 허용 판단만 계속 */ }
+  try {
+    const cl = document.body && document.body.classList;
+    if (cl && (cl.contains('fx-off') || cl.contains('fx-calm'))) return false;
+  } catch (_err) { /* 무해 */ }
+  return true;
+}
+
+const HINT_BASE = {
+  ...CARD_SKIN,
+  position: 'fixed',
+  zIndex: '2147483400',            // 온보딩 카드(…500)보다 아래
+  maxWidth: '360px',
+  padding: '10px 16px',
+  pointerEvents: 'none',           // 비상호작용 — 앱 조작 무간섭 (계약)
+  textAlign: 'center'
+};
+
+const hintTimers = new Map();      // place → { node, hide, kill } — 자리별 1개만 유지
+
+/**
+ * 짧은 안내 오버레이 1개를 띄운다 (자동 소멸).
+ * @param {string} text  안내 문구 (textContent 로만 주입)
+ * @param {number} ms    표시 시간
+ * @param {'bottom'|'bottomLeft'} place  자리 (자리마다 최신 1개만 산다)
+ */
+function shellHint(text, ms, place) {
+  if (!document.body) return null;
+  const spot = place || 'bottom';
+  const prev = hintTimers.get(spot);
+  if (prev) prev.kill();
+
+  const node = el('div', HINT_BASE, text);
+  node.setAttribute('data-shell-hint', spot);
+  node.setAttribute('role', 'status');
+  node.setAttribute('aria-live', 'polite');
+  if (spot === 'bottomLeft') {
+    Object.assign(node.style, { left: '16px', bottom: '16px', textAlign: 'left', fontSize: '13px' });
+  } else {
+    Object.assign(node.style, { left: '50%', bottom: '24px', transform: 'translateX(-50%)' });
+  }
+  const shift = spot === 'bottomLeft' ? 'translateY(8px)' : 'translateX(-50%) translateY(8px)';
+  const rest = spot === 'bottomLeft' ? 'none' : 'translateX(-50%)';
+
+  const anim = motionOk();
+  if (anim) {
+    node.style.opacity = '0';
+    node.style.transform = shift;
+    node.style.transition = 'opacity .22s ease, transform .22s ease';
+  }
+  document.body.appendChild(node);
+  if (anim) {
+    // 다음 프레임에 목표값 — 첫 페인트 전 전환이 삼켜지지 않게
+    requestAnimationFrame(function () {
+      node.style.opacity = '1';
+      node.style.transform = rest;
+    });
+  }
+
+  let hideTimer = null;
+  let dropTimer = null;
+  const kill = function () {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (dropTimer) { clearTimeout(dropTimer); dropTimer = null; }
+    if (node.isConnected) node.remove();
+    if (hintTimers.get(spot) && hintTimers.get(spot).node === node) hintTimers.delete(spot);
+  };
+  const hide = function () {
+    if (!node.isConnected) return;
+    if (!motionOk()) { kill(); return; }
+    node.style.opacity = '0';
+    node.style.transform = shift;
+    dropTimer = setTimeout(kill, 260);
+  };
+  hideTimer = setTimeout(hide, Math.max(600, ms || 2600));
+  hintTimers.set(spot, { node: node, hide: hide, kill: kill });
+  return node;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -298,7 +392,8 @@ async function initMigrateUi() {
 //  - fresh 첫 실행에만 오버레이([data-onboarding]) 표시 — postit-onboarded 존재 시 미표시.
 //  - 사용자 액션 단계 = 엄격 가시 [data-onboarding-target] "정확히 1개", 속성값이 액션을
 //    선언 (click=빈 값 / fill / press:<Key> / drag:<CSS셀렉터>). 자동 안내 슬라이드는
-//    target 0개 상태로 12초 내 자진 전진 (액션으로 계수되지 않는다).
+//    target 0개 상태로 12초 내 자진 전진 (액션으로 계수되지 않는다) — 최소화 이후
+//    이 엔진 기능은 남겨 두되 실제 여정에는 자동 슬라이드가 0개다 (ONBOARD_STEPS 참조).
 //  - 총 사용자 액션 ≤8 에 fill ≥1(첫 포스트잇 실제 타이핑)·drag ≥1(첫 스티커 실제 드래그).
 //  - 콘텐츠는 전부 사용자 입력분 — 온보딩이 노트·스티커를 자동 생성하면 FAIL (굿하트 차단).
 //    셸이 발행하는 유일한 합성 이벤트는 "사용자 드래그 1회가 끝난 순간" 팔레트 단추의
@@ -309,22 +404,35 @@ async function initMigrateUi() {
 
 const ONBOARDED_KEY = 'postit-onboarded';      // additive 키 — 값 존재 = 첫 실행 아님
 
-// 여정: 환영(자동) → ＋ 새 포스트잇 클릭 → 노트 실제 타이핑(fill) → 꾸미기 열기(click)
-//      → 스티커 실제 드래그 부착(drag:#board) → 완료(자동). 사용자 액션 4회 (≤8 계약).
-// find = 지금 조작할 실제 앱 UI 셀렉터. markDelay = 패널 슬라이드(0.28s)가 끝난 뒤에야
-// 지목한다 — 전환 중 좌표로 드래그 시작점이 빗나가지 않게.
+// 여정(최소화): ＋ 새 포스트잇 클릭 → 노트 실제 타이핑(fill) → 꾸미기 열기(click)
+//      → 스티커 실제 드래그 부착(drag:#board). 4단계 = 사용자 액션 4회 (≤8 계약).
+//
+// 최소화 원칙 — "읽기만 하는 단계는 단계가 아니다":
+//   · 환영 슬라이드(자동 2.6s) 삭제 → 인사말을 1단계 문구에 흡수. 앱의 첫 화면 안내
+//     카드(#welcome)가 이미 같은 말을 하고 있어 슬라이드는 순수 중복이었다.
+//   · 축하 슬라이드(자동 2.4s) 삭제 → 완료 토스트(비상호작용)로 흡수. 끝난 뒤의 칭찬은
+//     화면을 붙잡을 이유가 없다.
+//   → 첫 실행에서 가만히 기다리는 시간 5.0s 제거, 단계 표시 6 → 4.
+//   ※ 액션 단계 4개는 서로가 서로의 전제라 더 줄일 수 없다 (타이핑하려면 노트가,
+//     스티커를 끌려면 꾸미기 서랍이 있어야 한다). A47 은 fill ≥1·drag ≥1 을 요구한다.
+//
+// 문구 규칙: 한 단계 한 문장, 지금 누를 것의 이름을 그대로 부른다.
+// find = 지금 조작할 실제 앱 UI 셀렉터. markDelay = 전환(앱 렌더·패널 슬라이드 0.28s)이
+// 끝난 뒤에야 지목한다 — 전환 중 좌표로 클릭·드래그 시작점이 빗나가지 않게.
 const ONBOARD_STEPS = [
-  { auto: 2600, text: '반가워요, 포스트잇 월이에요! 🌷 첫 포스트잇을 함께 붙여 볼까요?' },
-  { find: '[data-add-note]', action: 'click',
-    text: '먼저 위의 "＋ 새 포스트잇" 단추를 눌러 보세요.' },
+  { find: '[data-add-note]', action: 'click', markDelay: 400,
+    text: '반가워요! 🌷 "＋ 새 포스트잇"을 눌러 첫 장을 붙여 보세요.' },
   { find: '[data-note].editing [data-note-edit]', action: 'fill',
-    text: '좋아요! 이제 마음에 담아 둔 말을 적어 보세요. 무엇이든 좋아요. ✏️' },
+    text: '마음에 담아 둔 말을 적어 보세요. ✏️' },
   { find: '#decorBtn', action: 'click',
-    text: '멋진 첫 노트예요! 이번엔 🎨 단추로 꾸미기 서랍을 열어 볼까요?' },
+    text: '이번엔 🎨 를 눌러 꾸미기 서랍을 열어요.' },
   { find: '#dpStSeason button', action: 'drag:#board', markDelay: 550,
-    text: '마음에 드는 스티커를 꾹 잡고 보드로 끌어와 붙여 보세요. 🌸' },
-  { auto: 2400, text: '참 잘했어요! 🎉 이 보드는 이제 온전히 당신의 자리예요.' }
+    text: '스티커를 잡고 보드로 끌어와 붙여요. 🌸' }
 ];
+
+// 온보딩이 끝난 뒤의 대체 장치 문구 (읽기 전용 슬라이드를 대신한다)
+const OB_DONE_TEXT = '다 됐어요! 🎉 이 보드는 이제 온전히 당신의 자리예요.';
+const OB_SKIP_TEXT = '안내를 접었어요. ⚙️ 설정 → "처음 안내 다시 보기"로 언제든 다시 볼 수 있어요.';
 
 let onboardingActive = false;                  // 중복 기동 방지 (재실행 버튼 연타 등)
 
@@ -492,6 +600,12 @@ function startOnboarding() {
     onboardingActive = false;
     lsSet(ONBOARDED_KEY, mode);                 // 완료 플래그 정본 — 재기동 시 재표시 금지
     petitApi.onboarding.setDone().catch(function () { /* 스텁 실패 무해 — 정본은 localStorage */ });
+    // 삭제한 자동 슬라이드의 대체 장치 — 화면을 붙잡지 않는 비상호작용 토스트.
+    // 건너뛰기 쪽은 "되돌아오는 길"을 알려 준다 (단계를 줄인 만큼 재진입이 중요하다).
+    try {
+      shellHint(mode === 'skip' ? OB_SKIP_TEXT : OB_DONE_TEXT, mode === 'skip' ? 4200 : 2800, 'bottom');
+    } catch (_err) { /* 힌트 실패는 앱 무영향 */ }
+    armCtxHint();                               // 이제부터 "첫 우클릭" 힌트를 지켜본다
   }
 
   // ── 전진 판정: 사용자 발행(isTrusted) 입력만 계수 (합성 이벤트·자동 전진 계수 금지) ──
@@ -572,10 +686,59 @@ function injectOnboardingReplay() {
   panel.appendChild(sec);
 }
 
+// ── 대체 장치: "첫 우클릭" 힌트 (온보딩 밖에서 딱 한 번) ────────────────────
+// 온보딩을 4단계로 줄이면서 "우클릭 메뉴"는 아예 가르치지 않기로 했다. 대신 온보딩이
+// 끝난 뒤(또는 이미 끝낸 프로필에서) 첫 메모가 생겼을 때 한 번만, 화면을 붙잡지 않는
+// 칩으로 알린다. 사용자가 먼저 우클릭했다면 가르칠 것이 없으므로 조용히 물러난다.
+// 앱 첫 화면의 빈 상태 안내는 앱이 이미 담당한다(postit.html #welcome — 붙이기·옮기기·
+// 고치기·색·떼어내기 5줄). 셸이 같은 말을 겹쳐 쓰지 않는다 (원본 무수정·중복 금지).
+const CTX_HINT_KEY = 'postit-hint-ctx';        // additive 키 — 1회성 표시 플래그
+const CTX_HINT_TEXT = '메모를 마우스 오른쪽 단추로 눌러 보세요 — 색·크기·사진·날짜·삭제가 거기 다 있어요.';
+
+let ctxHintTimer = null;                       // 표시 조건 감시 (조건 충족·5분 경과 시 해제)
+let ctxHintBound = false;                      // contextmenu 관찰자 1회 등록
+
+function markCtxHintSeen() {
+  lsSet(CTX_HINT_KEY, '1');
+  if (ctxHintTimer) { clearInterval(ctxHintTimer); ctxHintTimer = null; }
+}
+
+function armCtxHint() {
+  if (PAGE !== 'postit' || ctxHintTimer) return;
+  if (lsGet(CTX_HINT_KEY) !== null) return;    // 이미 본 프로필 — 두 번 말하지 않는다
+  if (!ctxHintBound) {
+    ctxHintBound = true;
+    document.addEventListener('contextmenu', function () {
+      markCtxHintSeen();                       // 스스로 찾아냈다 — 힌트 불요
+      const h = hintTimers.get('bottomLeft');
+      if (h) h.hide();
+    }, true);
+  }
+  const started = Date.now();
+  ctxHintTimer = setInterval(function () {
+    try {
+      if (lsGet(CTX_HINT_KEY) !== null) { markCtxHintSeen(); return; }
+      if (Date.now() - started > 300000) {     // 5분간 메모가 없으면 지켜보기를 그만둔다
+        clearInterval(ctxHintTimer);
+        ctxHintTimer = null;
+        return;
+      }
+      if (onboardingActive) return;            // 온보딩 중에는 말을 겹치지 않는다
+      if (hintTimers.get('bottom')) return;    // 완료·건너뛰기 토스트가 물러난 뒤에 (한 번에 한 마디)
+      if (!document.querySelector('[data-note]')) return;  // 붙일 메모가 생긴 뒤에만 의미가 있다
+      markCtxHintSeen();                       // 플래그 먼저 — 중복 표시 차단
+      shellHint(CTX_HINT_TEXT, 9000, 'bottomLeft');
+    } catch (_err) { /* 무해 */ }
+  }, 1200);
+}
+
 function initOnboarding() {
   if (PAGE !== 'postit') return;
   injectOnboardingReplay();                    // 재실행 진입점은 항상 준비 (완료·건너뛰기 후 포함)
-  if (lsGet(ONBOARDED_KEY) !== null) return;   // fresh userData 에서만 자동 표시
+  if (lsGet(ONBOARDED_KEY) !== null) {         // fresh userData 에서만 자동 표시
+    armCtxHint();                              // 이미 끝낸 프로필 — 우클릭 힌트만 지켜본다
+    return;
+  }
   // 앱 초기화(load)가 끝난 뒤 시작 — fresh 첫 기동의 무거운 초기화와 첫 클릭이
   // 경합하지 않게 한다 (오버레이는 load 직후 표시 — 15초 표시 계약에 충분).
   if (document.readyState === 'complete') startOnboarding();

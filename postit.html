@@ -55,6 +55,7 @@ body {
   align-items: center;
   max-width: calc(100vw - 28px);
   gap: 10px;
+  row-gap: 8px;
   padding: 8px 16px;
   background: linear-gradient(180deg, rgba(255,251,240,0.97), rgba(246,236,214,0.97));
   border-radius: 14px;
@@ -84,7 +85,21 @@ body {
 .add-btn:hover { filter: brightness(1.05); }
 .add-btn:active { box-shadow: 0 1px 0 rgba(122,84,34,0.5), 0 2px 5px rgba(60,35,10,0.28); }
 .sep { width: 1px; height: 26px; background: rgba(94,62,24,0.25); }
+/* 도구 그룹 — 같은 일을 하는 컨트롤끼리 한 덩이로 묶는다.
+   컨트롤을 없애거나 숨기지 않는다: 배치·시각 위계만 바꾼다 (훅·핸들러·기본 동작 불변). */
+.tb-group { display: inline-flex; align-items: center; gap: 8px; }
+.tb-group + .tb-group { padding-left: 10px; border-left: 1px dashed rgba(94,62,24,0.28); }
+/* 3차 컨트롤(월 1회 미만): 자리는 지키되 무게만 낮춘다 — hover/focus 에서 온전히 돌아온다.
+   opacity 는 0.7 미만으로 내리지 않는다 (가시성 판정·저시력 사용자 모두 보호). */
+.tool-btn.t3, .sndbtn.t3 { opacity: 0.74; }
+.tool-btn.t3 { font-size: 14px; padding: 4px 9px 5px; }
+.tool-btn.t3:hover, .tool-btn.t3:focus-visible,
+.sndbtn.t3:hover, .sndbtn.t3:focus-visible { opacity: 1; }
 .palette { display: inline-flex; align-items: center; gap: 6px; }
+/* 고를 노트가 없을 때(첫 화면)의 팔레트 — 무반응 대신 "아직 쓸 수 없음"을 눈으로 알린다.
+   클릭 경로·핸들러는 그대로 두고(disabled 미사용) 표시만 바꾼다 (A3 계약 보호). */
+.palette[data-armed="0"] .swatch { opacity: 0.62; }
+.palette[data-armed="0"] .swatch:hover { transform: none; }
 .swatch {
   width: 26px;
   height: 26px;
@@ -143,7 +158,7 @@ body {
 
 /* ── 보드 탭 (A25) ── */
 .boards { display: inline-flex; align-items: center; gap: 5px; }
-.board-tabs { display: inline-flex; align-items: center; gap: 4px; }
+.board-tabs { display: inline-flex; align-items: center; gap: 8px; }
 .board-tab {
   font-family: inherit;
   font-size: 15px;
@@ -163,44 +178,50 @@ body {
   color: #4a3421;
   box-shadow: 0 1px 0 rgba(122,84,34,0.45);
 }
+/* "＋" 하나만으로는 "＋ 새 포스트잇"과 구별되지 않아 라벨을 붙였다 (훅·핸들러 불변) */
 .board-add {
-  width: 24px;
   height: 24px;
-  padding: 0;
+  padding: 0 8px;
   border: 1px dashed rgba(94,62,24,0.5);
   border-radius: 8px;
   background: transparent;
   color: #6b4d2e;
+  font-family: inherit;
   font-size: 13px;
+  font-weight: 700;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 .board-add:hover { background: rgba(94,62,24,0.12); }
-/* 탭 삭제 단추: hover 시에만 표시 — 기본 화면은 현행과 동일 (opt-in) */
+/* 탭 삭제 단추: "지금 열려 있는 보드"에서만 나타난다.
+   예전에는 탭을 스치기만 해도(hover) ✕ 가 떠서 "보드 전환"과 "보드 삭제"가 같은 손짓 안에 있었다.
+   이제 삭제는 이미 선택한 보드에만 열리고, 타깃도 15→22px 로 키워 오조준을 줄인다. */
 .board-tab-wrap { position: relative; display: inline-flex; }
 .board-tab-del {
   position: absolute;
-  top: -5px;
-  right: -5px;
-  width: 15px;
-  height: 15px;
+  top: -7px;
+  right: -7px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 0;
+  border: 2px solid rgba(255,251,240,0.92);
   border-radius: 50%;
-  background: #c25048;
+  background: #b3352c;
   color: #fff;
-  font-size: 9px;
-  line-height: 15px;
+  font-size: 11px;
+  line-height: 18px;
   text-align: center;
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s ease;
   z-index: 1;
 }
-.board-tab-wrap:hover .board-tab-del:not(:disabled),
-.board-tab-del:focus-visible { opacity: 1; }
+.board-tab-wrap.is-active .board-tab-del:not(:disabled),
+.board-tab-del:focus-visible { opacity: 1; pointer-events: auto; }
 .board-tab-del:disabled { cursor: not-allowed; background: #9a938a; }
-.board-tab-wrap:hover .board-tab-del:disabled { opacity: 0.55; }
+.board-tab-wrap.is-active .board-tab-del:disabled { opacity: 0.5; pointer-events: auto; }
 /* 보드 이름 인라인 편집 (더블클릭·메뉴) — 편집 중에만 존재, 기본 화면은 현행과 동일 */
 .tab-rename {
   width: 108px;
@@ -227,6 +248,43 @@ body {
   cursor: pointer;
 }
 .vol { width: 62px; accent-color: #8c5a2b; cursor: pointer; }
+/* 소리 = 분할 단추. 🔊 본체는 예전 그대로 음소거 토글이고, 옆의 작은 ▾ 가 음량 서랍을 연다.
+   슬라이더 자체는 그대로 살아 있다(id·훅·min/max·이벤트 동일) — 툴바에서 서랍으로 자리만 옮겼다. */
+.snd-wrap { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+.snd-caret {
+  width: 15px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(94,62,24,0.10);
+  color: #6b4d2e;
+  font-size: 10px;
+  line-height: 30px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0.74;
+  transition: background 0.12s ease, opacity 0.12s ease;
+}
+.snd-caret:hover, .snd-caret:focus-visible { background: rgba(94,62,24,0.22); opacity: 1; }
+.snd-caret[aria-expanded="true"] { background: rgba(94,62,24,0.26); opacity: 1; }
+.snd-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  background: linear-gradient(180deg, rgba(255,251,240,0.98), rgba(246,236,214,0.98));
+  border-radius: 11px;
+  box-shadow: 0 8px 20px rgba(30,15,5,0.4), inset 0 0 0 1px rgba(255,255,255,0.65);
+  white-space: nowrap;
+  z-index: 5;
+}
+.snd-pop[hidden] { display: none; }
+.snd-pop .vol { width: 104px; }
+.snd-pop-lab { font-size: 14px; color: #6b4d2e; }
 @media (max-width: 1450px) { .brand-word { display: none; } }
 
 /* ── 포스트잇 ── */
@@ -264,8 +322,12 @@ body {
   transform: skewX(-9deg) rotate(3deg);
   z-index: -1;
 }
+/* 고른 메모 표시: 기존 그림자는 그대로 두고 실선 신호를 더한다.
+   outline 은 레이아웃·배경색·transform 어디에도 영향이 없다 (A2 크기·A3 배경색·A4 드래그·A17 회전 무영향). */
 .pnote.active {
   box-shadow: calc(var(--rotn, 0) * 1.6px + 3px) 10px 20px rgba(46,26,9,0.38), 0 2px 5px rgba(0,0,0,0.24);
+  outline: 2px solid rgba(255,143,171,0.85);
+  outline-offset: 2px;
 }
 .pnote.dragging {
   box-shadow: calc(var(--rotn, 0) * 2px + 7px) 18px 30px rgba(35,19,6,0.44), 0 3px 9px rgba(0,0,0,0.22);
@@ -336,22 +398,24 @@ body {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: rgba(67,48,31,0.10);
   color: #5d452e;
   font-size: 12px;
-  line-height: 20px;
+  line-height: 24px;
   text-align: center;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s ease, background 0.12s ease;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
-.pnote:hover .ndel, .pnote.active:hover .ndel { opacity: 1; }
-.ndel:hover { background: rgba(67,48,31,0.24); }
+/* 고른 메모에서는 hover 없이도 보인다 — 웰컴 카드가 약속한 "✕ 단추로 떼어낼 수 있어요"와
+   A18 계약("노트 클릭(활성) 시 보이면 됨") 양쪽에 맞춘다. */
+.pnote:hover .ndel, .pnote.active .ndel { opacity: 1; }
+.ndel:hover { background: rgba(179,53,44,0.16); color: #a33228; }
 .ntext {
   flex: 1 1 auto;                /* 짧은 메모는 노트를 채우고, 긴 메모는 상한 안에서 줄어든다 */
   min-height: 0;                 /* 상한(480px)까지 자란 뒤에는 이 칸이 스크롤 영역이 된다 */
@@ -533,15 +597,15 @@ body.fx-off .pnote.ovf:not(.at-bottom) .nhint { animation: none; transition: non
     repeating-linear-gradient(180deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 20px, rgba(70,100,160,0.18) 20px, rgba(70,100,160,0.18) 21px),
     repeating-linear-gradient(90deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 20px, rgba(70,100,160,0.18) 20px, rgba(70,100,160,0.18) 21px);
 }
-.skin-opts { display: inline-flex; gap: 5px; margin-left: auto; }
+.skin-opts { display: inline-flex; gap: 4px; margin-left: auto; }
 .skin-opt {
   border: 1px solid rgba(94,62,24,0.35);
   background: rgba(255,255,255,0.7);
   border-radius: 7px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   color: #4a3421;
-  padding: 2px 7px;
+  padding: 2px 6px;
   cursor: pointer;
 }
 .skin-opt:hover { background: #fff; }
@@ -551,9 +615,9 @@ body.fx-off .pnote.ovf:not(.at-bottom) .nhint { animation: none; transition: non
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 5px;
+  gap: 4px;
   margin-left: auto;
-  max-width: 240px;
+  max-width: 300px;   /* 크기 프리셋 5개가 한 줄에 들어가는 폭 — 메뉴 높이를 한 줄 줄인다 */
 }
 .size-opt, .move-opt {
   flex: none;
@@ -563,9 +627,9 @@ body.fx-off .pnote.ovf:not(.at-bottom) .nhint { animation: none; transition: non
   background: rgba(255,255,255,0.7);
   border-radius: 7px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   color: #4a3421;
-  padding: 2px 7px;
+  padding: 2px 6px;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
@@ -576,7 +640,7 @@ body.fx-off .pnote.ovf:not(.at-bottom) .nhint { animation: none; transition: non
 .move-none { font-size: 14px; opacity: 0.65; }
 .ctx-item.soon .size-opt, .ctx-item.soon .move-opt { cursor: default; }
 /* 항목 전체가 목록형이라 위/아래 여백을 조금 더 준다 */
-.ctx-item.ctx-row-wrap { align-items: flex-start; padding-top: 6px; padding-bottom: 6px; }
+.ctx-item.ctx-row-wrap { align-items: center; padding-top: 4px; padding-bottom: 4px; }
 
 /* ── 테마 프리셋 (A36): 기본=코르크(assets 질감 유지 — A10), 다크, 미니멀 화이트 ── */
 html[data-theme-preset="dark"] body { background: #232130; }
@@ -715,6 +779,7 @@ body.frame-rose #board, body.frame-rose .decor-bg.on {
 /* ── 다크 프리셋 색 조화: 툴바·패널·메뉴·알림 (기본/화이트 프리셋은 현행 그대로) ── */
 html[data-theme-preset="dark"] .toolbar,
 html[data-theme-preset="dark"] .ctxmenu,
+html[data-theme-preset="dark"] .snd-pop,
 html[data-theme-preset="dark"] .spanel,
 html[data-theme-preset="dark"] .notice {
   background: linear-gradient(180deg, rgba(60,56,80,0.97), rgba(44,41,60,0.97));
@@ -724,10 +789,13 @@ html[data-theme-preset="dark"] .notice {
 html[data-theme-preset="dark"] .brand,
 html[data-theme-preset="dark"] .sp-head,
 html[data-theme-preset="dark"] .sp-sec h3,
+html[data-theme-preset="dark"] .sp-fold > summary,
+html[data-theme-preset="dark"] .snd-pop-lab,
 html[data-theme-preset="dark"] .ctx-item,
 html[data-theme-preset="dark"] .seg button { color: #e8e4f4; }
 html[data-theme-preset="dark"] .tool-btn,
 html[data-theme-preset="dark"] .sndbtn,
+html[data-theme-preset="dark"] .snd-caret,
 html[data-theme-preset="dark"] .board-tab,
 html[data-theme-preset="dark"] .skin-opt,
 html[data-theme-preset="dark"] .sp-cdel,
@@ -739,6 +807,7 @@ html[data-theme-preset="dark"] .stpal button {
 }
 html[data-theme-preset="dark"] .tool-btn:hover,
 html[data-theme-preset="dark"] .sndbtn:hover,
+html[data-theme-preset="dark"] .snd-caret:hover,
 html[data-theme-preset="dark"] .board-tab:hover,
 html[data-theme-preset="dark"] .skin-opt:hover,
 html[data-theme-preset="dark"] .sp-cdel:hover,
@@ -749,6 +818,18 @@ html[data-theme-preset="dark"] .seg button:hover { background: rgba(172,162,215,
 html[data-theme-preset="dark"] .board-add { border-color: rgba(160,150,200,0.55); color: #cfc8e6; }
 html[data-theme-preset="dark"] .sep,
 html[data-theme-preset="dark"] .ctx-sep { background: rgba(160,150,200,0.3); }
+html[data-theme-preset="dark"] .tb-group + .tb-group { border-left-color: rgba(160,150,200,0.34); }
+/* 다크에서 #b3352c 는 대비 1.9:1 로 읽히지 않는다 — 같은 붉은 계열의 밝은 쪽으로 바꾼다 (5.6:1) */
+html[data-theme-preset="dark"] .ctxmenu .ctx-item.danger { color: #ff9d92; }
+html[data-theme-preset="dark"] .ctxmenu .ctx-item.danger:hover { background: rgba(255,157,146,0.16); color: #ffb9b1; }
+html[data-theme-preset="dark"] .ctx-sep.ctx-sep-danger { background: rgba(255,157,146,0.34); }
+html[data-theme-preset="dark"] .tool-btn.sp-danger {
+  color: #ff9d92;
+  background: rgba(255,157,146,0.14);
+  box-shadow: inset 0 0 0 1px rgba(255,157,146,0.36);
+}
+html[data-theme-preset="dark"] .tool-btn.sp-danger:hover { background: rgba(255,157,146,0.24); color: #ffb9b1; }
+html[data-theme-preset="dark"] .sp-hr { border-top-color: rgba(160,150,200,0.3); }
 html[data-theme-preset="dark"] .size-opt,
 html[data-theme-preset="dark"] .move-opt {
   color: #e8e4f4;
@@ -999,12 +1080,13 @@ html[data-theme-preset="dark"] .nukki-apply { color: #4a3421; }
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 12px;
+  padding: 5px 12px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   font-family: inherit;
-  font-size: 17px;
+  font-size: 16px;
+  line-height: 1.3;
   color: #4a3421;
   text-align: left;
   cursor: pointer;
@@ -1013,6 +1095,11 @@ html[data-theme-preset="dark"] .nukki-apply { color: #4a3421; }
 .ctx-item:hover { background: rgba(94,62,24,0.12); }
 .ctx-item.soon { opacity: 0.5; }
 .ctx-sep { height: 1px; margin: 5px 8px; background: rgba(94,62,24,0.18); }
+/* 파괴 항목 앞의 굵은 경계 — "여기부터는 되돌리기가 필요한 일"이라는 시각 신호 */
+.ctx-sep.ctx-sep-danger { height: 2px; margin: 6px 8px; background: rgba(179,53,44,0.3); }
+/* 파괴 항목은 hover 전(정지 상태)에 이미 위험색이어야 한다 — 누르기 전에 알아볼 수 있게 */
+.ctxmenu .ctx-item.danger { color: #b3352c; font-weight: 700; }
+.ctxmenu .ctx-item.danger:hover { background: rgba(179,53,44,0.12); color: #8f271f; }
 .ctx-dots { display: inline-flex; gap: 5px; margin-left: auto; }
 .ctx-dot {
   width: 18px;
@@ -1129,11 +1216,34 @@ html[data-theme-preset="dark"] .nukki-apply { color: #4a3421; }
 }
 .sp-cdel:hover { background: #ddcda9; }
 .sp-info p { margin: 5px 0; font-size: 14px; line-height: 1.45; word-break: keep-all; }
+/* 접이 블록 — 평생 한두 번 여는 것들(손상 백업·라이선스 고지)만 접는다.
+   내용은 DOM 에 그대로 있고(접힌 상태에서도 textContent 로 읽힌다) 자리만 차지하지 않는다. */
+.sp-fold { margin: 8px 0 0; }
+.sp-fold > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 4px 0;
+  font-size: 13.5px;
+  color: #6b4d2e;
+  opacity: 0.9;
+}
+.sp-fold > summary::-webkit-details-marker { display: none; }
+.sp-fold > summary::before { content: "▸ "; font-size: 11px; }
+.sp-fold[open] > summary::before { content: "▾ "; }
+.sp-fold > summary:hover { opacity: 1; text-decoration: underline; }
+/* 패널 안의 파괴 단추 — 메뉴의 파괴 항목과 같은 규칙(정지 상태에서 이미 위험색) */
+.tool-btn.sp-danger {
+  color: #b3352c;
+  background: rgba(179,53,44,0.10);
+  box-shadow: inset 0 0 0 1px rgba(179,53,44,0.3);
+}
+.tool-btn.sp-danger:hover { background: rgba(179,53,44,0.2); color: #8f271f; }
+.sp-hr { margin: 10px 0 0; border-top: 1px dashed rgba(94,62,24,0.22); }
 
 /* ── 설정: 애니메이션 줄임/끔 (기본 = 클래스 없음 → 현행 그대로) ── */
 body.fx-calm .pnote, body.fx-calm .swatch, body.fx-calm .add-btn, body.fx-calm .sndbtn, body.fx-calm .ndel,
 body.fx-calm .tool-btn, body.fx-calm .ctx-item, body.fx-calm .ctx-dot, body.fx-calm .rgrip,
-body.fx-calm .board-tab, body.fx-calm .spanel,
+body.fx-calm .board-tab, body.fx-calm .spanel, body.fx-calm .snd-caret,
 body.fx-calm .board-tab-del, body.fx-calm .stgrip { transition: none; }
 body.fx-calm .pnote.pop-in, body.fx-calm .pnote.removing { animation: none; }
 body.fx-calm .notice.show { animation: none; }
@@ -1143,7 +1253,7 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
 /* ── 동작 축소 선호: 장식 애니메이션·기울임은 즉시 상태로 (소리는 음소거 단추가 담당) ── */
 @media (prefers-reduced-motion: reduce) {
   .pnote, .swatch, .add-btn, .sndbtn, .ndel, .tool-btn, .ctx-item, .ctx-dot, .rgrip, .board-tab, .spanel,
-  .board-tab-del, .stgrip { transition: none; }
+  .snd-caret, .board-tab-del, .stgrip { transition: none; }
   .pnote.pop-in, .pnote.removing { animation: none; }
   .notice.show { animation: none; }
   .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
@@ -1253,40 +1363,61 @@ html[data-pro-theme="lavender"] #board {
 <div id="board" data-board>
   <div class="toolbar">
     <span class="brand">🗒️<span class="brand-word"> 포스트잇 월</span></span>
-    <button type="button" id="addBtn" class="add-btn" data-add-note>＋ 새 포스트잇</button>
-    <span class="sep"></span>
-    <span class="palette" id="palette">
-      <button type="button" class="swatch" data-color style="background-color:#FFD966" title="노랑"></button>
-      <button type="button" class="swatch" data-color style="background-color:#FFA9C0" title="분홍"></button>
-      <button type="button" class="swatch" data-color style="background-color:#A0DC8E" title="연두"></button>
-      <button type="button" class="swatch" data-color style="background-color:#9FD4FF" title="하늘"></button>
-      <button type="button" class="swatch" data-color style="background-color:#FFFFFF" title="하양"></button>
-    </span>
-    <span class="sep"></span>
-    <input type="search" id="searchBox" class="search-box" data-search placeholder="🔍 메모 찾기" aria-label="메모 검색">
-    <span class="sep"></span>
-    <span class="boards" id="boardSwitcher" data-board-switcher>
-      <span class="board-tabs" id="boardTabs"></span>
-      <button type="button" id="addBoardBtn" class="board-add" data-add-board title="새 보드 추가">＋</button>
-    </span>
-    <span class="sep"></span>
-    <button type="button" id="arrangeBtn" class="tool-btn" data-arrange title="포스트잇을 겹치지 않게 한 번에 정리">✨ 정리</button>
-    <button type="button" id="exportBtn" class="tool-btn" data-export title="모든 보드의 메모를 파일로 저장">💾 내보내기</button>
-    <button type="button" id="importBtn" class="tool-btn" data-import title="파일에서 메모 불러오기">📂 가져오기</button>
+
+    <!-- 그룹 1 · 만들기 (1차) — 세션 내내 가장 많이 쓰는 두 가지 -->
+    <div class="tb-group" role="group" aria-label="만들기">
+      <button type="button" id="addBtn" class="add-btn" data-add-note>＋ 새 포스트잇</button>
+      <span class="palette" id="palette" role="group" aria-label="고른 메모의 색" data-armed="0"
+            title="메모를 먼저 고르면 색을 바꿀 수 있어요">
+        <button type="button" class="swatch" data-color style="background-color:#FFD966" title="노랑" aria-label="노랑으로 바꾸기"></button>
+        <button type="button" class="swatch" data-color style="background-color:#FFA9C0" title="분홍" aria-label="분홍으로 바꾸기"></button>
+        <button type="button" class="swatch" data-color style="background-color:#A0DC8E" title="연두" aria-label="연두로 바꾸기"></button>
+        <button type="button" class="swatch" data-color style="background-color:#9FD4FF" title="하늘" aria-label="하늘색으로 바꾸기"></button>
+        <button type="button" class="swatch" data-color style="background-color:#FFFFFF" title="하양" aria-label="하양으로 바꾸기"></button>
+      </span>
+    </div>
+
+    <!-- 그룹 2 · 찾기와 보드 (2차) — "지금 보고 있는 자리"를 고르는 것들 -->
+    <div class="tb-group" role="group" aria-label="찾기와 보드">
+      <input type="search" id="searchBox" class="search-box" data-search placeholder="🔍 메모 찾기" aria-label="메모 검색">
+      <span class="boards" id="boardSwitcher" data-board-switcher>
+        <span class="board-tabs" id="boardTabs"></span>
+        <button type="button" id="addBoardBtn" class="board-add" data-add-board title="새 보드 추가">＋ 보드</button>
+      </span>
+    </div>
+
+    <!-- 그룹 3 · 정리와 파일 (정리=2차, 내보내기·가져오기=3차) -->
+    <div class="tb-group" role="group" aria-label="정리와 파일">
+      <button type="button" id="arrangeBtn" class="tool-btn" data-arrange title="포스트잇을 겹치지 않게 한 번에 정리">✨ 정리</button>
+      <button type="button" id="exportBtn" class="tool-btn t3" data-export title="모든 보드의 메모를 파일로 저장">💾 내보내기</button>
+      <button type="button" id="importBtn" class="tool-btn t3" data-import title="파일에서 메모 불러오기">📂 가져오기</button>
+    </div>
+
+    <!-- 그룹 4 · 모양과 소리 (3차) — 한번 정하면 오래 안 건드리는 것들 -->
+    <div class="tb-group" role="group" aria-label="모양과 소리">
+      <select id="themeSel" class="theme-sel" data-theme-preset aria-label="보드 테마" title="보드 테마">
+        <option data-theme-option value="basic">기본</option>
+        <option data-theme-option value="dark">다크</option>
+        <option data-theme-option value="white">화이트</option>
+      </select>
+      <span class="snd-wrap">
+        <button type="button" id="soundBtn" class="sndbtn t3" aria-pressed="true" title="효과음 끄기">🔊</button>
+        <button type="button" id="soundCaret" class="snd-caret" aria-expanded="false" aria-controls="soundPop"
+                aria-label="음량 조절 열기" title="음량 조절">▾</button>
+        <span class="snd-pop" id="soundPop" hidden>
+          <span class="snd-pop-lab">음량</span>
+          <input type="range" id="volSlider" class="vol" data-volume min="0" max="100" step="1" aria-label="효과음 음량" title="효과음 음량">
+        </span>
+      </span>
+      <button type="button" id="decorBtn" class="sndbtn t3" aria-expanded="false" aria-label="꾸미기" title="꾸미기 열기">🎨</button>
+      <button type="button" id="settingsBtn" class="sndbtn t3" aria-expanded="false" aria-label="설정" title="설정 열기">⚙️</button>
+    </div>
+
+    <!-- 보이지 않는 파일 입력들 (레이아웃 비점유) -->
     <input type="file" id="importFile" accept=".json,application/json" hidden>
     <input type="file" id="noteImageInput" data-note-image-input accept="image/*" hidden>
     <input type="file" id="decorBgInput" data-decor-bg-input accept="image/*" hidden>
     <input type="file" id="decorPhotoInput" data-decor-photo-input accept="image/*" hidden>
-    <span class="sep"></span>
-    <select id="themeSel" class="theme-sel" data-theme-preset aria-label="보드 테마" title="보드 테마">
-      <option data-theme-option value="basic">기본</option>
-      <option data-theme-option value="dark">다크</option>
-      <option data-theme-option value="white">화이트</option>
-    </select>
-    <button type="button" id="soundBtn" class="sndbtn" aria-pressed="true" title="효과음 끄기">🔊</button>
-    <input type="range" id="volSlider" class="vol" data-volume min="0" max="100" step="1" aria-label="효과음 음량" title="효과음 음량">
-    <button type="button" id="decorBtn" class="sndbtn" aria-expanded="false" aria-label="꾸미기" title="꾸미기 열기">🎨</button>
-    <button type="button" id="settingsBtn" class="sndbtn" aria-expanded="false" aria-label="설정" title="설정 열기">⚙️</button>
   </div>
 
   <div class="welcome-card" id="welcome">
@@ -1295,8 +1426,8 @@ html[data-pro-theme="lavender"] #board {
     <p class="w-line">위의 ＋ 새 포스트잇 단추로<br>첫 메모를 붙여 보세요.</p>
     <p class="w-line">🖱 잡아서 끌면 자유롭게 옮겨지고</p>
     <p class="w-line">✏️ 살짝 클릭하면 바로 고칠 수 있어요</p>
-    <p class="w-line">🎨 색 단추로 옷을 갈아입히고</p>
-    <p class="w-line">✕ 단추로 떼어낼 수 있어요</p>
+    <p class="w-line">🎨 메모를 한 번 고른 뒤 색 단추를 누르면 옷을 갈아입고</p>
+    <p class="w-line">✕ 고른 메모 오른쪽 위의 단추로 떼어낼 수 있어요</p>
     <p class="w-small">모든 메모는 이 컴퓨터에만 저장돼요</p>
   </div>
 </div>
@@ -1332,26 +1463,30 @@ html[data-pro-theme="lavender"] #board {
     <button type="button" class="notice-close sp-close" id="spClose" title="설정 닫기">✕</button>
   </div>
 
+  <!-- 패널 순서 = 손대는 빈도. 메모 → 보드 → 느낌 → 안전 → 데이터 → 정보.
+       모든 컨트롤은 그대로다(하나도 없애지 않았다). 묶는 방식과 이름만 바꿨다. -->
+
   <div class="sp-sec">
-    <h3>글자</h3>
-    <div class="sp-row"><span class="sp-lab">노트 글자 크기</span>
+    <h3>메모 글씨</h3>
+    <div class="sp-row"><span class="sp-lab">글자 크기</span>
       <span class="seg" id="spFontSize">
         <button type="button" data-val="small">작게</button>
         <button type="button" data-val="normal">보통</button>
         <button type="button" data-val="large">크게</button>
       </span>
     </div>
-    <div class="sp-row"><span class="sp-lab">노트 폰트</span>
+    <div class="sp-row"><span class="sp-lab">글꼴</span>
       <span class="seg" id="spFont">
         <button type="button" data-val="hand">손글씨</button>
         <button type="button" data-val="gothic">고딕</button>
       </span>
     </div>
+    <p class="sp-small">이미 붙여 둔 메모까지 함께 바뀌어요.</p>
   </div>
 
   <div class="sp-sec">
-    <h3>노트 기본값</h3>
-    <div class="sp-row"><span class="sp-lab">새 노트 기본 색</span>
+    <h3>새 메모 기본값</h3>
+    <div class="sp-row"><span class="sp-lab">기본 색</span>
       <span class="sp-swatches" id="spDefColor">
         <button type="button" class="sp-sw-auto" data-cval="auto">자동 순환</button>
         <button type="button" class="sp-sw" data-cval="#FFD966" style="background-color:#FFD966" title="노랑"></button>
@@ -1361,7 +1496,7 @@ html[data-pro-theme="lavender"] #board {
         <button type="button" class="sp-sw" data-cval="#FFFFFF" style="background-color:#FFFFFF" title="하양"></button>
       </span>
     </div>
-    <div class="sp-row"><span class="sp-lab">새 노트 기본 크기</span>
+    <div class="sp-row"><span class="sp-lab">기본 크기</span>
       <span class="seg" id="spDefSize">
         <button type="button" data-val="normal">기본</button>
         <button type="button" data-val="large">크게</button>
@@ -1373,32 +1508,34 @@ html[data-pro-theme="lavender"] #board {
         <button type="button" data-val="straight">반듯하게</button>
       </span>
     </div>
-    <p class="sp-small">기본값은 앞으로 만드는 새 노트에만 적용돼요. 이미 붙인 노트는 그대로예요.</p>
-    <div class="sp-row"><span class="sp-lab">입력하면 자동으로 크기 맞추기</span>
+    <div class="sp-row"><span class="sp-lab">쓰면 크기 자동</span>
       <span class="seg" id="spAutoFit">
         <button type="button" data-val="off">끔</button>
         <button type="button" data-val="on">켬</button>
       </span>
     </div>
-    <p class="sp-small">켜면 내용 입력을 마칠 때(다른 곳 클릭·Esc) 그 노트만 내용에 맞는 크기로 바뀌어요. 우클릭 메뉴의 "내용에 맞추기"와 같은 계산이에요.</p>
+    <p class="sp-small">여기 값은 <b>앞으로 만드는 메모</b>에만 적용돼요 — 이미 붙인 메모는 그대로예요.
+      "쓰면 크기 자동"을 켜면 입력을 마칠 때(다른 곳 클릭·Esc) 그 메모만 내용에 맞는 크기로 바뀌어요.
+      우클릭 메뉴의 "내용에 맞추기"와 같은 계산이에요.</p>
   </div>
 
   <div class="sp-sec">
-    <h3>배치</h3>
+    <h3>보드 정리</h3>
     <div class="sp-row"><span class="sp-lab">정리 방식</span>
       <select id="spArrange" class="theme-sel" aria-label="정리 방식">
         <option value="default">기본 (읽는 순서)</option>
         <option value="grid3">3×3 격자</option>
         <option value="grid2">2×2 격자</option>
-        <option value="masonry">동적 마소너리 (큰 노트 먼저)</option>
+        <option value="masonry">동적 마소너리 (큰 메모 먼저)</option>
         <option value="time">시간순 (최근 수정 좌상단)</option>
       </select>
     </div>
     <p class="sp-small">✨ 정리 단추와 보드 우클릭 메뉴의 "한 번에 정리"가 이 방식을 사용해요.</p>
   </div>
 
+  <!-- 움직임과 소리를 한 자리에 — 둘 다 "얼마나 조용한 앱이길 바라는가"에 대한 답이다 -->
   <div class="sp-sec">
-    <h3>효과</h3>
+    <h3>움직임과 소리</h3>
     <div class="sp-row"><span class="sp-lab">애니메이션</span>
       <span class="seg" id="spAnim">
         <button type="button" data-val="on">켬</button>
@@ -1406,6 +1543,14 @@ html[data-pro-theme="lavender"] #board {
         <button type="button" data-val="off">끔</button>
       </span>
     </div>
+    <div class="sp-row">
+      <label class="sp-lab" for="spMute">음소거</label>
+      <input type="checkbox" id="spMute">
+    </div>
+    <div class="sp-row"><span class="sp-lab">음량</span>
+      <input type="range" id="spVol" class="vol sp-vol" min="0" max="100" step="1" aria-label="효과음 음량 (설정 미러)">
+    </div>
+    <p class="sp-small">툴바의 🔊 단추·▾ 음량 서랍과 항상 같이 움직여요.</p>
   </div>
 
   <div class="sp-sec">
@@ -1416,19 +1561,7 @@ html[data-pro-theme="lavender"] #board {
         <button type="button" data-val="on">켬</button>
       </span>
     </div>
-    <p class="sp-small">켜면 포스트잇·보드·스티커·배경·손상 백업을 지우기 전에 한 번 더 물어봐요. 지운 뒤의 실행 취소는 그대로 돼요.</p>
-  </div>
-
-  <div class="sp-sec">
-    <h3>사운드</h3>
-    <div class="sp-row">
-      <label class="sp-lab" for="spMute">음소거</label>
-      <input type="checkbox" id="spMute">
-    </div>
-    <div class="sp-row"><span class="sp-lab">볼륨</span>
-      <input type="range" id="spVol" class="vol sp-vol" min="0" max="100" step="1" aria-label="효과음 음량 (설정 미러)">
-    </div>
-    <p class="sp-small">툴바의 🔊 단추·볼륨 슬라이더와 항상 같이 움직여요.</p>
+    <p class="sp-small">켜면 메모·보드·스티커·배경·손상 백업을 지우기 전에 한 번 더 물어봐요. 지운 뒤의 실행 취소는 그대로 돼요.</p>
   </div>
 
   <div class="sp-sec">
@@ -1444,26 +1577,35 @@ html[data-pro-theme="lavender"] #board {
     <div class="gauge" title="이 컴퓨터에 저장된 용량 추정"><div class="gauge-fill" id="spGaugeFill"></div></div>
     <p class="sp-small" id="spGaugeText">저장 용량 계산 중…</p>
     <p class="sp-small" id="spPhotoText"></p>
-    <p class="sp-small">손상 백업 (<span id="spCorruptCount">0</span>)</p>
-    <div id="spCorruptList"></div>
-    <div class="sp-row"><button type="button" id="spCorruptClear" class="tool-btn" hidden>모두 정리</button></div>
+    <!-- 손상 백업은 평생 한두 번 여는 자리 + 파괴 단추가 있는 자리라 한 겹 접어 둔다.
+         내용은 그대로 살아 있고(접힌 채로도 DOM 에 존재) 개수는 접힌 줄에서 바로 읽힌다. -->
+    <details class="sp-fold">
+      <summary>손상 백업 (<span id="spCorruptCount">0</span>)</summary>
+      <p class="sp-small">저장 데이터가 깨졌을 때 원본을 따로 보관해 둔 것들이에요. 지워도 지금 메모에는 영향이 없어요.</p>
+      <div id="spCorruptList"></div>
+      <div class="sp-row"><button type="button" id="spCorruptClear" class="tool-btn sp-danger" hidden>🗑 모두 정리</button></div>
+    </details>
   </div>
 
   <div class="sp-sec sp-info">
     <h3>정보</h3>
     <p>🗒️ 포스트잇 월 — 캘린더+포스트잇 월 rev.5 (오프라인 단일 파일, 이 컴퓨터에만 저장)</p>
-    <div class="lic-list" data-licenses>
-      <p>에셋·오픈소스 고지 (전체 출처·라이선스 원문은 assets/ASSETS.md):</p>
-      <ul>
-        <li>cork-texture.jpg — 코르크 질감, ambientCG "Cork001" · CC0 (Public Domain)</li>
-        <li>Gaegu-Regular.ttf — 개구쟁이 한글 손글씨 폰트, Google Fonts · OFL 1.1 (SIL Open Font License)</li>
-        <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 폰트, Google Fonts · OFL 1.1 (SIL Open Font License)</li>
-        <li>pro-manifest.json — Pro 스티커·테마 정의 (assets/pro/, 자체 제작) · CC0 (Public Domain)</li>
-        <li>korean-lunar-calendar — 한국 음력 변환 알고리즘 (캘린더 앱의 음력 표시에 사용) · MIT License</li>
-        <li>Electron / Chromium — 데스크톱 셸 런타임 · MIT 등 오픈소스 라이선스</li>
-      </ul>
-    </div>
-    <p>단축키: Esc = 편집·메뉴·설정 닫기 · 노트 클릭 = 편집 · 위쪽 잡아 끌기 = 이동 · 오른쪽 아래 모서리 끌기 = 크기 조절 · 우클릭 = 메뉴</p>
+    <p>단축키: Esc = 편집·메뉴·설정 닫기 · 메모 클릭 = 편집 · 위쪽 잡아 끌기 = 이동 · 오른쪽 아래 모서리 끌기 = 크기 조절 · 우클릭 = 메뉴</p>
+    <!-- 라이선스 전문은 읽을 사람만 편다. 접혀 있어도 DOM 에 그대로 있어 고지 의무는 유지된다. -->
+    <details class="sp-fold">
+      <summary>에셋·오픈소스 고지</summary>
+      <div class="lic-list" data-licenses>
+        <p>에셋·오픈소스 고지 (전체 출처·라이선스 원문은 assets/ASSETS.md):</p>
+        <ul>
+          <li>cork-texture.jpg — 코르크 질감, ambientCG "Cork001" · CC0 (Public Domain)</li>
+          <li>Gaegu-Regular.ttf — 개구쟁이 한글 손글씨 폰트, Google Fonts · OFL 1.1 (SIL Open Font License)</li>
+          <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 폰트, Google Fonts · OFL 1.1 (SIL Open Font License)</li>
+          <li>pro-manifest.json — Pro 스티커·테마 정의 (assets/pro/, 자체 제작) · CC0 (Public Domain)</li>
+          <li>korean-lunar-calendar — 한국 음력 변환 알고리즘 (캘린더 앱의 음력 표시에 사용) · MIT License</li>
+          <li>Electron / Chromium — 데스크톱 셸 런타임 · MIT 등 오픈소스 라이선스</li>
+        </ul>
+      </div>
+    </details>
   </div>
 </aside>
 
@@ -2054,6 +2196,29 @@ html[data-pro-theme="lavender"] #board {
   });
   /* 읽기 전용 게터 — rev.5 B-5 가 허용하는 유일한 신규 전역 노출 */
   window.__getMasterGain = function () { return gainValue(); };
+
+  /* ── 음량 서랍: ▾ 캐럿으로만 열고 닫는다. 🔊 본체의 음소거 토글은 위 그대로다.
+        슬라이더는 여전히 같은 요소(#volSlider)이고 값·저장·게인 경로도 그대로다. ── */
+  var soundCaret = document.getElementById('soundCaret');
+  var soundPop = document.getElementById('soundPop');
+  function setSoundPop(open) {
+    soundPop.hidden = !open;
+    soundCaret.setAttribute('aria-expanded', open ? 'true' : 'false');
+    soundCaret.setAttribute('aria-label', open ? '음량 조절 닫기' : '음량 조절 열기');
+  }
+  soundCaret.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var willOpen = soundPop.hidden;
+    setSoundPop(willOpen);
+    /* 서랍을 열면 곧바로 슬라이더에 손이 닿게 한다 — 키보드만 쓰는 사람도 화살표로 바로 조절 */
+    if (willOpen) { try { volSlider.focus({ preventScroll: true }); } catch (err) { /* 무시 */ } }
+  });
+  document.addEventListener('mousedown', function (e) {
+    if (soundPop.hidden) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('.snd-wrap')) return;
+    setSoundPop(false);
+  });
 
   /* ── 테마 프리셋: 기본/다크/화이트 — postit-theme 저장, html[data-theme-preset] 반영 (A36) ── */
   var theme = 'basic';
@@ -3123,6 +3288,7 @@ html[data-pro-theme="lavender"] #board {
     if (activeId && activeId !== n.id && els[activeId]) els[activeId].root.classList.remove('active');
     activeId = n.id;
     ref.root.classList.add('active');
+    reflectPalette();
     if (n.z < zCounter) {
       zCounter += 1;
       n.z = zCounter;
@@ -3160,7 +3326,7 @@ html[data-pro-theme="lavender"] #board {
     data = next;
     var ref = els[id];
     delete els[id];
-    if (activeId === id) activeId = null;
+    if (activeId === id) { activeId = null; reflectPalette(); }
     if (ref && ref.root && ref.root.parentNode) {
       var el = ref.root;
       if (calmMotion()) {
@@ -3446,12 +3612,36 @@ html[data-pro-theme="lavender"] #board {
     saveNow();
   }
 
+  /* 팔레트 상태 표시 — "고를 노트가 없어서 아무 일도 안 일어난다"를 눈으로 알린다.
+     클릭 핸들러·활성 노트 판정은 손대지 않는다(아래 그대로). 표시만 갱신한다. */
+  function reflectPalette() {
+    var pal = document.getElementById('palette');
+    if (!pal) return;
+    var armed = !!(activeId && els[activeId]);
+    pal.setAttribute('data-armed', armed ? '1' : '0');
+    pal.title = armed
+      ? '고른 메모의 색을 바꿔요'
+      : '메모를 먼저 고르면 색을 바꿀 수 있어요';
+    var cur = '';
+    if (armed) {
+      try { cur = getComputedStyle(els[activeId].root).backgroundColor; } catch (err) { cur = ''; }
+    }
+    Array.prototype.forEach.call(pal.querySelectorAll('[data-color]'), function (sw) {
+      sw.setAttribute('aria-disabled', armed ? 'false' : 'true');
+      var mine = '';
+      try { mine = getComputedStyle(sw).backgroundColor; } catch (err) { mine = ''; }
+      sw.setAttribute('aria-pressed', armed && cur && mine === cur ? 'true' : 'false');
+    });
+  }
+
   Array.prototype.forEach.call(document.querySelectorAll('[data-color]'), function (sw) {
     sw.addEventListener('click', function () {
       if (!activeId) return;
       applyNoteColor(activeId, sw);
+      reflectPalette();
     });
   });
+  reflectPalette();
 
   function updateWelcome() {
     welcomeEl.style.display = data.length ? 'none' : '';
@@ -4315,9 +4505,9 @@ html[data-pro-theme="lavender"] #board {
     return b;
   }
 
-  function ctxSep() {
+  function ctxSep(extraClass) {
     var d = document.createElement('div');
-    d.className = 'ctx-sep';
+    d.className = 'ctx-sep' + (extraClass ? ' ' + extraClass : '');
     return d;
   }
 
@@ -4481,34 +4671,47 @@ html[data-pro-theme="lavender"] #board {
     return dateRow;
   }
 
+  /* 메뉴 배열 규칙(양 메뉴 공통): 위에서 아래로 빈도↓ · 위험↑, 구분선은 정확히 2개.
+     ① 자주 = 대상만 정해지면 바로 쓰는 것 (색상·크기·복제)
+     ② 가끔 = 모양과 부가 정보 (스킨·사진·날짜·맨 앞으로·보드 이동)
+     ③ 파괴 = 삭제 — 언제나 마지막, 굵은 구분선 뒤, 정지 상태에서 이미 빨강.
+     각 행 빌더의 내부는 손대지 않았다 — 붙이는 순서만 바꿨다 (라벨·훅 전부 그대로). */
   function buildNoteMenu(id) {
+    var noteForDate = findNote(id);
+
+    /* ① 자주 */
     ctxMenuEl.appendChild(buildMenuColorRow(id));
-    ctxMenuEl.appendChild(ctxItem('복제', function () { duplicateNote(id); }));
-    ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () { bringToFront(id); }));
-    ctxMenuEl.appendChild(ctxSep());
-    ctxMenuEl.appendChild(buildMenuSkinRow(id));
     ctxMenuEl.appendChild(buildMenuSizeRow(id));
+    ctxMenuEl.appendChild(ctxItem('복제', function () { duplicateNote(id); }));
+
+    ctxMenuEl.appendChild(ctxSep());
+
+    /* ② 가끔 */
+    ctxMenuEl.appendChild(buildMenuSkinRow(id));
     ctxMenuEl.appendChild(ctxItem('사진 넣기', function () {
       imageTargetId = id;
       noteImageInput.click();   /* 직접 제스처 — 파일 선택 창 (A26) */
     }));
-    ctxMenuEl.appendChild(ctxSep());
-    var noteForDate = findNote(id);
     ctxMenuEl.appendChild(buildMenuDateRow(id, noteForDate));
     if (noteForDate && noteForDate.date) {
       ctxMenuEl.appendChild(ctxItem('날짜 해제', function () { setNoteDate(id, ''); }));
     }
+    ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () { bringToFront(id); }));
     ctxMenuEl.appendChild(buildMenuMoveRow(id));
-    ctxMenuEl.appendChild(ctxSep());
-    ctxMenuEl.appendChild(ctxItem('삭제', function () {
+
+    ctxMenuEl.appendChild(ctxSep('ctx-sep-danger'));
+
+    /* ③ 파괴 */
+    ctxMenuEl.appendChild(ctxItem('🗑 삭제', function () {
       confirmThen(null, function () {   /* 메뉴는 이미 닫혀 앵커가 없다 — 마지막 제스처 좌표 사용 */
         playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
         removeNote(id);
       });
-    }));
+    }, 'danger'));
   }
 
   function buildBoardMenu(px, py) {
+    /* ① 자주 — 지금 이 자리에서 바로 하는 일 */
     ctxMenuEl.appendChild(ctxItem('여기에 새 포스트잇', function () {
       var b = board.getBoundingClientRect();
       var bw = board.clientWidth || 1280;
@@ -4526,8 +4729,9 @@ html[data-pro-theme="lavender"] #board {
       playDrop();   /* 직접 제스처(메뉴 클릭) 내부 */
     }));
     ctxMenuEl.appendChild(ctxSep());
+
+    /* ② 가끔 — 보드 자체를 손보는 일들 */
     ctxMenuEl.appendChild(ctxItem('🎨 꾸미기', function () { openDecorPanel(); }));
-    ctxMenuEl.appendChild(ctxSep());
     var memoItem = ctxItem('메모 가져오기', function () { importMemos(); });
     memoItem.setAttribute('data-import-memo', '');   /* A29 진입점 — 보드 컨텍스트 메뉴 */
     ctxMenuEl.appendChild(memoItem);
@@ -4536,14 +4740,18 @@ html[data-pro-theme="lavender"] #board {
     var renItem = ctxItem('보드 이름 바꾸기', function () { startTabRename(boardId); });
     renItem.title = '탭을 더블클릭해도 바꿀 수 있어요 (빈 이름 = 기본 이름)';
     ctxMenuEl.appendChild(renItem);
-    /* 보드 삭제 — 기본 보드·마지막 보드는 비활성 + 안내(title) (실행은 즉시, 취소는 토스트) */
-    var delItem = ctxItem('보드 삭제', function () {
+
+    ctxMenuEl.appendChild(ctxSep('ctx-sep-danger'));
+
+    /* ③ 파괴 — 보드 삭제. 기본 보드·마지막 보드는 비활성 + 안내(title) (실행은 즉시, 취소는 토스트) */
+    var boardDelBlocked = boardId === 'b1' || boards.length <= 1;
+    var delItem = ctxItem('🗑 보드 삭제', function () {
       confirmThen(null, function () {
         playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
         deleteBoard(boardId);
       });
-    });
-    if (boardId === 'b1' || boards.length <= 1) {
+    }, boardDelBlocked ? '' : 'danger');   /* 못 누르는 항목까지 빨갛게 하지는 않는다 */
+    if (boardDelBlocked) {
       delItem.disabled = true;
       delItem.classList.add('soon');
       delItem.title = boardId === 'b1' ? '기본 보드는 삭제할 수 없어요' : '마지막 남은 보드는 삭제할 수 없어요';
@@ -4562,13 +4770,15 @@ html[data-pro-theme="lavender"] #board {
     var ren = ctxItem('보드 이름 바꾸기', function () { startTabRename(id); });
     ren.title = '탭을 더블클릭해도 바꿀 수 있어요 (빈 이름 = 기본 이름)';
     ctxMenuEl.appendChild(ren);
-    var del = ctxItem('보드 삭제', function () {
+    var tabDelBlocked = id === 'b1' || boards.length <= 1;
+    ctxMenuEl.appendChild(ctxSep('ctx-sep-danger'));
+    var del = ctxItem('🗑 보드 삭제', function () {
       confirmThen(null, function () {
         playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
         deleteBoard(id);
       });
-    });
-    if (id === 'b1' || boards.length <= 1) {
+    }, tabDelBlocked ? '' : 'danger');
+    if (tabDelBlocked) {
       del.disabled = true;
       del.classList.add('soon');
       del.title = id === 'b1' ? '기본 보드는 삭제할 수 없어요' : '마지막 남은 보드는 삭제할 수 없어요';
@@ -4593,13 +4803,13 @@ html[data-pro-theme="lavender"] #board {
       trim.title = '사진의 흰 배경을 지워 다듬어요 (되돌리기 가능)';
       ctxMenuEl.appendChild(trim);
     }
-    ctxMenuEl.appendChild(ctxSep());
-    var del = ctxItem('삭제', function () {
+    ctxMenuEl.appendChild(ctxSep('ctx-sep-danger'));
+    var del = ctxItem('🗑 삭제', function () {
       confirmThen(null, function () {
         playDelete();   /* 직접 제스처(메뉴/확인 클릭) 내부 */
         deleteStickerById(id);
       });
-    });
+    }, 'danger');
     del.title = '스티커를 떼어내요 (토스트의 실행 취소로 되돌릴 수 있어요)';
     ctxMenuEl.appendChild(del);
   }
@@ -4675,6 +4885,11 @@ html[data-pro-theme="lavender"] #board {
     if (e.key === 'Escape') {
       if (confirmPopEl) { closeConfirmPop(); return; }   /* 확인 팝오버만 먼저 닫는다 */
       if (nukki) { closeNukkiEditor(); return; }         /* 누끼 편집 카드만 먼저 닫는다 (스티커는 그대로) */
+      if (soundPop && !soundPop.hidden) {   /* 음량 서랍만 먼저 닫고, 포커스는 열었던 자리로 돌려준다 */
+        setSoundPop(false);
+        try { soundCaret.focus({ preventScroll: true }); } catch (err) { /* 무시 */ }
+        return;
+      }
       closeCtxMenu();
       closeSettings();
       closeDecorPanel();
@@ -4783,7 +4998,8 @@ html[data-pro-theme="lavender"] #board {
     while (boardTabsEl.firstChild) boardTabsEl.removeChild(boardTabsEl.firstChild);
     boards.forEach(function (id, i) {
       var wrap = document.createElement('span');
-      wrap.className = 'board-tab-wrap';
+      /* is-active = 지금 열려 있는 보드 — 삭제(✕)는 이 탭에서만 열린다 (오조준 차단) */
+      wrap.className = 'board-tab-wrap' + (id === boardId ? ' is-active' : '');
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'board-tab';
@@ -4798,7 +5014,7 @@ html[data-pro-theme="lavender"] #board {
         startTabRename(id);
       });
       wrap.appendChild(b);
-      /* 탭 삭제 단추 (hover 시 표시) — 기본 보드·마지막 보드는 비활성 + 안내(title) */
+      /* 탭 삭제 단추 (열려 있는 보드에서만 표시) — 기본 보드·마지막 보드는 비활성 + 안내(title) */
       var del = document.createElement('button');
       del.type = 'button';
       del.className = 'board-tab-del';
@@ -4860,6 +5076,7 @@ html[data-pro-theme="lavender"] #board {
       els = {};
       data = [];
       activeId = null;
+      reflectPalette();
       dragState = null;
       resizeState = null;
       zCounter = 10;
@@ -4936,6 +5153,7 @@ html[data-pro-theme="lavender"] #board {
     deletedIds = deletedIdsCache[id] || {};
     undoStack = undoStacks[id] || [];
     activeId = null;
+    reflectPalette();
     dragState = null;
     resizeState = null;
     zCounter = 10;
@@ -6214,7 +6432,7 @@ html[data-pro-theme="lavender"] #board {
       if (seen[n.id] || noteBusy(n.id)) { kept.push(n); return; }
       var ref = els[n.id];
       delete els[n.id];
-      if (activeId === n.id) activeId = null;
+      if (activeId === n.id) { activeId = null; reflectPalette(); }
       if (ref && ref.root.parentNode) ref.root.parentNode.removeChild(ref.root);
     });
     data = kept;

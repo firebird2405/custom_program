@@ -26,9 +26,13 @@
 //     실제로 클릭·드래그하는 경로를 가로채지 않는다.
 //     대체 장치(셸 레이어): 완료·건너뛰기 토스트와 "첫 우클릭" 힌트 칩 — 전부
 //     pointerEvents:none 비상호작용 오버레이라 앱 조작 경로를 건드리지 않는다.
-//   A42 rev.7 — 분리 모드에서만 양 앱 설정 패널에 [창 모드] 섹션을 주입해
-//     재병합 진입점 [data-merge]("🔗 한 창으로 합치기")를 제공한다. 병합 모드의
-//     셸 UI(탭바·[data-split]·[data-shell-settings])는 tabbar.html 소관.
+//   A42 rev.8 — 창은 항상 1개(단일 창 탭 모드)다. 창 구성 UI(탭바·설정 드로어)는
+//     전부 tabbar.html 소관이고, 이 파일은 앱 페이지에 창 구성 관련 UI·브리지를
+//     일절 주입하지 않는다 (창 분리·재병합 진입점은 rev.8 에서 폐지 — 재도입 금지).
+//   시작 프로그램 — 앱 설정 패널에 [시작 프로그램] 셸 섹션([data-startup-section],
+//     토글 [data-startup-toggle], 상태 [data-startup-status])을 주입한다. 탭바 설정
+//     드로어의 같은 항목과 채널 하나를 공유하고 main 의 상태 push 로 양방향 동기화된다.
+//     상태의 단일 진실은 OS(로그인 항목) — 셸도 앱도 따로 저장하지 않는다.
 //   A49③ — contextBridge 로 이름 붙은 채널 화이트리스트 API(window.petit)만 노출.
 //     ipcRenderer 원본·require·Node 모듈 노출 0건, 채널 인자는 전부 문자열 리터럴.
 //
@@ -54,11 +58,6 @@ const migrateDetect = function () { return ipcRenderer.invoke('petit:migrate:det
 const migrateRun = function () { return ipcRenderer.invoke('petit:migrate:run'); };
 const migrateStatus = function () { return ipcRenderer.invoke('petit:migrate:status'); };
 
-// A42 rev.7 — 셸 창 구성 브리지 (분리 모드의 재병합 진입점 [data-merge]가 쓴다).
-// 탭바 페이지의 전체 API 는 tabbar-preload.js — 앱 페이지에는 필요한 두 채널만 노출.
-const shellGetState = function () { return ipcRenderer.invoke('petit:shell:state'); };
-const shellMerge = function () { return ipcRenderer.invoke('petit:shell:merge'); };
-
 const petitApi = {
   version: SHELL_VERSION,
   migrate: {
@@ -81,11 +80,24 @@ const petitApi = {
     setAuto: function (on) { return ipcRenderer.invoke('petit:backup:set-auto', on === true); },
     setIncludeImages: function (on) { return ipcRenderer.invoke('petit:backup:set-include-images', on === true); }
   },
-  shell: {
-    // 셸 창 구성 (main: main.js) — 상태 조회 + 분리 상태에서 병합 복귀 (A42 rev.7)
-    getState: shellGetState,
-    merge: shellMerge
+  startup: {
+    // 윈도우 시작 시 자동 실행 — main 이 app.getLoginItemSettings/setLoginItemSettings 로
+    // OS 로그인 항목을 직접 읽고 쓴다 (셸·앱 어디에도 이중 저장하지 않는다).
+    // status(): 셸 상태 페이로드({ ok, …, openAtLogin }) / set(on): 적용 결과
+    // ({ ok:true, openAtLogin } 또는 { ok:false, openAtLogin(실측), reason }).
+    status: function () { return ipcRenderer.invoke('petit:shell:state'); },
+    set: function (on) { return ipcRenderer.invoke('petit:shell:set-startup', on === true); },
+    // main → 렌더러 상태 push 구독 (수신 전용 — 채널은 문자열 리터럴, A49③):
+    // 탭바 드로어에서 바꾼 값이 앱 설정 모달에도 즉시 반영된다.
+    onChange: function (handler) {
+      if (typeof handler !== 'function') return;
+      ipcRenderer.on('petit:shell:ui-push', function (_event, payload) {
+        handler(payload && typeof payload === 'object' ? payload : null);
+      });
+    }
   }
+  // (창 구성 브리지 정리 — 2026-08-20 rev.8: 창 분리 폐지로 셸 상태 조회·재병합 채널은
+  //  앱 페이지에서 쓸 일이 없어 제거. 탭바 페이지의 브리지는 tabbar-preload.js 소관.)
 };
 contextBridge.exposeInMainWorld('petit', petitApi);
 
@@ -577,7 +589,7 @@ function startOnboarding() {
     spotStop();                                 // 강조 오버레이·추적 rAF 도 함께 내린다
   }
 
-  // 안내 카드가 지목 대상을 덮으면 카드를 위쪽으로 옮긴다 — 병합 1창 탭 모드(A42 rev.7)
+  // 안내 카드가 지목 대상을 덮으면 카드를 위쪽으로 옮긴다 — 단일 창 탭 모드(A42 rev.8)
   // 에서는 뷰 높이가 탭바(40px)만큼 줄어 하단 고정 카드가 꾸미기 팔레트와 겹칠 수 있다.
   // 카드는 pointerEvents:auto 라 겹치면 드래그 pointerdown 을 가로챈다 (실측 회귀).
   function repositionCardAwayFromTarget() {
@@ -1168,10 +1180,107 @@ function initBackupUi() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// 병합 모드 알림 릴레이 (캘린더 페이지 전용)
-// 문제: 병합 1창 탭 모드에서 캘린더가 백그라운드 탭이면 일정 알림 토스트(A32)가
+// 시작 프로그램 UI (양 창 설정 패널 — 윈도우 시작 시 자동 실행)
+// 훅: [data-startup-section] 섹션 / [data-startup-toggle] 토글 / [data-startup-status] 상태 줄.
+// 탭바 설정 드로어의 같은 항목과 채널 하나(petit:shell:set-startup)를 공유하고, main 의
+// 상태 push 로 양방향 동기화된다. 상태의 단일 진실은 OS 로그인 항목이라 초기값도 매번
+// OS 실측값으로 만든다 (앱 저장 키·셸 설정 파일 어디에도 이중 저장하지 않는다).
+// 원본 HTML 은 무수정(A42) — 전부 preload 주입. data-spcat 이 없고 백업 훅도 없으므로
+// 앱의 spSecCat() 이 첫 카테고리(🖋 표시)로 배정한다 = 설정을 열자마자 보이는 자리.
+// ────────────────────────────────────────────────────────────────────────────
+
+function injectStartupSection() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel || panel.querySelector('[data-startup-section]')) return;
+  const isCal = PAGE === 'calendar';
+  const host = isCal ? (panel.querySelector('.spBody') || panel) : panel;
+  const smallCls = isCal ? 'spSmall' : 'sp-small'; // 앱별 안내문 관용 클래스
+
+  const sec = el(isCal ? 'section' : 'div');
+  sec.className = isCal ? 'spSec' : 'sp-sec';
+  sec.setAttribute('data-startup-section', '');
+  sec.appendChild(el('h3', undefined, '시작 프로그램'));
+
+  const row = el('label', { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', fontSize: '13px', cursor: 'pointer' });
+  const chk = document.createElement('input');
+  chk.type = 'checkbox';
+  chk.setAttribute('data-startup-toggle', '');
+  row.appendChild(chk);
+  row.appendChild(el('span', undefined, '윈도우 시작 시 자동 실행'));
+  sec.appendChild(row);
+
+  const hint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '5px 0 0' },
+    '컴퓨터를 켜면 쁘띠캘린더가 함께 열려요.');
+  hint.className = smallCls;
+  sec.appendChild(hint);
+
+  const statusLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '5px 0 0' }, '');
+  statusLine.className = smallCls;
+  statusLine.setAttribute('data-startup-status', '');
+  sec.appendChild(statusLine);
+
+  // 자리: 셸 섹션 무리의 앞쪽 — 포스트잇에서는 [처음 안내](재실행 진입점) 바로 위에 둔다.
+  // 첫 카테고리(🖋 표시) 안에서 한 번이라도 덜 스크롤하고 만나게 하는 배치다.
+  const replayBtn = !isCal ? host.querySelector('[data-onboarding-replay]') : null;
+  const anchor = replayBtn ? replayBtn.closest('.sp-sec') : null;
+  if (anchor && anchor.parentElement === host) host.insertBefore(sec, anchor);
+  else host.appendChild(sec);
+
+  // ── 상태 동기화 (표시는 언제나 OS 실측값) ──
+  function setStatus(msg) { statusLine.textContent = msg || ''; }
+  function applyStartupState(st) {
+    if (!st || typeof st.openAtLogin !== 'boolean') return;
+    chk.checked = st.openAtLogin;
+  }
+  async function refreshStartupUi() {
+    try {
+      applyStartupState(await petitApi.startup.status());
+    } catch (_err) { /* 브리지 실패 — 표시만 유지 */ }
+  }
+
+  chk.addEventListener('change', async function () {
+    const want = chk.checked;
+    chk.disabled = true;
+    try {
+      const res = await petitApi.startup.set(want);
+      applyStartupState(res);
+      if (res && res.ok === true) {
+        setStatus(want ? '컴퓨터를 켜면 쁘띠캘린더가 함께 열려요.' : '윈도우 시작 시 자동 실행을 껐어요.');
+      } else {
+        const why = String((res && res.reason) || '윈도우 시작 설정을 바꾸지 못했어요.');
+        setStatus(why);
+        shellHint(why, 3200, 'bottom');           // 비모달 안내 (alert/confirm 금지)
+        await refreshStartupUi();                 // 표시를 실제 OS 값으로 되돌린다
+      }
+    } catch (_err) {
+      setStatus('윈도우 시작 설정을 바꾸지 못했어요.');
+      shellHint('윈도우 시작 설정을 바꾸지 못했어요.', 3200, 'bottom');
+      await refreshStartupUi();
+    }
+    chk.disabled = false;
+  });
+
+  // 다른 표면(탭바 드로어)에서 바뀐 값 즉시 반영 — main 이 모든 표면에 push 한다
+  try { petitApi.startup.onChange(applyStartupState); } catch (_err) { /* 구독 실패 — 패널 개방 시 재조회로 강등 */ }
+
+  // 패널이 열릴 때마다 최신 상태 재조회 (calendar: .open / postit: .spanel.open)
+  const panelObserver = new MutationObserver(function () {
+    if (panel.classList.contains('open')) refreshStartupUi();
+  });
+  panelObserver.observe(panel, { attributes: true, attributeFilter: ['class'] });
+
+  refreshStartupUi();
+}
+
+function initStartupUi() {
+  try { injectStartupSection(); } catch (_err) { /* 셸 UI 실패는 앱 무영향 */ }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 알림 릴레이 (캘린더 페이지 전용)
+// 문제: 단일 창 탭 모드에서 캘린더가 백그라운드 탭이면 일정 알림 토스트(A32)가
 // 다른 뷰에 가려져 유실된다. 캘린더 preload 가 [data-toast] 표출을 감지해 main 으로
-// 릴레이하고, main 이 병합 모드 + 캘린더 비활성일 때만 탭바 배지·미니 스트립으로 띄운다.
+// 릴레이하고, main 이 캘린더 탭 비활성일 때만 탭바 배지·미니 스트립으로 띄운다.
 //
 // "알림성 토스트만" 판정 휴리스틱 (명시 기준 — calendar.html showToastBase 계약):
 //   ① [data-toast] 의 data-toast-kind 속성이 "alarm" 일 때만 (showAlarmToast — A32 일정
@@ -1205,7 +1314,7 @@ function initAlarmRelay() {
       if (wasAlarmShowing && text === lastRelayedText) return; // 같은 표출 — 중복 릴레이 없음
       wasAlarmShowing = true;
       lastRelayedText = text;
-      // main 이 모드·활성 탭을 판정한다 (분리 모드·캘린더 활성 탭이면 무시 — 현행 유지)
+      // main 이 활성 탭을 판정한다 (캘린더 탭이 이미 활성이면 무시 — 현행 유지)
       ipcRenderer.invoke('petit:shell:alarm-relay', text).catch(function () { /* 브리지 실패 무해 */ });
     } catch (_err) { /* 감시 실패는 앱 무영향 */ }
   };
@@ -1217,73 +1326,6 @@ function initAlarmRelay() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// 창 모드 UI (분리 모드 전용 — A42 rev.7 재병합 진입점)
-// 훅: [data-merge] — "🔗 한 창으로 합치기" 버튼. 분리 모드일 때만 양 앱 설정 패널에
-// 주입한다 (병합 모드에서는 탭바가 셸 UI 를 담당 — 계약상 [data-merge]는 분리
-// 상태에서 관찰되면 된다). 주입 관용구는 [백업] 섹션과 동일 — 원본 HTML 무수정(A42).
-// 위치: 설정 패널 "최상단" — 재병합 진입점의 발견성 (3차 점검 제안 반영, 2026-08-20).
-// ────────────────────────────────────────────────────────────────────────────
-
-async function injectMergeSection() {
-  let st = null;
-  try { st = await shellGetState(); } catch (_err) { return; }
-  if (!st || st.ok !== true || st.mode !== 'separate') return; // 병합 모드 — 주입 없음
-
-  const panel = document.getElementById('settingsPanel');
-  if (!panel || panel.querySelector('[data-merge]')) return;
-  const isCal = PAGE === 'calendar';
-  const host = isCal ? (panel.querySelector('.spBody') || panel) : panel;
-  const smallCls = isCal ? 'spSmall' : 'sp-small'; // 앱별 안내문 관용 클래스
-
-  const sec = el(isCal ? 'section' : 'div');
-  sec.className = isCal ? 'spSec' : 'sp-sec';
-  sec.setAttribute('data-shell-window-section', '');
-  sec.appendChild(el('h3', undefined, '창 모드'));
-
-  const row = el('div', { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '6px 0' });
-  const btnMerge = btnEl(undefined, '🔗 한 창으로 합치기');
-  if (!isCal) btnMerge.className = 'tool-btn';
-  btnMerge.title = '캘린더와 포스트잇을 탭이 있는 한 창으로 합쳐요';
-  btnMerge.setAttribute('data-merge', '');
-  row.appendChild(btnMerge);
-  sec.appendChild(row);
-
-  const hint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '5px 0 0' },
-    '두 창을 하나로 합치고 위쪽 탭으로 오가요. 합친 뒤에는 탭바의 "창 분리"로 언제든 되돌릴 수 있어요.');
-  hint.className = smallCls;
-  sec.appendChild(hint);
-  const statusLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '5px 0 0', minHeight: '0' }, '');
-  statusLine.className = smallCls;
-  sec.appendChild(statusLine);
-
-  // 최상단 삽입 — 캘린더는 .spBody 의 첫 섹션 앞, 포스트잇은 헤더(.sp-head) 다음의
-  // 첫 .sp-sec 앞. (기존 최하단 append 는 스크롤 아래에 묻혀 재병합 발견성이 낮았다.)
-  const firstSec = host.querySelector(isCal ? '.spSec' : '.sp-sec');
-  if (firstSec && firstSec.parentNode === host) host.insertBefore(sec, firstSec);
-  else host.insertBefore(sec, host.firstChild);
-
-  btnMerge.addEventListener('click', async function () {
-    btnMerge.disabled = true;
-    statusLine.textContent = '한 창으로 합치는 중…';
-    let res = null;
-    try {
-      res = await shellMerge();
-    } catch (err) {
-      res = { ok: false, reason: String(err && err.message || err) };
-    }
-    if (!res || res.ok !== true) {
-      statusLine.textContent = '합치지 못했어요: ' + String((res && res.reason) || '알 수 없는 오류');
-      btnMerge.disabled = false;
-    }
-    // 성공 시 이 창은 곧 닫히고 병합 창이 열린다 — 추가 처리 불요
-  });
-}
-
-function initMergeUi() {
-  injectMergeSection().catch(function () { /* 브리지 실패 시 셸 UI 만 생략 — 앱 무영향 */ });
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // 진입점 — 앱 DOM 준비 후 셸 UI 부착
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1292,8 +1334,8 @@ function initShellUi() {
   initMigrateUi().catch(function () { /* 브리지 실패 시 셸 UI 만 생략 — 앱 무영향 */ });
   if (PAGE === 'postit') initOnboarding();
   initBackupUi();   // 양 앱 설정 패널에 [백업] 섹션 주입
-  initMergeUi();    // 분리 모드에서만 양 앱 설정 패널 "최상단"에 [창 모드] 섹션([data-merge]) 주입
-  initAlarmRelay(); // 캘린더 페이지 — 병합 모드 백그라운드 탭 알림 릴레이 (탭바 배지)
+  initStartupUi();  // 양 앱 설정 패널에 [시작 프로그램] 섹션 주입 (탭바 드로어와 동기)
+  initAlarmRelay(); // 캘린더 페이지 — 백그라운드 탭 알림 릴레이 (탭바 배지)
 }
 
 if (document.readyState === 'loading') {

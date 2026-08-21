@@ -4,12 +4,15 @@
 <meta charset="utf-8">
 <title>쁘띠캘린더</title>
 <!--
-  쁘띠캘린더 — 셸 탭바 페이지 (병합 1창 탭 모드의 창 기본 페이지, 셸 소유 — 앱 원본 아님)
+  쁘띠캘린더 — 셸 탭바 페이지 (단일 창 탭 모드의 창 기본 페이지, 셸 소유 — 앱 원본 아님)
 
-  계약 (protocol/SCORECARD.md rev.7 A42):
+  계약 (protocol/SCORECARD.md rev.8 A42):
     - [data-shell-tabbar] 루트 / 탭 [data-tab="postit"]·[data-tab="calendar"] (활성 표시)
-    - [data-split] 창 분리 버튼
-    - [data-shell-settings] 설정 드로어: 창 모드(merged/separate) 세그 + 기본 탭 세그 — 변경 즉시 저장
+    - [data-shell-settings-open] 설정 드로어 토글
+    - [data-shell-settings] 설정 드로어: 기본 탭 세그 — 변경 즉시 저장
+    - [data-startup-toggle] 윈도우 시작 시 자동 실행 체크박스 (드로어 안, 즉시 적용 —
+      상태의 단일 진실은 OS. 앱 설정 모달의 같은 항목과 main push 로 양방향 동기)
+    - 창은 항상 1개다 — 창 분리·재병합 진입점은 rev.8 에서 폐지됐다 (재도입 금지)
   셸 자체 훅 (채점 계약 아님 — 스모크·유지보수용):
     - [data-alarm-badge] 캘린더 탭 알림 배지 (빨간 점 + 건수)
     - [data-alarm-strip] 미니 알림 스트립 (클릭 = 캘린더 탭 전환) / [data-alarm-strip-text]
@@ -22,8 +25,9 @@
     - 스크립트의 동적 텍스트는 textContent 만 사용 (innerHTML 계열 금지 조항)
     - 장식 모션은 transform/opacity 전용 0.18s — prefers-reduced-motion 과 앱 [효과]
       설정(postit-settings.anim ≠ "on")을 존중해 끈다 (body.motion 게이트)
-    - 상단 header 높이 40px·드로어 높이 148px 은 main.js 의
-      TABBAR_HEIGHT·SETTINGS_DRAWER_HEIGHT 와 동기 유지 (수동 관리)
+    - 상단 header 높이 40px·드로어 높이 138px 은 main.js 의
+      TABBAR_HEIGHT·SETTINGS_DRAWER_HEIGHT 와 동기 유지 (수동 관리 — 드로어에 줄을
+      더하면 실측 높이(스크롤 없는 최소 높이)를 두 곳에 함께 반영한다)
 -->
 <style>
   @font-face {
@@ -164,9 +168,9 @@
   .actions button:disabled { opacity: 0.55; cursor: default; }
   .actions button.gear.open { background: var(--accent); border-color: var(--cork-deep); }
 
-  /* ── 설정 드로어 (고정 148px — main.js SETTINGS_DRAWER_HEIGHT 동기) ── */
+  /* ── 설정 드로어 (고정 138px — main.js SETTINGS_DRAWER_HEIGHT 동기) ── */
   section[data-shell-settings] {
-    height: 148px;
+    height: 138px;
     padding: 10px 16px 8px;
     background: var(--cream-hi);
     border-bottom: 2px solid var(--cork);
@@ -198,8 +202,28 @@
     font-weight: 700;
     background: var(--accent);
   }
+  /* 체크박스 행 (윈도우 시작 시 자동 실행) — 세그 행과 같은 리듬으로 정렬 */
+  .chk {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--ink);
+    cursor: pointer;
+    line-height: 1.2;
+  }
+  .chk input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--cork);
+    cursor: pointer;
+  }
+  .chk input:disabled { cursor: default; }
+  .chk-hint { font-size: 13px; color: var(--ink-soft); }
   .hint { font-size: 13px; color: var(--ink-soft); margin: 2px 0 0; line-height: 1.45; }
   .status { font-size: 13px; color: #a04638; margin: 0; min-height: 15px; line-height: 1.35; }
+  .status.ok { color: var(--ink-soft); }
 
   /* ── 모션 게이트: body.motion 일 때만 전환 재생 (transform/opacity 전용, 0.18s) ── */
   body.motion .tab-indicator,
@@ -225,27 +249,27 @@
     <span>🔔</span><span class="strip-text" data-alarm-strip-text></span>
   </button>
   <div class="actions">
-    <button type="button" data-split title="캘린더와 포스트잇을 두 창으로 나눠요">⧉ 창 분리</button>
     <button type="button" class="gear" data-shell-settings-open title="셸 설정을 열고 닫아요">⚙️ 설정</button>
   </div>
 </header>
 
 <section data-shell-settings hidden>
   <div class="seg-row">
-    <span class="seg-label">창 모드</span>
+    <span class="seg-label">기본 탭</span>
     <span class="seg">
-      <button type="button" data-mode="merged" title="탭이 있는 한 창으로 시작해요">한 창(탭)</button>
-      <button type="button" data-mode="separate" title="캘린더·포스트잇 두 창으로 시작해요">두 창(분리)</button>
+      <button type="button" data-default-tab="postit" title="앱을 열면 포스트잇 탭으로 시작해요">포스트잇</button>
+      <button type="button" data-default-tab="calendar" title="앱을 열면 캘린더 탭으로 시작해요">캘린더</button>
     </span>
   </div>
   <div class="seg-row">
-    <span class="seg-label">기본 탭</span>
-    <span class="seg">
-      <button type="button" data-default-tab="postit" title="한 창 모드에서 포스트잇 탭으로 시작해요">포스트잇</button>
-      <button type="button" data-default-tab="calendar" title="한 창 모드에서 캘린더 탭으로 시작해요">캘린더</button>
-    </span>
+    <span class="seg-label">시작</span>
+    <label class="chk" title="컴퓨터를 켜면 쁘띠캘린더가 함께 열려요">
+      <input type="checkbox" data-startup-toggle>
+      <span>윈도우 시작 시 자동 실행</span>
+    </label>
+    <span class="chk-hint">컴퓨터를 켜면 쁘띠캘린더가 함께 열려요.</span>
   </div>
-  <p class="hint">설정은 바로 저장돼요. 창 모드는 다음 실행부터 적용되고, 지금 바로 나누고 싶으면 위의 "창 분리"를 눌러 주세요. (Ctrl+Tab으로 탭을 오갈 수 있어요)</p>
+  <p class="hint">설정은 바로 저장되고, 기본 탭은 다음 실행부터 적용돼요. (Ctrl+Tab으로 탭을 오갈 수 있어요)</p>
   <p class="status" data-shell-status></p>
 </section>
 
@@ -255,19 +279,19 @@
 
   var api = window.petitShell;
   var tabButtons = Array.prototype.slice.call(document.querySelectorAll('[data-tab]'));
-  var modeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-mode]'));
   var defaultTabButtons = Array.prototype.slice.call(document.querySelectorAll('[data-default-tab]'));
-  var splitBtn = document.querySelector('[data-split]');
   var gearBtn = document.querySelector('[data-shell-settings-open]');
   var drawer = document.querySelector('[data-shell-settings]');
   var statusLine = document.querySelector('[data-shell-status]');
+  var startupChk = document.querySelector('[data-startup-toggle]');
   var indicator = document.querySelector('[data-tab-indicator]');
   var badge = document.querySelector('[data-alarm-badge]');
   var strip = document.querySelector('[data-alarm-strip]');
   var stripText = document.querySelector('[data-alarm-strip-text]');
 
-  function setStatus(msg) {
+  function setStatus(msg, ok) {
     statusLine.textContent = msg || '';
+    statusLine.classList.toggle('ok', ok === true);
   }
 
   /* ── 모션 게이트: OS 동작 축소 선호 또는 앱 [효과] 설정(postit-settings.anim ≠ "on")이면
@@ -329,15 +353,14 @@
     placeIndicator();
   }
   function markSettings(st) {
-    modeButtons.forEach(function (b) {
-      b.classList.toggle('on', b.getAttribute('data-mode') === st.windowMode);
-    });
     defaultTabButtons.forEach(function (b) {
       b.classList.toggle('on', b.getAttribute('data-default-tab') === st.defaultTab);
     });
+    /* 자동 실행 표시는 OS 실측값(main 이 매번 읽어 보낸다)만 따른다 — 탭바는 저장하지 않는다 */
+    if (typeof st.openAtLogin === 'boolean') startupChk.checked = st.openAtLogin;
   }
 
-  /* ── 알림 배지 + 미니 스트립 (병합 모드 백그라운드 캘린더의 일정 알림 릴레이) ── */
+  /* ── 알림 배지 + 미니 스트립 (백그라운드 캘린더 탭의 일정 알림 릴레이) ── */
   function applyAlarms(al) {
     var count = al && typeof al.count === 'number' && al.count > 0 ? al.count : 0;
     var text = al && typeof al.text === 'string' ? al.text : '';
@@ -404,7 +427,7 @@
     }
   }
 
-  /* ── 탭 전환 (병합 내 전환은 z순서 재배치만 — 리로드 없음) ── */
+  /* ── 탭 전환 (한 창 안의 z순서 재배치만 — 리로드 없음) ── */
   function requestTab(tab) {
     api.switchTab(tab).then(applyState).catch(function () {
       setStatus('탭을 전환하지 못했어요. 다시 시도해 주세요.');
@@ -423,37 +446,36 @@
     requestTab('calendar');
   });
 
-  /* ── 창 분리 — 성공하면 이 창은 곧 닫히고 두 창이 열린다 ── */
-  splitBtn.addEventListener('click', function () {
-    splitBtn.disabled = true;
-    api.split().then(function (res) {
-      if (!res || res.ok !== true) {
-        splitBtn.disabled = false;
-        if (!drawerOpen) setDrawer(true);
-        setStatus((res && res.reason) || '창을 나누지 못했어요. 다시 시도해 주세요.');
-      }
-    }).catch(function () {
-      splitBtn.disabled = false;
-    });
-  });
-
   /* ── 설정 세그 — 변경 즉시 저장 ── */
   gearBtn.addEventListener('click', function () { setDrawer(!drawerOpen); });
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape' && drawerOpen) setDrawer(false);
-  });
-  modeButtons.forEach(function (b) {
-    b.addEventListener('click', function () {
-      api.setSettings({ windowMode: b.getAttribute('data-mode') }).then(applyState).catch(function () {
-        setStatus('설정을 저장하지 못했어요.');
-      });
-    });
   });
   defaultTabButtons.forEach(function (b) {
     b.addEventListener('click', function () {
       api.setSettings({ defaultTab: b.getAttribute('data-default-tab') }).then(applyState).catch(function () {
         setStatus('설정을 저장하지 못했어요.');
       });
+    });
+  });
+
+  /* ── 윈도우 시작 시 자동 실행 — 즉시 적용, 표시는 항상 실제 OS 값으로 확정 ──
+     실패해도 크래시·모달 없이 안내 한 줄 + 체크 상태를 실측값으로 되돌린다. */
+  startupChk.addEventListener('change', function () {
+    var want = startupChk.checked;
+    startupChk.disabled = true;
+    api.setStartup(want).then(function (res) {
+      startupChk.disabled = false;
+      if (res && typeof res.openAtLogin === 'boolean') startupChk.checked = res.openAtLogin;
+      if (res && res.ok === true) {
+        setStatus(want ? '컴퓨터를 켜면 쁘띠캘린더가 함께 열려요.' : '윈도우 시작 시 자동 실행을 껐어요.', true);
+      } else {
+        setStatus((res && res.reason) || '윈도우 시작 설정을 바꾸지 못했어요.');
+      }
+    }).catch(function () {
+      startupChk.disabled = false;
+      startupChk.checked = !want;
+      setStatus('윈도우 시작 설정을 바꾸지 못했어요.');
     });
   });
 

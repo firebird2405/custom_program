@@ -6,8 +6,8 @@
 //   - 안전 JSON 파일 IO: readJsonFile / writeJsonFile — 부재·손상 시 크래시 없이 강등
 //     (아키텍처 원칙 5 준용)
 //   - 앱 페이지 식별: windowAppKind / appWindows — 로드 URL 기준 (창 생성 코드와 결합도
-//     없음). 병합 모드(1창 탭, WebContentsView)와 분리 모드(창 2개) 어느 쪽이든
-//     webContents 단위로 잡는다 — 호출측은 .webContents 만 쓴다.
+//     없음). 단일 창 탭 모드의 앱 WebContentsView 를 webContents 단위로 잡는다 —
+//     호출측은 .webContents 만 쓴다.
 //   - IPC 방어: assertTrustedSender — 우리 앱 창(file://)의 요청만 허용
 //   - 자식 프로세스 환경 정돈: cleanChildEnv — 부모 환경 오염 방어
 //
@@ -78,8 +78,8 @@ function wcAppKind(wc) {
 
 /**
  * 창(또는 webContents 를 가진 앱 타깃)이 어느 앱인지 로드 URL 로 판별한다
- * (main.js 창 생성과 결합도 없음). 분리 모드의 BrowserWindow 와
- * 병합 모드의 appWindows() 타깃 둘 다 받는다 — 판별 기준은 .webContents 의 URL.
+ * (main.js 창 생성과 결합도 없음). BrowserWindow 와 appWindows() 타깃 둘 다 받는다
+ * — 판별 기준은 .webContents 의 URL.
  * @param {Electron.BrowserWindow|{webContents: Electron.WebContents}} win
  * @returns {'calendar'|'postit'|null}
  */
@@ -90,9 +90,8 @@ function windowAppKind(win) {
 
 /**
  * 살아 있는 앱 페이지 타깃 목록 — 각 항목은 { webContents } 형태.
- * 분리 모드에서는 앱 BrowserWindow 의 webContents, 병합 모드(1창 탭)에서는
- * WebContentsView 의 webContents 가 잡힌다 — 호출측(backup/migrate)은
- * .webContents.executeJavaScript 만 쓰므로 두 모드에서 동일하게 동작한다.
+ * 단일 창 탭 모드에서는 앱 WebContentsView 의 webContents 가 잡힌다 —
+ * 호출측(backup/migrate)은 .webContents.executeJavaScript 만 쓴다.
  * preferred(BrowserWindow 또는 타깃)를 주면 같은 webContents 항목을 맨 앞으로 정렬한다.
  * (모든 앱 페이지는 같은 file:// 오리진 저장소를 공유한다 — 아무 페이지에서나 읽으면 전체가 보인다.)
  * @param {Electron.BrowserWindow|{webContents: Electron.WebContents}|null} [preferred] 우선 타깃
@@ -114,8 +113,8 @@ function appWindows(preferred) {
 
 /**
  * IPC 호출자 검증 — 우리 앱 페이지(file://)의 요청만 처리한다. 그 외는 한국어 오류 throw.
- * 허용 호출자: ① 우리 BrowserWindow 소속 webContents(분리 창·병합 탭바),
- * ② 병합 모드의 앱 WebContentsView(calendar/postit URL) — 둘 다 file:// 필수.
+ * 허용 호출자: ① 우리 BrowserWindow 소속 webContents(셸 탭바 페이지),
+ * ② 앱 WebContentsView(calendar/postit URL) — 둘 다 file:// 필수.
  * @param {Electron.IpcMainInvokeEvent} event
  */
 function assertTrustedSender(event) {

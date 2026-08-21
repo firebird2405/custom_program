@@ -391,21 +391,75 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
 .confirmPop button{flex:none; padding:3px 10px; font-size:13px;}
 .confirmPop button.yes{color:var(--red); border-color:var(--red); font-weight:600;}
 
-/* ---------- settings panel (⚙️ — 비모달 슬라이드, transform/opacity 전용) ---------- */
+/* ---------- settings window (⚙️ — 게임 환경설정 창 관용구: 중앙 모달 · 딤 ·
+ *  좌측 카테고리 + 우측 내용 패널. 모션은 transform/opacity 전용 0.16s)
+ *  구조: #settingsPanel(딤 포함 오버레이) > .spFrame > .spHead + .spMain(.spNav + .spWrap > .spBody)
+ *  .spBody 는 그대로 .spSec 들의 직속 부모로 남는다 — Electron preload 가 이 자리에
+ *  [백업]·[창 모드] 섹션을 직접 붙이기 때문이다 (주입 앵커 불변). 포스트잇 월과 동일 구조. */
 #settingsBtn{font-size:16px; width:40px; padding:5px 0; text-align:center;}
 #settingsPanel{
-  position:fixed; top:0; right:0; bottom:0; width:330px; max-width:92vw;
-  display:flex; flex-direction:column; z-index:950;
-  background:var(--surface); border-left:1px solid var(--border);
-  box-shadow:-6px 0 22px rgba(0,0,0,.22);
-  transform:translateX(105%); visibility:hidden;
-  transition:transform .24s ease, visibility 0s linear .24s;
+  position:fixed; inset:0; z-index:950;
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity .16s ease, visibility 0s linear .16s;
 }
-#settingsPanel.open{transform:translateX(0); visibility:visible; transition:transform .24s ease;}
+#settingsPanel.open{opacity:1; visibility:visible; pointer-events:auto; transition:opacity .16s ease;}
+.spDim{position:absolute; inset:0; background:rgba(20,14,6,.44); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);}
+.spFrame{
+  position:relative; display:flex; flex-direction:column;
+  width:min(920px, 92vw); height:min(620px, 86vh);
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  box-shadow:0 18px 48px rgba(0,0,0,.42);
+  transform:scale(.98); transition:transform .16s ease;
+}
+#settingsPanel.open .spFrame{transform:scale(1);}
 .spHead{flex:none; display:flex; align-items:center; gap:8px; padding:14px 16px 10px; border-bottom:1px solid var(--border);}
 .spTitle{font-family:"NanumPen","Gaegu",'Segoe UI','Malgun Gothic',sans-serif; font-size:26px; line-height:1; flex:1;}
 #settingsClose{width:32px; padding:4px 0; text-align:center; font-size:15px;}
-.spBody{flex:1; overflow-y:auto; padding:4px 16px 18px; display:flex; flex-direction:column;}
+.spMain{flex:1 1 auto; display:flex; min-height:0;}
+.spNav{
+  flex:none; width:190px; display:flex; flex-direction:column; gap:3px;
+  padding:10px 8px 12px; overflow-y:auto; border-right:1px solid var(--border);
+}
+.spNavi{
+  flex:none; border:0; border-radius:9px; padding:8px 10px 9px;
+  background:transparent; color:var(--muted); font-family:inherit; font-size:14px;
+  text-align:left; cursor:pointer; transition:background .16s ease;
+}
+.spNavi:hover{background:var(--accent-soft); color:var(--text);}
+.spNavi.sel{background:var(--accent); color:var(--on-accent); font-weight:600; box-shadow:inset 3px 0 0 rgba(0,0,0,.18);}
+.spWrap{position:relative; flex:1 1 auto; min-width:0; display:flex;}
+.spBody{flex:1 1 auto; min-width:0; overflow-y:auto; padding:4px 16px 18px; display:flex; flex-direction:column; scrollbar-gutter:stable;}
+/* 카테고리 필터 — 활성 카테고리 섹션만 보인다. 나머지는 DOM 에 그대로 남는다
+   (셸 주입 훅·라이선스 고지 전문 보존). */
+.spBody > .spSec{display:none;}
+.spBody > .spSec.spOn{display:flex; max-width:640px;}
+.spBody > .spSec.spOn.spLast{border-bottom:0;}
+/* 넘침 어포던스 (포스트잇 월과 같은 관용구) — 실측으로만 .ovf/.at-top/.at-bottom */
+.spWrap.ovf:not(.at-bottom) .spBody{
+  -webkit-mask-image:linear-gradient(180deg, #000 0, #000 calc(100% - 34px), rgba(0,0,0,.12) 100%);
+          mask-image:linear-gradient(180deg, #000 0, #000 calc(100% - 34px), rgba(0,0,0,.12) 100%);
+}
+.spHint{
+  position:absolute; left:0; right:0; bottom:2px; text-align:center; line-height:0;
+  opacity:0; pointer-events:none; transition:opacity .16s ease;
+}
+.spHint::after{
+  content:""; display:inline-block; width:0; height:0;
+  border-left:6px solid transparent; border-right:6px solid transparent;
+  border-top:6px solid var(--muted);
+}
+.spWrap.ovf:not(.at-bottom) .spHint{opacity:1; animation:spHintNudge 1.7s ease-in-out infinite;}
+@keyframes spHintNudge{0%,100%{transform:translateY(0);} 50%{transform:translateY(2px);}}
+@media (max-width:720px){
+  .spMain{flex-direction:column;}
+  .spNav{
+    width:auto; flex-direction:row; flex-wrap:wrap; gap:4px;
+    padding:8px 10px; border-right:0; border-bottom:1px solid var(--border);
+  }
+  .spNavi{padding:5px 9px 6px; font-size:13px;}
+  .spNavi.sel{box-shadow:inset 0 3px 0 rgba(0,0,0,.18);}
+}
 .spSec{padding:10px 0 12px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:8px;}
 .spSec:last-child{border-bottom:0;}
 .spSec h3{
@@ -436,7 +490,7 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
   padding:5px 8px; cursor:pointer;
 }
 #settingsPanel select:focus{outline:none; border-color:var(--accent);}
-#setVol{flex:1; min-width:110px; accent-color:var(--accent); cursor:pointer;}
+#setVol{flex:1; min-width:110px; max-width:260px; accent-color:var(--accent); cursor:pointer;}
 #setGaugeBar{
   height:10px; border-radius:6px; background:var(--surface2);
   border:1px solid var(--border); overflow:hidden;
@@ -470,11 +524,23 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
 }
 .foldBadge[hidden]{display:none;}
 .spFoldBody{display:flex; flex-direction:column; gap:8px; padding-top:9px;}
-/* 다크 프리셋: 설정 패널을 배경보다 살짝 띄운 따뜻한 브라운으로 — 컨트롤 표면·경계도 패널 안에서만 조화 */
+/* [정보] 안의 라이선스 전문 — 읽을 사람만 편다 (접혀 있어도 DOM·textContent 는 그대로) */
+.spLicFold > summary{padding:3px 0; color:var(--muted); font-size:12px;}
+.spLicFold > summary::before{content:"▸ "; font-size:10px;}
+.spLicFold[open] > summary::before{content:"▾ ";}
+.spLicFold > summary:hover{text-decoration:underline;}
+/* 손상 백업이 생기면 [데이터] 카테고리 자체에 점을 찍는다 (접혀 있던 배지의 대체) */
+.spNavi[data-badge]::after{
+  content:""; display:inline-block; width:7px; height:7px; margin-left:6px;
+  border-radius:50%; background:var(--red); vertical-align:middle;
+}
+/* 다크 프리셋: 설정 창을 배경보다 살짝 띄운 따뜻한 브라운으로 — 컨트롤 표면·경계도 창 안에서만 조화 */
 [data-preset="dark"] #settingsPanel{
-  background:#312818;
   --surface:#312818; --surface2:#41351e; --border:#57472a;
-  box-shadow:-8px 0 28px rgba(0,0,0,.5);
+}
+[data-preset="dark"] .spFrame{
+  background:#312818;
+  box-shadow:0 18px 44px rgba(0,0,0,.6);
 }
 
 /* ---------- 배경 꾸미기 (설정 [꾸미기] — 기본 상태에서는 display:none, 렌더 완전 불변) ----------
@@ -614,13 +680,38 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
   </aside>
 </main>
 
+<!-- 설정 창 (⚙️) — 게임 환경설정 창 관용구: 화면 중앙 고정 프레임 + 딤, 좌측 카테고리 목록,
+     우측 내용 패널(.spBody). 카테고리를 바꿔도 다른 섹션은 DOM 에 그대로 남는다
+     (셸 주입 훅·라이선스 고지 전문 보존). 포스트잇 월과 같은 구조·같은 관용구. -->
 <aside id="settingsPanel" data-settings-panel aria-label="설정" aria-hidden="true">
+  <div class="spDim" id="spDim"></div>
+  <div class="spFrame" role="dialog" aria-modal="false" aria-labelledby="spTitleText">
   <div class="spHead">
-    <span class="spTitle">설정</span>
+    <span class="spTitle" id="spTitleText">설정</span>
     <button type="button" id="settingsClose" title="설정 닫기 (ESC)">×</button>
   </div>
-  <div class="spBody">
-    <section class="spSec">
+  <div class="spMain">
+    <!-- 카테고리 목록 — 형제 앱(포스트잇 월)과 공통 카테고리는 같은 이름·같은 순서다 -->
+    <nav class="spNav" id="spNav" role="tablist" aria-label="설정 분류">
+      <button type="button" class="spNavi" id="spTab-display" role="tab" data-spcat="display"
+              aria-controls="spBody" aria-selected="true">🖋 표시</button>
+      <button type="button" class="spNavi" id="spTab-alarm" role="tab" data-spcat="alarm"
+              aria-controls="spBody" aria-selected="false">🔔 알림</button>
+      <button type="button" class="spNavi" id="spTab-decor" role="tab" data-spcat="decor"
+              aria-controls="spBody" aria-selected="false">🎨 꾸미기</button>
+      <button type="button" class="spNavi" id="spTab-fx" role="tab" data-spcat="fx"
+              aria-controls="spBody" aria-selected="false">✨ 효과·소리</button>
+      <button type="button" class="spNavi" id="spTab-safety" role="tab" data-spcat="safety"
+              aria-controls="spBody" aria-selected="false">🛡 안전</button>
+      <button type="button" class="spNavi" id="spTab-data" role="tab" data-spcat="data"
+              aria-controls="spBody" aria-selected="false">💾 데이터</button>
+      <button type="button" class="spNavi" id="spTab-about" role="tab" data-spcat="about"
+              aria-controls="spBody" aria-selected="false">ℹ️ 정보</button>
+    </nav>
+    <div class="spWrap" id="spWrap">
+  <div class="spBody" id="spBody" role="tabpanel" tabindex="0">
+    <!-- data-spcat = 이 섹션이 속한 카테고리. 값이 없는 섹션(셸 주입분)은 첫 카테고리로 간다. -->
+    <section class="spSec" data-spcat="display">
       <h3>표시</h3>
       <div class="spRow"><span class="spLab">글자 크기</span>
         <span class="seg" id="setFontSeg">
@@ -639,7 +730,18 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
       <label class="spRow spCheck"><input type="checkbox" id="setLunar" checked> 음력 표시</label>
       <label class="spRow spCheck"><input type="checkbox" id="setDday" checked> D-day 배지</label>
     </section>
-    <section class="spSec">
+    <section class="spSec" data-spcat="alarm">
+      <h3>알림</h3>
+      <label class="spRow spCheck"><input type="checkbox" id="setAlarm" checked> 일정 시간 알림</label>
+      <div class="spRow"><span class="spLab">알림 시점</span>
+        <select id="setAlarmLead" title="일정 시각 기준 알림 선행 시간">
+          <option value="0">정각</option>
+          <option value="5">5분 전</option>
+          <option value="15">15분 전</option>
+        </select>
+      </div>
+    </section>
+    <section class="spSec" data-spcat="decor">
       <h3>꾸미기</h3>
       <div class="spRow"><span class="spLab">배경</span>
         <span class="seg" id="setDecorSeg">
@@ -660,19 +762,9 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
       <p class="spSmall">배경은 카드 뒤에 은은하게 깔려요. 기본을 고르면 원래 화면 그대로예요.</p>
       <input type="file" id="setDecorImgFile" accept="image/*" hidden>
     </section>
-    <section class="spSec">
-      <h3>알림</h3>
-      <label class="spRow spCheck"><input type="checkbox" id="setAlarm" checked> 일정 시간 알림</label>
-      <div class="spRow"><span class="spLab">알림 시점</span>
-        <select id="setAlarmLead" title="일정 시각 기준 알림 선행 시간">
-          <option value="0">정각</option>
-          <option value="5">5분 전</option>
-          <option value="15">15분 전</option>
-        </select>
-      </div>
-    </section>
-    <section class="spSec">
-      <h3>효과</h3>
+    <!-- 움직임과 소리 — 포스트잇 월의 같은 이름 섹션과 1:1 대응 (형제 앱 관용구 통일) -->
+    <section class="spSec" data-spcat="fx">
+      <h3>움직임과 소리</h3>
       <div class="spRow"><span class="spLab">애니메이션</span>
         <span class="seg" id="setAnimSeg" title="화면 전환·목록 애니메이션">
           <button type="button" data-val="on">켬</button>
@@ -680,10 +772,13 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
           <button type="button" data-val="off">끔</button>
         </span>
       </div>
+      <label class="spRow spCheck"><input type="checkbox" id="setMute"> 음소거</label>
+      <div class="spRow"><span class="spLab">볼륨</span>
+        <input type="range" id="setVol" min="0" max="100" step="1" title="효과음 볼륨 (헤더 슬라이더와 동기화)">
+      </div>
+      <p class="spSmall">헤더의 🔊 볼륨 슬라이더와 항상 같이 움직여요.</p>
     </section>
-    <!-- 섹션 순서는 포스트잇 월과 맞춘다 (… 효과 → 안전 → 사운드 → 데이터 → 정보):
-         형제 앱을 오갈 때 같은 것이 같은 자리에 있어야 한 제품으로 읽힌다. -->
-    <section class="spSec">
+    <section class="spSec" data-spcat="safety">
       <h3>안전</h3>
       <div class="spRow"><span class="spLab">삭제 전 확인</span>
         <span class="seg" id="setConfirmDelSeg" title="삭제 버튼을 누르면 한 번 더 물어보기">
@@ -693,15 +788,10 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
       </div>
       <p class="spSmall">켜면 일정·배경 이미지·손상 백업을 지우기 전에 한 번 더 물어봐요.</p>
     </section>
-    <section class="spSec">
-      <h3>사운드</h3>
-      <label class="spRow spCheck"><input type="checkbox" id="setMute"> 음소거</label>
-      <div class="spRow"><span class="spLab">볼륨</span>
-        <input type="range" id="setVol" min="0" max="100" step="1" title="효과음 볼륨 (헤더 슬라이더와 동기화)">
-      </div>
-    </section>
-    <details class="spSec spFold" id="setDataSec">
-      <summary><h3>데이터<span id="setDataBadge" class="foldBadge" hidden></span><span class="foldMark" aria-hidden="true">▾</span></h3></summary>
+    <!-- [데이터]·[정보]는 이제 카테고리가 열고 닫는다 — 섹션 자체의 접이는 걷었다.
+         id 는 그대로 유지한다 (손상 백업 배지가 이 자리를 가리킨다). -->
+    <section class="spSec" data-spcat="data" id="setDataSec">
+      <h3>데이터<span id="setDataBadge" class="foldBadge" hidden></span></h3>
       <div class="spFoldBody">
         <div class="spRow">
           <button type="button" id="setExport">내보내기</button>
@@ -718,25 +808,33 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
           <button type="button" id="setCorruptClear" hidden>모두 정리</button>
         </div>
       </div>
-    </details>
-    <details class="spSec spFold" id="setInfoSec">
-      <summary><h3>정보<span class="foldMark" aria-hidden="true">▾</span></h3></summary>
+    </section>
+    <section class="spSec" data-spcat="about" id="setInfoSec">
+      <h3>정보</h3>
       <div class="spFoldBody">
         <p class="spInfo">캘린더 — 캘린더 + 포스트잇 월 (2026-08)</p>
         <p class="spInfo spSmall">단축키: ← → 이동 · T 오늘 · W 주간/월간 · ESC 닫기</p>
-        <div class="spInfo spSmall" data-licenses>
-          <p>라이선스 고지 — 번들 에셋·라이브러리 전수 (상세: assets/ASSETS.md)</p>
-          <ul class="spLicList">
-            <li>cork-texture.jpg — ambientCG Cork001 · CC0 (Public Domain)</li>
-            <li>Gaegu-Regular.ttf — 개구쟁이 글꼴, Google Fonts · SIL OFL 1.1</li>
-            <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 글꼴, Google Fonts · SIL OFL 1.1</li>
-            <li>korean-lunar-calendar v0.4.0 — 음력 변환표 · MIT License, (c) 2022 Jinil Lee</li>
-            <li>앱 아이콘 — 자체 제작 (쁘띠캘린더 원본, 외부 에셋 불사용)</li>
-          </ul>
-        </div>
+        <!-- 라이선스 전문은 읽을 사람만 편다. 접혀 있어도 DOM 에 그대로 있어 고지 의무는 유지된다. -->
+        <details class="spFold spLicFold">
+          <summary><span class="spSmall">에셋·오픈소스 고지</span></summary>
+          <div class="spInfo spSmall" data-licenses>
+            <p>라이선스 고지 — 번들 에셋·라이브러리 전수 (상세: assets/ASSETS.md)</p>
+            <ul class="spLicList">
+              <li>cork-texture.jpg — ambientCG Cork001 · CC0 (Public Domain)</li>
+              <li>Gaegu-Regular.ttf — 개구쟁이 글꼴, Google Fonts · SIL OFL 1.1</li>
+              <li>NanumPenScript-Regular.ttf — 나눔손글씨 펜 글꼴, Google Fonts · SIL OFL 1.1</li>
+              <li>korean-lunar-calendar v0.4.0 — 음력 변환표 · MIT License, (c) 2022 Jinil Lee</li>
+              <li>앱 아이콘 — 자체 제작 (쁘띠캘린더 원본, 외부 에셋 불사용)</li>
+            </ul>
+          </div>
+        </details>
       </div>
-    </details>
-  </div>
+    </section>
+  </div><!-- /.spBody -->
+      <span class="spHint" aria-hidden="true"></span>
+    </div><!-- /.spWrap -->
+  </div><!-- /.spMain -->
+  </div><!-- /.spFrame -->
 </aside>
 
 <div id="toast" data-toast role="status" aria-live="polite">
@@ -2364,14 +2462,17 @@ function refreshDataSection(){
   }
   setCorruptClear.hidden = keys.length === 0;
 
-  /* [데이터]는 평소 접혀 있다 — 손상 백업이 실제로 생겼을 때만 요약줄에 배지를 띄우고 펼친다.
-     fresh 상태(0건)에서는 접힌 그대로라 기본 표시가 달라지지 않는다. */
-  const badge = $('setDataBadge'), sec = $('setDataSec');
+  /* 손상 백업이 실제로 생겼을 때만 [데이터] 제목에 배지를 띄우고, 카테고리 목록에도 점을 찍는다.
+     fresh 상태(0건)에서는 둘 다 없어 기본 표시가 달라지지 않는다. */
+  const badge = $('setDataBadge'), navData = $('spTab-data');
   if (badge){
     badge.hidden = keys.length === 0;
     badge.textContent = keys.length ? ('손상 ' + keys.length) : '';
   }
-  if (sec && keys.length > 0) sec.open = true;
+  if (navData){
+    if (keys.length > 0) navData.setAttribute('data-badge', '');
+    else navData.removeAttribute('data-badge');
+  }
 }
 setCorruptClear.addEventListener('click', ()=>{
   /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시 정리) */
@@ -2383,16 +2484,95 @@ setCorruptClear.addEventListener('click', ()=>{
   });
 });
 
+/* ── 설정 창: 화면 중앙 모달 — 좌측 카테고리 + 우측 내용 패널 (포스트잇 월과 같은 관용구).
+   .spBody 는 여전히 .spSec 들의 직속 부모다 — 셸(preload)이 [백업]·[창 모드] 섹션을
+   이 자리에 직접 붙이기 때문에 앵커를 바꾸지 않는다. ── */
+const spBodyEl = $('spBody'), spNavEl = $('spNav'), spWrapEl = $('spWrap');
+const SP_CAT_DEFAULT = 'display';   /* 열 때 활성화되는 첫 카테고리 */
+let spCat = SP_CAT_DEFAULT;
+
+/* 섹션 → 카테고리. 셸이 나중에 붙이는 섹션에는 data-spcat 이 없다:
+   [백업]은 데이터로, 나머지(창 모드)는 첫 카테고리로 보낸다 — 설정을 열자마자
+   보이는 자리라 셸 진입점이 묻히지 않는다. */
+function spSecCat(sec){
+  const c = sec.getAttribute('data-spcat');
+  if (c) return c;
+  if (sec.hasAttribute('data-backup-section') || sec.querySelector('[data-backup-now]')) return 'data';
+  return SP_CAT_DEFAULT;
+}
+
+/* 넘침 어포던스 — 실측(scrollHeight vs clientHeight)으로만 판정 */
+function spUpdateOvf(){
+  if (!spWrapEl) return;
+  const max = spBodyEl.scrollHeight - spBodyEl.clientHeight;
+  const ovf = max > 1;
+  spWrapEl.classList.toggle('ovf', ovf);
+  spWrapEl.classList.toggle('at-top', !ovf || spBodyEl.scrollTop <= 1);
+  spWrapEl.classList.toggle('at-bottom', !ovf || spBodyEl.scrollTop >= max - 1);
+}
+
+function spApplyCat(resetScroll){
+  let last = null;
+  for (const sec of Array.from(spBodyEl.children)){
+    if (!sec.classList || !sec.classList.contains('spSec')) continue;
+    const on = spSecCat(sec) === spCat;
+    sec.classList.toggle('spOn', on);
+    sec.classList.remove('spLast');
+    if (on) last = sec;
+  }
+  if (last) last.classList.add('spLast');
+  for (const tab of spNavEl.querySelectorAll('.spNavi')){
+    const sel = tab.getAttribute('data-spcat') === spCat;
+    tab.classList.toggle('sel', sel);
+    tab.setAttribute('aria-selected', sel ? 'true' : 'false');
+    tab.tabIndex = sel ? 0 : -1;
+    if (sel) spBodyEl.setAttribute('aria-labelledby', tab.id);
+  }
+  if (resetScroll !== false) spBodyEl.scrollTop = 0;
+  spUpdateOvf();
+}
+
+function spSetCat(cat, focusTab){
+  spCat = cat;
+  spApplyCat();
+  if (focusTab){
+    const t = spNavEl.querySelector('.spNavi[data-spcat="' + cat + '"]');
+    try{ if (t) t.focus({preventScroll:true}); }catch(e){}
+  }
+}
+
+spNavEl.addEventListener('click', (e)=>{
+  const t = (e.target instanceof Element) ? e.target.closest('.spNavi') : null;
+  if (!t) return;
+  spSetCat(t.getAttribute('data-spcat'), true);
+});
+/* 위/아래 화살표로 카테고리 이동 (환경설정 창 관용구) */
+spNavEl.addEventListener('keydown', (e)=>{
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const list = Array.from(spNavEl.querySelectorAll('.spNavi'));
+  const at = list.map((b)=>b.getAttribute('data-spcat')).indexOf(spCat);
+  if (at < 0) return;
+  e.preventDefault();
+  const next = (at + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length;
+  spSetCat(list[next].getAttribute('data-spcat'), true);
+});
+spBodyEl.addEventListener('scroll', spUpdateOvf, {passive:true});
+window.addEventListener('resize', ()=>{ if (isSettingsOpen()) spUpdateOvf(); });
+/* 셸이 뒤늦게 붙이는 섹션도 카테고리에 편입 (preload 는 수정 불가 — 앱이 맞춘다) */
+try{ new MutationObserver(()=>spApplyCat(false)).observe(spBodyEl, {childList:true}); }catch(e){}
+
 function isSettingsOpen(){ return settingsPanel.classList.contains('open'); }
 function openSettings(){
   syncSettingsUI();
   refreshDataSection();
   settingsPanel.classList.add('open');
   settingsPanel.setAttribute('aria-hidden', 'false');
+  spSetCat(SP_CAT_DEFAULT, true);   /* 열 때 첫 카테고리 활성 + 포커스는 모달 안으로 */
+  spUpdateOvf();
 }
 function closeSettings(){
   closeConfirmPop(); /* 패널 안 컨트롤에 붙은 삭제 확인 팝오버도 함께 닫는다 */
-  /* 패널 안 요소가 포커스를 쥔 채 aria-hidden 이 되면 접근성 경고 — 토글 버튼으로 되돌린다 */
+  /* 창 안 요소가 포커스를 쥔 채 aria-hidden 이 되면 접근성 경고 — 토글 버튼으로 되돌린다 */
   try{ if (settingsPanel.contains(document.activeElement)) settingsBtn.focus({preventScroll:true}); }catch(e){}
   settingsPanel.classList.remove('open');
   settingsPanel.setAttribute('aria-hidden', 'true');
@@ -2408,11 +2588,13 @@ document.addEventListener('keydown', (e)=>{
   if (confirmPop){ closeConfirmPop(); return; } /* 삭제 확인 팝오버가 먼저 닫힌다 (패널 유지) */
   closeSettings();
 }, true);
-/* 바깥 클릭 닫기 (비모달 — 클릭 자체는 그대로 진행). 프로그램적 click(내보내기 앵커·파일 입력)은 무시 */
+/* 딤(배경) 클릭 = 닫기. 창 바깥에서 시작한 클릭도 닫는다.
+   프로그램적 click(내보내기 앵커·파일 입력)은 무시 */
 document.addEventListener('click', (e)=>{
   if (!isSettingsOpen() || !e.isTrusted) return;
   const t = e.target;
   if (!(t instanceof Element)) return;
+  if (t.closest('.spDim')){ closeSettings(); return; }
   if (settingsPanel.contains(t) || settingsBtn.contains(t)) return;
   closeSettings();
 });

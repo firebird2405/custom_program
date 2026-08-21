@@ -1,28 +1,29 @@
 'use strict';
 /**
- * A42 — Electron 셸 (SCORECARD rev.7: 병합 1창 탭 모드)
- * "(rev.7) Playwright `_electron.launch`(개발 트리, 패키지 exe는 EnableNodeCliInspectArguments
- *  fuse 유지)로 기동하면: fresh 기동 = BrowserWindow 정확히 1개(병합 모드) — 제목에 앱 이름
- *  포함, 기본 크기 ≥1024×700, 셸 탭바([data-shell-tabbar], 탭 [data-tab="postit"]·
- *  [data-tab="calendar"], 분리 [data-split]) + 기본 활성 탭 = 포스트잇(보드 visible).
+ * A42 — Electron 셸 (SCORECARD rev.8: 단일 창 탭 모드 — 창 분리 폐지)
+ * "(rev.8) Playwright `_electron.launch`(개발 트리, 패키지 exe는 EnableNodeCliInspectArguments
+ *  fuse 유지)로 기동하면: 항상 BrowserWindow 정확히 1개(단일 창 탭 모드) — 제목에 앱 이름
+ *  포함, 기본 크기 ≥1024×700, 리사이즈·이동 가능, 셸 탭바([data-shell-tabbar], 탭
+ *  [data-tab="postit"]·[data-tab="calendar"]) + 기본 활성 탭 = 포스트잇(보드 visible).
  *  탭 전환: [data-tab="calendar"] → 날짜 셀 ≥28 visible, 포스트잇 탭 복귀 시 작성 상태가
- *  리로드 없이 보존(webContents 유지). 분리: [data-split] → BrowserWindow 2개(각 제목
- *  브랜드·리사이즈·이동·독립 종료 — rev.6 계약), 재병합([data-merge]) → 1개 복귀. 설정 영속:
- *  셸 설정([data-shell-settings])에서 모드(separate)·기본 탭(calendar) 변경 후 재기동 시
- *  각각 반영. 출시-소스 동일성: 패키지 리소스의 calendar.html·postit.html이 저장소 원본과
+ *  리로드 없이 보존(webContents 유지). 분리 모드 부재 단언: [data-split]·[data-merge] 훅이
+ *  어디에도 존재하지 않고, 어떤 조작으로도 BrowserWindow 가 2개가 되지 않는다. 설정 영속:
+ *  셸 설정([data-shell-settings])에서 기본 탭(calendar) 변경 후 재기동 시 캘린더 탭 활성.
+ *  출시-소스 동일성: 패키지 리소스의 calendar.html·postit.html이 저장소 원본과
  *  SHA256 동일(빌드 변형·인젝션 금지). 임계 서브셋 실검증: A5·A6·A8·A9·A25·A26 시나리오를
- *  Electron 컨텍스트(병합 기본 모드, 고정 userData, 환경변수 오버라이드 훅 격리)에서 재실행 —
+ *  Electron 컨텍스트(고정 userData, 환경변수 오버라이드 훅 격리)에서 재실행 —
  *  완전 종료 후 재기동 보존 포함"
  *
- * ── REQUIRED CONTRACT (rev.7 — 이 주석이 셸 계약의 정본, rev.5 관례) ──
+ * ── REQUIRED CONTRACT (rev.8 — 이 주석이 셸 계약의 정본, rev.5 관례) ──
  *  - 기동: `electron.exe d:\custom_program\electron` (개발 트리). main.js 는 app ready 이전에
  *    환경변수 PETIT_USERDATA 가 있으면 userData 로 사용한다 (채점 격리 훅 — 실사용 데이터 불가침).
- *  - 병합 모드(fresh 기본): BrowserWindow 정확히 1개, 제목에 브랜드(쁘띠캘린더 또는
- *    PetitCalendar) 포함, fresh 기동 기본 크기 ≥ 1024×700.
- *    · 탭바 = 셸 소유 페이지가 로드한 electron\tabbar.html (병합 창의 기본 페이지 또는
+ *  - 단일 창 탭 모드(유일한 모드): BrowserWindow 정확히 1개, 제목에 브랜드(쁘띠캘린더 또는
+ *    PetitCalendar) 포함, fresh 기동 기본 크기 ≥ 1024×700, isResizable/isMovable 참 +
+ *    setBounds 실효(±8px — rev.6 창 계약을 단일 창에 그대로 적용).
+ *    · 탭바 = 셸 소유 페이지가 로드한 electron\tabbar.html (단일 창의 기본 페이지 또는
  *      별도 WebContentsView — 채점은 페이지 URL 로 획득하므로 양쪽 모두 허용).
  *      상시 visible 훅: [data-shell-tabbar] · [data-tab="postit"] · [data-tab="calendar"] ·
- *      [data-split] · [data-shell-settings-open](설정 드로어 토글). 설정 드로어
+ *      [data-shell-settings-open](설정 드로어 토글). 설정 드로어
  *      [data-shell-settings] 는 존재 필수(기본 닫힘 허용 — hidden 토글), 내부에
  *      [data-default-tab="calendar"] 세그 존재(클릭 = shell-settings.json 즉시 저장).
  *      (폴백 셀렉터 없음 — 훅 부재 = 즉시 FAIL, fail-closed)
@@ -34,33 +35,37 @@
  *      실측 2026-08-20, electron-helpers rev.7 주석).
  *    · 기본 활성 탭 = 포스트잇 (보드 visible). [data-tab] 클릭으로 전환, 전환은 리로드 없이
  *      (window 전역 마커 잔존 = 무리로드 증명 — reload 시 소거되는 것 실측 확인).
- *    · 병합 창 호스트 webContents 는 최소 문서라도 로드해야 한다 — 무로드 시 Playwright
+ *    · 단일 창 호스트 webContents 는 최소 문서라도 로드해야 한다 — 무로드 시 Playwright
  *      _electron.launch 자체가 타임아웃한다 (실측).
- *  - 분리 모드: 탭바 [data-split] → BrowserWindow 2개 (rev.6 계약 재적용: 각 제목에 브랜드
- *    포함 + 제목 2종 상이, isResizable/isMovable 참, setBounds 실효 ±8px, 독립 종료).
- *    분리 모드에서는 preload 가 각 앱 설정 패널(#settingsPanel — #settingsBtn 으로 연다)에
- *    [data-merge] 버튼을 주입한다 → 클릭 시 병합 1창 복귀(탭바·앱 2뷰 복원).
- *    분리↔병합 전환은 창/뷰 재구성(재로드 허용) — 무리로드 계약은 병합 모드의 탭 전환에만
- *    적용된다 (전환 후 페이지는 URL 재획득).
- *  - 셸 설정 영속: userData\shell-settings.json {windowMode:"merged"|"separate",
- *    defaultTab:"postit"|"calendar"}. [data-split] 분리 = windowMode="separate" 즉시 저장 →
- *    재기동 = 창 2. [data-merge] 재병합 후엔 windowMode 가 separate 가 아니어야 하고(병합
- *    재기동), 설정 드로어의 [data-default-tab="calendar"] 클릭 = defaultTab="calendar"
- *    저장 → 병합 재기동의 활성 탭 = 캘린더(날짜 셀 ≥28 visible).
+ *  - 분리 모드 부재 (rev.8 신규 — 폐지 확정 기능의 잔존 금지):
+ *    · DOM: 탭바·설정 드로어·양 앱 뷰(캘린더/포스트잇, 각 앱 설정 패널 #settingsPanel 개방
+ *      상태 포함) 어디에도 [data-split]·[data-merge] 가 0개여야 한다. preload 의 지연 주입을
+ *      잡기 위해 설정 패널 개방 후 안정화 구간까지 0개 유지를 확인한다.
+ *    · 소스: electron\ 의 셸 소스(main.js·preload.js·tabbar-preload.js·tabbar.html 등
+ *      node_modules·dist 제외)와 calendar.html·postit.html 에 data-split/data-merge 훅의
+ *      코드 형태(따옴표 문자열 또는 HTML 태그 속성)가 남아 있지 않아야 한다. 주석 언급은
+ *      무해하므로 JS 주석·HTML 주석 제거 후 판정한다 (휴면 분리 코드 잔존 차단).
+ *    · 구조: 정상 조작 전수(탭 왕복 전환, 설정 드로어 개폐, [data-default-tab] 클릭, 양 앱
+ *      설정 패널 개방) 후에도 BrowserWindow 는 계속 정확히 1개이고, 두 앱 뷰가 모두 그 한
+ *      창에 속한다(windowIdForApp 동일). 안정화 폴링으로 뒤늦은 창 생성도 배제한다.
+ *  - 셸 설정 영속: userData\shell-settings.json {defaultTab:"postit"|"calendar", …}.
+ *    설정 드로어의 [data-default-tab="calendar"] 클릭 = defaultTab="calendar" 즉시 저장 →
+ *    재기동의 활성 탭 = 캘린더(날짜 셀 ≥28 visible), 재기동도 BrowserWindow 1개.
+ *    (rev.7 의 windowMode/separate 계약은 창 분리 폐지로 삭제 — 재도입 금지)
  *  - 출시-소스 동일성: 셸이 실제 로드한 file:// 문서가 저장소 원본과 SHA256 동일 (항상 수행).
  *    electron\dist\win-unpacked 존재 시(조건부): resources\calendar.html·postit.html 동일 +
  *    패키지 exe 의 EnableNodeCliInspectArguments fuse = ENABLE. dist 부재 시 개발 트리
  *    기준으로만 판정하고 annotation 으로 명시한다 (skip-pass 아님).
- *  - 임계 서브셋: A5·A6·A8·A9·A25·A26 핵심 관찰을 병합 기본 모드의 각 앱 페이지
+ *  - 임계 서브셋: A5·A6·A8·A9·A25·A26 핵심 관찰을 단일 창 탭 모드의 각 앱 페이지
  *    (WebContentsView — Playwright windows() 에 Page 로 노출, 실측)에서 재실행. 조작 전
  *    해당 앱 탭을 활성화한다. 각 시나리오의 정밀·확장 검사 정본은 원 스펙(a05~a26)이며,
- *    여기서는 "같은 HTML 이 Electron 병합 셸에서도 같은 관찰을 낸다"를 판정한다.
+ *    여기서는 "같은 HTML 이 Electron 셸에서도 같은 관찰을 낸다"를 판정한다.
  *    두 뷰는 같은 file:// 오리진 localStorage 를 공유하므로 cal-*·postit-* 키 접두 규약 유지.
  *  - 온보딩(A47)·이전 제안(A43) 오버레이가 뜨면 각각 skip/나중에 경로로 닫고 진행한다
  *    (훅 부재 시 fail-closed FAIL — 해당 헬퍼가 판정).
  *  - fail-closed: 셸 미구축 = "electron 셸 미구축 (2단계 진행 중)" FAIL(기존 문구 유지).
- *    셸이 구계약(2창, 탭바 없음)이면 "병합 탭 모드 미구현 (rev.7 진행 중)" 류 한국어 FAIL.
- *    SKIP 은 비 Windows 뿐.
+ *    셸이 구계약(분리 2창·탭바 없음)이거나 분리 훅이 남아 있으면 "단일 창 탭 모드 미구현
+ *    (rev.8 진행 중)" 류 한국어 FAIL. SKIP 은 비 Windows 뿐.
  */
 const fs = require('fs');
 const os = require('os');
@@ -117,18 +122,21 @@ const {
   shellViewsInfo,
   judgeActiveAppView,
   windowIdForApp,
-  closeWindowById,
+  stripJsComments,
 } = require('../lib/electron-helpers');
 
-/* 탭바 상시 visible 훅 (rev.7 DOM 계약 — 폴백 없음).
- * [data-shell-settings](설정 드로어)는 기본 닫힘 허용 — 존재만 fail-closed 확인. */
+/* 탭바 상시 visible 훅 (rev.8 DOM 계약 — 폴백 없음).
+ * [data-shell-settings](설정 드로어)는 기본 닫힘 허용 — 존재만 fail-closed 확인.
+ * rev.8: [data-split] 은 폐지 — 상시 훅에서 제외되고 "부재" 단언 대상이 된다. */
 const TABBAR_HOOKS_VISIBLE = [
   '[data-shell-tabbar]',
   '[data-tab="postit"]',
   '[data-tab="calendar"]',
-  '[data-split]',
   '[data-shell-settings-open]',
 ];
+
+/* rev.8 폐지 훅 — 어떤 문서에도 존재해서는 안 된다 (분리 모드 부재 단언) */
+const ABOLISHED_HOOKS = ['[data-split]', '[data-merge]'];
 
 /* 캘린더 이번 달 날짜 셀 (calDayCell 과 동일 셀렉터 축 — 이번 달만) */
 const CAL_CELL_SEL = '#grid .cell:not(.other)';
@@ -166,8 +174,8 @@ function readShellSettings(dir, label) {
   const p = shellSettingsPath(dir);
   if (!fs.existsSync(p)) {
     throw new Error(
-      `${label}: 셸 설정 파일이 없습니다 (${p}) — userData\\shell-settings.json {windowMode, defaultTab} ` +
-        '영속 계약 미구현 (rev.7, fail-closed)'
+      `${label}: 셸 설정 파일이 없습니다 (${p}) — userData\\shell-settings.json {defaultTab, …} ` +
+        '영속 계약 미구현 (rev.8, fail-closed)'
     );
   }
   const raw = fs.readFileSync(p, 'utf8');
@@ -219,28 +227,143 @@ async function activateTab(launched, which, label) {
   await pollActiveApp(launched.shell.app, which, 8000, `${label}: [data-tab="${which}"] 클릭 후`);
 }
 
-/** 앱 설정 패널(#settingsBtn → #settingsPanel)을 열고 [data-merge] 가시 확인 (분리 모드 계약) */
-async function openSettingsAndRequireMerge(page, appLabel, itemLabel) {
+/**
+ * 앱 설정 패널(#settingsBtn → #settingsPanel)을 연다 (rev.8: 폐지된 [data-merge] 주입
+ * 지점을 실제로 노출시켜 "부재"를 관찰하기 위한 준비 동작). 열 수 없으면 한국어 FAIL.
+ */
+async function openAppSettingsPanel(page, appLabel, itemLabel) {
   const btn = page.locator('#settingsBtn');
   if ((await btn.count()) === 0) {
     throw new Error(
-      `${itemLabel}: ${appLabel} 설정 버튼(#settingsBtn)이 없습니다 — [data-merge] 주입 지점(설정 패널)을 열 수 없습니다`
+      `${itemLabel}: ${appLabel} 설정 버튼(#settingsBtn)이 없습니다 — 분리 훅 부재를 확인할 설정 패널을 열 수 없습니다 (fail-closed)`
     );
   }
   await btn.first().click({ timeout: 5000 });
   await pollVisibleStrict(
     page,
-    '[data-merge]',
+    '#settingsPanel',
     true,
     5000,
-    `${itemLabel}: ${appLabel} 설정 패널을 연 뒤 5초 내 [data-merge] 가 보이지 않습니다 — ` +
-      '분리 모드에서 각 앱 설정 패널에 preload 주입 [data-merge] 버튼 필요 (rev.7, fail-closed)'
+    `${itemLabel}: ${appLabel} 설정 버튼(#settingsBtn) 클릭 후 5초 내 설정 패널(#settingsPanel)이 보이지 않습니다 (fail-closed)`
   );
 }
 
+/** 폐지 훅([data-split]·[data-merge]) 발견 목록 — 조회 실패는 "확인 불가" 로 FAIL(fail-closed) */
+async function findAbolishedHooks(pages, itemLabel) {
+  const found = [];
+  for (const { label, page } of pages) {
+    for (const sel of ABOLISHED_HOOKS) {
+      let n = 0;
+      try {
+        n = await page.locator(sel).count();
+      } catch (e) {
+        throw new Error(
+          `${itemLabel}: ${label} 문서에서 ${sel} 존재 여부를 조회할 수 없습니다 (${String((e && e.message) || e)}) — ` +
+            '분리 훅 부재를 증명할 수 없으므로 FAIL 처리합니다 (fail-closed)'
+        );
+      }
+      if (n > 0) found.push(`${label} → ${sel} ${n}개`);
+    }
+  }
+  return found;
+}
+
+/** 지정 문서들에 폐지 훅이 0개이며, 안정화 구간(holdMs) 동안 지연 주입도 없음을 단언 */
+async function assertNoAbolishedHooks(pages, itemLabel, holdMs = 1500) {
+  const now = await findAbolishedHooks(pages, itemLabel);
+  if (now.length > 0) {
+    throw new Error(
+      `${itemLabel}: 폐지된 분리 훅이 DOM 에 남아 있습니다 — ${now.join(' / ')} ` +
+        '(rev.8 계약: 창 분리 폐지 — [data-split]·[data-merge] 는 탭바·설정 드로어·양 앱 어디에도 존재하면 안 됩니다)'
+    );
+  }
+  const deadline = Date.now() + holdMs;
+  while (Date.now() < deadline) {
+    await sleep(250);
+    const late = await findAbolishedHooks(pages, itemLabel);
+    if (late.length > 0) {
+      throw new Error(
+        `${itemLabel}: 분리 훅이 지연 주입되었습니다 — ${late.join(' / ')} ` +
+          '(preload 등이 뒤늦게 [data-merge]/[data-split] 를 주입 — rev.8 폐지 계약 위반)'
+      );
+    }
+  }
+}
+
+/* rev.8 분리 훅의 "코드 형태" 탐지 (주석 언급은 무해 — 주석 제거 후 판정).
+ *  ① 따옴표 문자열 안: '[data-merge]' · "data-split" · `data-merge`
+ *  ② HTML 여는 태그 속성: <button data-split …> */
+const HOOK_IN_STRING_RE = /(['"`])[^'"`\r\n]*\bdata-(?:split|merge)\b/;
+const HOOK_IN_TAG_RE = /<[A-Za-z][^>\r\n]*\bdata-(?:split|merge)\b/;
+
+/** 스캔 대상 소스 파일 수집 (node_modules·dist·test-license 는 순회 자체를 건너뛴다) */
+function collectShellSources() {
+  const SKIP_DIR = /^(node_modules|dist|test-license|\.git)$/i;
+  const out = [];
+  const walk = (dir, relBase) => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+      return;
+    }
+    for (const ent of entries) {
+      const abs = path.join(dir, ent.name);
+      const rel = relBase ? `${relBase}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) {
+        if (SKIP_DIR.test(ent.name)) continue;
+        walk(abs, rel);
+      } else if (/\.(js|cjs|mjs|html)$/i.test(ent.name)) {
+        out.push({ abs, label: `electron/${rel}` });
+      }
+    }
+  };
+  if (fs.existsSync(ELECTRON_DIR)) walk(ELECTRON_DIR, '');
+  out.push({ abs: CALENDAR_PATH, label: 'calendar.html' });
+  out.push({ abs: POSTIT_PATH, label: 'postit.html' });
+  return out;
+}
+
+/** 주석 제거 (JS 는 static-checks 토크나이저, HTML 은 HTML 주석 + 순수 주석 줄) */
+function stripCommentsForScan(src, isHtml) {
+  if (!isHtml) {
+    try {
+      return stripJsComments(src);
+    } catch (e) {
+      return src;
+    }
+  }
+  return src
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .split(/\r?\n/)
+    .map((line) => (/^\s*(\/\/|\*|\/\*)/.test(line) ? '' : line))
+    .join('\n');
+}
+
+/** 소스에 남은 분리 훅 코드 (파일:줄 목록) — 없으면 빈 배열 */
+function scanSourcesForAbolishedHooks() {
+  const hits = [];
+  for (const f of collectShellSources()) {
+    let src = '';
+    try {
+      src = fs.readFileSync(f.abs, 'utf8');
+    } catch (e) {
+      continue;
+    }
+    const body = stripCommentsForScan(src, /\.html$/i.test(f.abs));
+    const lines = body.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      if (HOOK_IN_STRING_RE.test(lines[i]) || HOOK_IN_TAG_RE.test(lines[i])) {
+        hits.push(`${f.label}:${i + 1}`);
+      }
+    }
+  }
+  return hits;
+}
+
 /**
- * 병합 셸 기동 + 탭바·앱 2뷰 페이지 획득 + 온보딩/이전 제안 오버레이 처치 (공용 진입).
- * 실패 시 셸을 정리하고 던진다. 구계약(2창·탭바 없음) 셸은 rev.7 미구현으로 명시 FAIL.
+ * 단일 창 셸 기동 + 탭바·앱 2뷰 페이지 획득 + 온보딩/이전 제안 오버레이 처치 (공용 진입).
+ * 실패 시 셸을 정리하고 던진다. 구계약(분리 2창·탭바 없음) 셸은 rev.8 미구현으로 명시 FAIL.
  */
 async function launchMerged(dir, label, opts = {}) {
   const shell = await launchShellChecked(dir, Object.assign({ label }, opts));
@@ -253,7 +376,7 @@ async function launchMerged(dir, label, opts = {}) {
       if (n >= 2) {
         throw new Error(
           `${label}: 탭바 페이지(electron\\tabbar.html)가 없고 BrowserWindow 가 ${n}개입니다 — ` +
-            '구계약(2창) 셸 감지: 병합 탭 모드 미구현 (rev.7 진행 중, fail-closed)'
+            '구계약(분리 2창) 셸 감지: 단일 창 탭 모드 미구현 (rev.8 진행 중, fail-closed)'
         );
       }
       throw e;
@@ -273,8 +396,8 @@ async function launchMerged(dir, label, opts = {}) {
 
 /* ════════════════════════════════════════════════════════════════════ */
 
-test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
-  test('A42: 병합 기동 — BrowserWindow 1개·제목 브랜드·크기 ≥1024×700·탭바 훅 5종·기본 활성 포스트잇', async () => {
+test.describe('A42 Electron 셸 (rev.8 단일 창 탭 모드 — 창 분리 폐지)', () => {
+  test('A42: 단일 창 기동 — BrowserWindow 1개·제목 브랜드·크기 ≥1024×700·리사이즈/이동·탭바 훅·기본 활성 포스트잇', async () => {
     test.setTimeout(180 * 1000);
     skipUnlessWin32();
     requireElectronShell('A42');
@@ -285,30 +408,56 @@ test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
       const launched = await launchMerged(dir, 'A42');
       shell = launched.shell;
 
-      // rev.7 핵심: fresh 기동 = BrowserWindow 정확히 1개 (탭바·앱은 WebContentsView — 창이 아님)
+      // rev.8 핵심: 기동 = BrowserWindow 정확히 1개 (탭바·앱은 WebContentsView — 창이 아님)
       await pollBrowserWindowCount(
         shell.app,
         1,
         10000,
-        'A42: fresh 기동이 병합 1창이 아닙니다 — rev.7 계약: BrowserWindow 정확히 1개(탭바·앱 2뷰는 ' +
-          'WebContentsView). 2개 이상이면 병합 탭 모드 미구현 (rev.7 진행 중)'
+        'A42: fresh 기동이 단일 창이 아닙니다 — rev.8 계약: BrowserWindow 정확히 1개(탭바·앱 2뷰는 ' +
+          'WebContentsView). 2개 이상이면 창 분리 잔존/단일 창 탭 모드 미구현 (rev.8 진행 중)'
       );
 
       const infos = await mainWindowsInfo(shell.app);
       expect(
         infos.length,
-        `A42: BrowserWindow 가 ${infos.length}개입니다 (병합 모드 = 정확히 1개): ` +
+        `A42: BrowserWindow 가 ${infos.length}개입니다 (단일 창 탭 모드 = 정확히 1개): ` +
           infos.map((w) => `"${w.title}"(${w.url || 'url 없음'})`).join(', ')
       ).toBe(1);
       const w = infos[0];
       expect(
         BRAND_RE.test(w.title),
-        `A42: 병합 창 제목 "${w.title}" 에 앱 이름(쁘띠캘린더/PetitCalendar)이 없습니다`
+        `A42: 창 제목 "${w.title}" 에 앱 이름(쁘띠캘린더/PetitCalendar)이 없습니다`
       ).toBe(true);
       expect(
         w.bounds.width >= 1024 && w.bounds.height >= 700,
-        `A42: 병합 창 기본 크기 미달 — ${w.bounds.width}×${w.bounds.height} ` +
-          '(fresh 기동 시 ≥ 1024×700, SCORECARD rev.7 A42)'
+        `A42: 창 기본 크기 미달 — ${w.bounds.width}×${w.bounds.height} ` +
+          '(fresh 기동 시 ≥ 1024×700, SCORECARD rev.8 A42)'
+      ).toBe(true);
+
+      // 창 조작 계약 (rev.6 창 계약을 rev.8 단일 창에 그대로 적용): 리사이즈·이동 가능 + setBounds 실효
+      expect(w.resizable, `A42: 창 "${w.title}" 이 리사이즈 불가(isResizable=false)입니다`).toBe(true);
+      expect(w.movable, `A42: 창 "${w.title}" 이 이동 불가(isMovable=false)입니다`).toBe(true);
+      const rb = await shell.app.evaluate(({ BrowserWindow }, id) => {
+        const win = BrowserWindow.getAllWindows().find((x) => x.id === id);
+        if (!win) return null;
+        const before = win.getBounds();
+        win.setBounds({
+          x: before.x + 24,
+          y: before.y + 18,
+          width: before.width + 64,
+          height: before.height + 48,
+        });
+        return { before, after: win.getBounds() };
+      }, w.id);
+      expect(rb, 'A42: 단일 창을 main 프로세스에서 찾을 수 없습니다').not.toBeNull();
+      expect(
+        Math.abs(rb.after.width - (rb.before.width + 64)) <= 8 &&
+          Math.abs(rb.after.height - (rb.before.height + 48)) <= 8,
+        `A42: 리사이즈가 반영되지 않았습니다 (setBounds ${rb.before.width + 64}×${rb.before.height + 48} 요청 → 실제 ${rb.after.width}×${rb.after.height})`
+      ).toBe(true);
+      expect(
+        Math.abs(rb.after.x - (rb.before.x + 24)) <= 8 && Math.abs(rb.after.y - (rb.before.y + 18)) <= 8,
+        `A42: 이동이 반영되지 않았습니다 (setBounds (${rb.before.x + 24},${rb.before.y + 18}) 요청 → 실제 (${rb.after.x},${rb.after.y}))`
       ).toBe(true);
 
       // 탭바 문서 정합: electron\tabbar.html 을 그대로 로드해야 한다
@@ -344,7 +493,7 @@ test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
         `A42: 기본 활성(포스트잇) 상태에서 보드(${POSTIT_SEL.BOARD})가 visible 이 아닙니다`
       ).toBe(true);
 
-      assertNoDialogs(shell.state, 'A42 병합 기동');
+      assertNoDialogs(shell.state, 'A42 단일 창 기동');
     } finally {
       await closeElectronShell(shell);
       await removeDirWithRetry(dir);
@@ -403,7 +552,7 @@ test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
     }
   });
 
-  test('A42: 분리·재병합 — [data-split] → 창 2(rev.6 계약: 제목 2종·리사이즈·이동) → [data-merge] → 창 1 복귀 → 독립 종료', async () => {
+  test('A42: 분리 모드 부재 — [data-split]·[data-merge] 훅 없음(DOM·소스) + 어떤 조작으로도 창 2개 불가', async () => {
     test.setTimeout(300 * 1000);
     skipUnlessWin32();
     requireElectronShell('A42');
@@ -411,109 +560,98 @@ test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
     const dir = freshUserDataDir();
     let shell = null;
     try {
-      const launched = await launchMerged(dir, 'A42 분리');
+      const launched = await launchMerged(dir, 'A42 분리부재');
       shell = launched.shell;
+      const docs = [
+        { label: '탭바(tabbar.html)', page: launched.tabbarPage },
+        { label: '캘린더 뷰(calendar.html)', page: launched.calPage },
+        { label: '포스트잇 뷰(postit.html)', page: launched.postitPage },
+      ];
 
-      // ── 분리: [data-split] → BrowserWindow 2개 ──
-      await requireHook6(launched.tabbarPage, '[data-split]', 'A42 분리');
-      await launched.tabbarPage.locator('[data-split]').first().click({ timeout: 5000 });
-      await pollBrowserWindowCount(
-        shell.app,
-        2,
-        15000,
-        'A42 분리: [data-split] 클릭 후 분리 모드(BrowserWindow 2개)로 전환되지 않았습니다'
+      // ── ① 기동 직후: 세 문서 어디에도 폐지 훅 0개 ──
+      await assertNoAbolishedHooks(docs, 'A42 분리부재(기동 직후)');
+
+      // ── ② 정상 조작 전수 후에도 폐지 훅 0개 · 창 1개 유지 ──
+      //     (탭 왕복 전환 → 설정 드로어 개폐 → [data-default-tab] 클릭 → 양 앱 설정 패널 개방)
+      await activateTab(launched, 'calendar', 'A42 분리부재');
+      await activateTab(launched, 'postit', 'A42 분리부재');
+      await requireHook6(launched.tabbarPage, '[data-shell-settings-open]', 'A42 분리부재');
+      await launched.tabbarPage.locator('[data-shell-settings-open]').first().click({ timeout: 5000 });
+      await pollVisibleStrict(
+        launched.tabbarPage,
+        '[data-shell-settings]',
+        true,
+        5000,
+        'A42 분리부재: [data-shell-settings-open] 클릭 후 5초 내 셸 설정 드로어([data-shell-settings])가 보이지 않습니다 (fail-closed)'
       );
+      await assertNoAbolishedHooks(docs, 'A42 분리부재(설정 드로어 개방)');
+      const segs = launched.tabbarPage.locator('[data-default-tab]');
+      const segCount = await segs.count();
+      expect(
+        segCount >= 1,
+        `A42 분리부재: 셸 설정 드로어에 [data-default-tab] 세그가 ${segCount}개입니다 (rev.8 DOM 계약: 최소 1개, fail-closed)`
+      ).toBe(true);
+      for (let i = 0; i < segCount; i++) {
+        await segs.nth(i).click({ timeout: 5000 }).catch(() => {});
+        await sleep(120);
+      }
+      await launched.tabbarPage.locator('[data-shell-settings-open]').first().click({ timeout: 5000 }).catch(() => {});
+      await sleep(200);
+      await openAppSettingsPanel(launched.postitPage, '포스트잇', 'A42 분리부재');
+      await activateTab(launched, 'calendar', 'A42 분리부재');
+      await openAppSettingsPanel(launched.calPage, '캘린더', 'A42 분리부재');
+      // 설정 패널이 열린 상태 = 폐지된 [data-merge] 의 옛 주입 지점 — 지연 주입까지 관찰
+      await assertNoAbolishedHooks(docs, 'A42 분리부재(양 앱 설정 패널 개방)', 3000);
 
-      // rev.6 계약 재적용: 제목 브랜드·2종 상이·리사이즈/이동 플래그
-      const infos = await mainWindowsInfo(shell.app);
-      expect(infos.length, `A42 분리: BrowserWindow 가 ${infos.length}개입니다 (분리 모드 = 정확히 2개)`).toBe(2);
-      for (const w of infos) {
+      // ── ③ 창 개수 불변: 모든 조작 후에도 정확히 1개 (안정화 폴링으로 뒤늦은 창 생성 배제) ──
+      const deadline = Date.now() + 3000;
+      for (;;) {
+        const n = await browserWindowCount(shell.app);
+        if (n !== 1) {
+          const infos = await mainWindowsInfo(shell.app).catch(() => []);
+          throw new Error(
+            `A42 분리부재: 조작 후 BrowserWindow 가 ${n}개가 되었습니다 — rev.8 계약: 어떤 조작으로도 창은 2개가 되지 않습니다 ` +
+              `(현재 창: ${infos.map((w) => `"${w.title}"(${w.url || 'url 없음'})`).join(', ') || '조회 실패'})`
+          );
+        }
+        if (Date.now() > deadline) break;
+        await sleep(200);
+      }
+
+      // ── ④ 구조: 두 앱 뷰가 모두 같은 하나의 창에 속한다 ──
+      const winId = (await mainWindowsInfo(shell.app))[0].id;
+      for (const [appLabel, file] of [['캘린더', 'calendar.html'], ['포스트잇', 'postit.html']]) {
+        const id = await windowIdForApp(shell.app, file);
         expect(
-          BRAND_RE.test(w.title),
-          `A42 분리: 창 제목 "${w.title}" 에 앱 이름(쁘띠캘린더/PetitCalendar)이 없습니다`
-        ).toBe(true);
-        expect(w.resizable, `A42 분리: 창 "${w.title}" 이 리사이즈 불가(isResizable=false)입니다`).toBe(true);
-        expect(w.movable, `A42 분리: 창 "${w.title}" 이 이동 불가(isMovable=false)입니다`).toBe(true);
+          id,
+          `A42 분리부재: ${appLabel}(${file})을 호스팅하는 창 id 가 ${String(id)} 입니다 — 단일 창(id ${winId})에 두 앱 뷰가 모두 속해야 합니다`
+        ).toBe(winId);
       }
+      const views = await shellViewsInfo(shell.app);
+      const appViews = views.filter((v) => /\/(calendar|postit)\.html$/i.test((v.url || '').split(/[?#]/)[0]));
       expect(
-        infos[0].title !== infos[1].title,
-        `A42 분리: 두 창 제목이 동일합니다 ("${infos[0].title}") — 캘린더/포스트잇을 구분하는 제목 2종이어야 합니다`
+        appViews.length >= 2 && appViews.every((v) => v.winId === winId),
+        `A42 분리부재: 앱 뷰 ${appViews.length}개가 서로 다른 창에 흩어져 있습니다 ` +
+          `(창 id 목록: ${appViews.map((v) => v.winId).join(', ') || '없음'}) — 단일 창 탭 모드 위반`
       ).toBe(true);
 
-      // 리사이즈·이동 실효 (setBounds ±8px 허용 — rev.6 단언 재사용, 첫 창 대상)
-      const rb = await shell.app.evaluate(({ BrowserWindow }, id) => {
-        const w = BrowserWindow.getAllWindows().find((x) => x.id === id);
-        if (!w) return null;
-        const before = w.getBounds();
-        w.setBounds({ x: before.x + 24, y: before.y + 18, width: before.width + 64, height: before.height + 48 });
-        return { before, after: w.getBounds() };
-      }, infos[0].id);
-      expect(rb, 'A42 분리: 분리된 창을 main 프로세스에서 찾을 수 없습니다').not.toBeNull();
+      // ── ⑤ 소스 잔존 금지: 휴면 분리 코드(따옴표 문자열·HTML 속성) 0건 ──
+      const srcHits = scanSourcesForAbolishedHooks();
       expect(
-        Math.abs(rb.after.width - (rb.before.width + 64)) <= 8 && Math.abs(rb.after.height - (rb.before.height + 48)) <= 8,
-        `A42 분리: 리사이즈가 반영되지 않았습니다 (setBounds ${rb.before.width + 64}×${rb.before.height + 48} 요청 → 실제 ${rb.after.width}×${rb.after.height})`
-      ).toBe(true);
-      expect(
-        Math.abs(rb.after.x - (rb.before.x + 24)) <= 8 && Math.abs(rb.after.y - (rb.before.y + 18)) <= 8,
-        `A42 분리: 이동이 반영되지 않았습니다 (setBounds (${rb.before.x + 24},${rb.before.y + 18}) 요청 → 실제 (${rb.after.x},${rb.after.y}))`
-      ).toBe(true);
+        srcHits.length,
+        `A42 분리부재: 셸 소스에 폐지된 분리 훅(data-split/data-merge) 코드가 ${srcHits.length}곳 남아 있습니다 — ` +
+          `${srcHits.slice(0, 12).join(', ')}${srcHits.length > 12 ? ' 외' : ''} ` +
+          '(rev.8: 창 분리 완전 폐지 — 휴면 코드도 제거해야 합니다. 주석 언급은 검사 대상이 아닙니다)'
+      ).toBe(0);
 
-      // ── 재병합: 각 앱 설정 패널에 [data-merge] visible → 클릭 → 창 1 복귀 ──
-      const calPage = await pageByUrl(shell.app, /\/calendar\.html$/i, 15000, 'A42 분리 후 캘린더');
-      const postitPage = await pageByUrl(shell.app, /\/postit\.html$/i, 15000, 'A42 분리 후 포스트잇');
-      await openSettingsAndRequireMerge(calPage, '캘린더', 'A42 재병합');
-      await openSettingsAndRequireMerge(postitPage, '포스트잇', 'A42 재병합');
-      await postitPage.locator('[data-merge]').first().click({ timeout: 5000 });
-      await pollBrowserWindowCount(
-        shell.app,
-        1,
-        15000,
-        'A42 재병합: [data-merge] 클릭 후 병합 1창으로 복귀하지 않았습니다'
-      );
-      const tabbar2 = await pageByUrl(shell.app, /\/tabbar\.html$/i, 15000, 'A42 재병합 탭바');
-      await requireHook6(tabbar2, '[data-shell-tabbar]', 'A42 재병합');
-      for (const [label2, re] of [['캘린더', /\/calendar\.html$/i], ['포스트잇', /\/postit\.html$/i]]) {
-        const p = await pageByUrl(shell.app, re, 15000, `A42 재병합 ${label2}`);
-        const alive = await p.evaluate(() => 1 + 1).catch(() => null);
-        expect(alive, `A42 재병합: 복귀 후 ${label2} 뷰가 응답하지 않습니다 (앱 2뷰 복원 실패)`).toBe(2);
-      }
-
-      // ── 재분리 → 독립 종료: 포스트잇 창을 닫아도 캘린더 창은 살아 있다 (rev.6 계약) ──
-      await requireHook6(tabbar2, '[data-split]', 'A42 독립 종료');
-      await tabbar2.locator('[data-split]').first().click({ timeout: 5000 });
-      await pollBrowserWindowCount(shell.app, 2, 15000, 'A42 독립 종료: 재분리([data-split] 2회차)가 되지 않았습니다');
-      // 창 2개 확보 직후엔 loadFile 이 미완일 수 있어 URL 판별을 폴링한다 (레이스 방지)
-      let pid = null;
-      await poll(
-        async () => {
-          pid = await windowIdForApp(shell.app, 'postit.html');
-          return pid !== null;
-        },
-        10000,
-        'A42 독립 종료: 재분리 후 10초 내 postit.html 을 호스팅하는 창을 특정할 수 없습니다 (창 로드 미완 또는 URL 미일치)'
-      );
-      await closeWindowById(shell.app, pid);
-      await pollBrowserWindowCount(
-        shell.app,
-        1,
-        10000,
-        'A42 독립 종료: 포스트잇 창 close() 후 BrowserWindow 1개로 줄지 않았습니다'
-      );
-      const calAfter = await pageByUrl(shell.app, /\/calendar\.html$/i, 10000, 'A42 독립 종료 캘린더');
-      const alive2 = await calAfter.evaluate(() => 1 + 1).catch(() => null);
-      expect(
-        alive2,
-        'A42 독립 종료: 포스트잇 창을 닫자 캘린더 쪽도 응답하지 않습니다 (독립 종료 실패 — 한 창 닫힘이 다른 창을 죽임)'
-      ).toBe(2);
-
-      assertNoDialogs(shell.state, 'A42 분리·재병합');
+      assertNoDialogs(shell.state, 'A42 분리부재');
     } finally {
       await closeElectronShell(shell);
       await removeDirWithRetry(dir);
     }
   });
 
-  test('A42: 셸 설정 영속 — separate 저장 재기동 = 창 2 · defaultTab=calendar 저장 병합 재기동 = 캘린더 활성', async () => {
+  test('A42: 셸 설정 영속 — defaultTab=calendar 즉시 저장 → 재기동 시 캘린더 탭 활성 (창은 계속 1개)', async () => {
     test.setTimeout(300 * 1000);
     skipUnlessWin32();
     requireElectronShell('A42');
@@ -521,9 +659,11 @@ test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
     const dir = freshUserDataDir();
     let shell = null;
     try {
-      // ── L1: fresh 병합 → 설정 드로어에서 defaultTab=calendar 저장 → [data-split] 분리 → 완전 종료 ──
+      // ── L1: fresh 기동(기본 탭 = 포스트잇) → 설정 드로어에서 defaultTab=calendar 저장 → 완전 종료 ──
       let launched = await launchMerged(dir, 'A42 설정영속');
       shell = launched.shell;
+      await pollBrowserWindowCount(shell.app, 1, 10000, 'A42 설정영속: fresh 기동이 단일 창(BrowserWindow 1개)이 아닙니다');
+      await pollActiveApp(shell.app, 'postit', 8000, 'A42 설정영속: fresh 기동 기본 활성 탭 —');
 
       // 셸 설정 드로어 개방([data-shell-settings-open]) → [data-default-tab="calendar"] 클릭 = 즉시 저장
       await requireHook6(launched.tabbarPage, '[data-shell-settings-open]', 'A42 설정영속');
@@ -548,62 +688,28 @@ test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
         5000,
         'A42 설정영속: [data-default-tab="calendar"] 클릭 후 5초 내 shell-settings.json 에 defaultTab="calendar" 가 저장되지 않았습니다 (변경 즉시 저장 계약)'
       );
-
-      // 분리 — windowMode="separate" 저장
-      await requireHook6(launched.tabbarPage, '[data-split]', 'A42 설정영속');
-      await launched.tabbarPage.locator('[data-split]').first().click({ timeout: 5000 });
-      await pollBrowserWindowCount(shell.app, 2, 20000, 'A42 설정영속: [data-split] 분리 전환 실패');
+      assertNoDialogs(shell.state, 'A42 설정영속');
       await sleep(1000); // 설정 기록 여유
       await closeElectronShell(shell);
       shell = null;
 
-      // 설정 파일 계약: windowMode === "separate" + defaultTab === "calendar" 잔존
-      let cfg = readShellSettings(dir, 'A42 설정영속');
-      expect(
-        cfg.windowMode === 'separate',
-        `A42 설정영속: 분리 후 shell-settings.json 의 windowMode 가 "separate" 가 아닙니다 ` +
-          `(실제: ${JSON.stringify(cfg.windowMode)}) — 재기동 시 분리 모드 반영이 불가합니다 (rev.7 계약)`
-      ).toBe(true);
+      // 완전 종료 후에도 파일에 잔존해야 한다
+      const cfg = readShellSettings(dir, 'A42 설정영속');
       expect(
         cfg.defaultTab === 'calendar',
         `A42 설정영속: 종료 후 defaultTab 이 "calendar" 로 남아 있지 않습니다 (실제: ${JSON.stringify(cfg.defaultTab)})`
       ).toBe(true);
 
-      // ── L2: 같은 userData 재기동 → 분리 모드 복원(창 2) → [data-merge] 재병합 → 종료 ──
-      shell = await launchShellChecked(dir, { label: 'A42 설정영속 재기동' });
+      // ── L2: 같은 userData 재기동 → 여전히 단일 창 + 활성 탭 = 캘린더 ──
+      launched = await launchMerged(dir, 'A42 설정영속 재기동');
+      shell = launched.shell;
       await pollBrowserWindowCount(
         shell.app,
-        2,
-        30000,
-        'A42 설정영속: windowMode=separate 저장 후 재기동이 분리 모드(BrowserWindow 2개)로 열리지 않았습니다'
+        1,
+        15000,
+        'A42 설정영속: defaultTab 저장 후 재기동이 단일 창(BrowserWindow 1개)이 아닙니다 — rev.8: 분리 모드는 폐지되었습니다'
       );
-      const postitPage = await pageByUrl(shell.app, /\/postit\.html$/i, 20000, 'A42 설정영속 재기동');
-      await dismissOnboardingIfPresent(postitPage, 'A42 설정영속');
-      await dismissMigrateIfPresent(postitPage, 'A42 설정영속');
-      await openSettingsAndRequireMerge(postitPage, '포스트잇', 'A42 설정영속');
-      await postitPage.locator('[data-merge]').first().click({ timeout: 5000 });
-      await pollBrowserWindowCount(shell.app, 1, 15000, 'A42 설정영속: [data-merge] 재병합 실패');
-      await sleep(1000);
-      await closeElectronShell(shell);
-      shell = null;
-
-      // 재병합이 저장되어야 다음 재기동이 병합 모드다
-      cfg = readShellSettings(dir, 'A42 설정영속');
-      expect(
-        cfg.windowMode !== 'separate',
-        'A42 설정영속: [data-merge] 재병합 후에도 shell-settings.json 의 windowMode 가 "separate" 입니다 — ' +
-          '재기동 시 다시 2창이 됩니다 (병합 상태 저장 필요)'
-      ).toBe(true);
-
-      // ── defaultTab=calendar(L1 에서 UI 로 저장) 잔존 확인 → 병합 재기동 = 캘린더 활성 ──
-      expect(
-        cfg.defaultTab === 'calendar',
-        `A42 설정영속: 재병합 과정에서 defaultTab 이 "calendar" 에서 변경되었습니다 (실제: ${JSON.stringify(cfg.defaultTab)})`
-      ).toBe(true);
-      launched = await launchMerged(dir, 'A42 설정영속 defaultTab');
-      shell = launched.shell;
-      await pollBrowserWindowCount(shell.app, 1, 10000, 'A42 설정영속: defaultTab 검증 재기동이 병합 1창이 아닙니다');
-      await pollActiveApp(shell.app, 'calendar', 10000, 'A42 설정영속: defaultTab=calendar 저장 후 재기동 —');
+      await pollActiveApp(shell.app, 'calendar', 15000, 'A42 설정영속: defaultTab=calendar 저장 후 재기동 —');
       const cells = await countVisibleStrict(launched.calPage, CAL_CELL_SEL);
       expect(
         cells >= 28,
@@ -611,8 +717,24 @@ test.describe('A42 Electron 셸 (rev.7 병합 탭 모드)', () => {
       ).toBe(true);
       // 셸 설정 진입 훅 존재 (판정은 파일 계약이 담당 — 훅은 fail-closed 존재 확인)
       await requireHook6(launched.tabbarPage, '[data-shell-settings]', 'A42 설정영속');
+      // 재기동 후에도 폐지된 분리 훅은 어디에도 없어야 한다
+      await assertNoAbolishedHooks(
+        [
+          { label: '탭바(tabbar.html)', page: launched.tabbarPage },
+          { label: '캘린더 뷰(calendar.html)', page: launched.calPage },
+          { label: '포스트잇 뷰(postit.html)', page: launched.postitPage },
+        ],
+        'A42 설정영속(재기동)',
+        800
+      );
+      // 저장값은 재기동 후에도 보존 (덮어쓰기·초기화 금지)
+      const cfg2 = readShellSettings(dir, 'A42 설정영속 재기동');
+      expect(
+        cfg2.defaultTab === 'calendar',
+        `A42 설정영속: 재기동 과정에서 defaultTab 이 "calendar" 에서 변경되었습니다 (실제: ${JSON.stringify(cfg2.defaultTab)})`
+      ).toBe(true);
 
-      assertNoDialogs(shell.state, 'A42 설정영속');
+      assertNoDialogs(shell.state, 'A42 설정영속 재기동');
     } finally {
       await closeElectronShell(shell);
       await removeDirWithRetry(dir);

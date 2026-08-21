@@ -781,6 +781,7 @@ html[data-theme-preset="dark"] .toolbar,
 html[data-theme-preset="dark"] .ctxmenu,
 html[data-theme-preset="dark"] .snd-pop,
 html[data-theme-preset="dark"] .spanel,
+html[data-theme-preset="dark"] .sp-frame,
 html[data-theme-preset="dark"] .notice {
   background: linear-gradient(180deg, rgba(60,56,80,0.97), rgba(44,41,60,0.97));
   color: #e8e4f4;
@@ -830,6 +831,11 @@ html[data-theme-preset="dark"] .tool-btn.sp-danger {
 }
 html[data-theme-preset="dark"] .tool-btn.sp-danger:hover { background: rgba(255,157,146,0.24); color: #ffb9b1; }
 html[data-theme-preset="dark"] .sp-hr { border-top-color: rgba(160,150,200,0.3); }
+html[data-theme-preset="dark"] .sp-main,
+html[data-theme-preset="dark"] .sp-nav { border-color: rgba(160,150,200,0.3); }
+html[data-theme-preset="dark"] .sp-navi { color: #e8e4f4; }
+html[data-theme-preset="dark"] .sp-navi:hover { background: rgba(172,162,215,0.24); }
+html[data-theme-preset="dark"] .sp-hint::after { border-top-color: rgba(212,205,240,0.6); }
 html[data-theme-preset="dark"] .size-opt,
 html[data-theme-preset="dark"] .move-opt {
   color: #e8e4f4;
@@ -1124,7 +1130,7 @@ html[data-theme-preset="dark"] .nukki-apply { color: #4a3421; }
   font-size: 14px;
 }
 
-/* ── 설정 패널 (오른쪽 슬라이드, 비모달 — 열려 있어도 보드 조작 가능) ── */
+/* ── 꾸미기 패널 (오른쪽 슬라이드) ── */
 .spanel {
   position: fixed;
   top: 14px;
@@ -1148,6 +1154,145 @@ html[data-theme-preset="dark"] .nukki-apply { color: #4a3421; }
   transform: none;
   visibility: visible;
   transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+/* ── 설정 창 (⚙️) — 게임 환경설정 창 관용구: 중앙 모달 · 딤 · 좌측 카테고리 + 우측 내용 ──
+   구조: #settingsModal(딤 포함 오버레이) > .sp-frame > .sp-head + .sp-main(.sp-nav + .sp-wrap > #settingsPanel).
+   #settingsPanel 은 그대로 .sp-sec 들의 직속 부모로 남는다 — Electron preload 가
+   이 자리에 [백업]·[창 모드]·[처음 안내] 섹션을 직접 붙이기 때문이다 (앵커 불변).
+   모션은 opacity/transform 전용, 0.16s. */
+.sp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease, visibility 0s linear 0.16s;
+}
+.sp-modal.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.16s ease;
+}
+.sp-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(28,16,4,0.46);
+  -webkit-backdrop-filter: blur(2px);
+          backdrop-filter: blur(2px);
+}
+.sp-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 92vw);
+  height: min(620px, 86vh);
+  padding: 12px 16px 14px;
+  background: linear-gradient(180deg, rgba(255,251,240,0.99), rgba(246,236,214,0.99));
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(43,24,8,0.5), inset 0 0 0 1px rgba(255,255,255,0.7);
+  color: #4a3421;
+  transform: scale(0.98);
+  transition: transform 0.16s ease;
+}
+.sp-modal.open .sp-frame { transform: scale(1); }
+.sp-main {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(94,62,24,0.25);
+}
+.sp-nav {
+  flex: none;
+  width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  padding-right: 10px;
+  border-right: 1px dashed rgba(94,62,24,0.28);
+}
+.sp-navi {
+  flex: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 10px 9px;
+  background: transparent;
+  color: #6b4d2e;
+  font-family: inherit;
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+.sp-navi:hover { background: rgba(94,62,24,0.1); }
+.sp-navi.sel {
+  background: #FFD966;
+  color: #4a3421;
+  box-shadow: inset 3px 0 0 #8c5a2b;
+}
+.sp-wrap { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+#settingsPanel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 6px 10px;
+  scrollbar-gutter: stable;
+}
+/* 카테고리 필터 — 활성 카테고리 섹션만 보인다. 나머지는 DOM 에 그대로 남는다
+   (셸 주입 훅·라이선스 고지 전문 보존). */
+#settingsPanel > .sp-sec { display: none; }
+#settingsPanel > .sp-sec.sp-on { display: block; max-width: 640px; }
+#settingsPanel > .sp-sec.sp-first { margin-top: 2px; padding-top: 0; border-top: 0; }
+/* 넘침 어포던스 (발주 #12 관용구) — 실측으로만 .ovf/.at-top/.at-bottom */
+.sp-wrap.ovf:not(.at-bottom) #settingsPanel {
+  -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 34px), rgba(0,0,0,0.12) 100%);
+          mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 34px), rgba(0,0,0,0.12) 100%);
+}
+.sp-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  text-align: center;
+  line-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+.sp-hint::after {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(67,48,31,0.6);
+}
+.sp-wrap.ovf:not(.at-bottom) .sp-hint { opacity: 1; animation: hint-nudge 1.7s ease-in-out infinite; }
+body.fx-calm .sp-wrap.ovf:not(.at-bottom) .sp-hint,
+body.fx-off .sp-wrap.ovf:not(.at-bottom) .sp-hint { animation: none; transition: none; }
+@media (max-width: 720px) {
+  .sp-main { flex-direction: column; }
+  .sp-nav {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0 0 8px;
+    border-right: 0;
+    border-bottom: 1px dashed rgba(94,62,24,0.28);
+  }
+  .sp-navi { font-size: 15px; padding: 5px 9px 6px; }
+  .sp-navi.sel { box-shadow: inset 0 3px 0 #8c5a2b; }
 }
 .sp-head {
   display: flex;
@@ -1244,7 +1389,9 @@ html[data-theme-preset="dark"] .nukki-apply { color: #4a3421; }
 body.fx-calm .pnote, body.fx-calm .swatch, body.fx-calm .add-btn, body.fx-calm .sndbtn, body.fx-calm .ndel,
 body.fx-calm .tool-btn, body.fx-calm .ctx-item, body.fx-calm .ctx-dot, body.fx-calm .rgrip,
 body.fx-calm .board-tab, body.fx-calm .spanel, body.fx-calm .snd-caret,
-body.fx-calm .board-tab-del, body.fx-calm .stgrip { transition: none; }
+body.fx-calm .board-tab-del, body.fx-calm .stgrip,
+body.fx-calm .sp-modal, body.fx-calm .sp-frame, body.fx-calm .sp-navi { transition: none; }
+body.fx-calm .sp-frame { transform: none; }
 body.fx-calm .pnote.pop-in, body.fx-calm .pnote.removing { animation: none; }
 body.fx-calm .notice.show { animation: none; }
 body.fx-calm .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
@@ -1253,7 +1400,9 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
 /* ── 동작 축소 선호: 장식 애니메이션·기울임은 즉시 상태로 (소리는 음소거 단추가 담당) ── */
 @media (prefers-reduced-motion: reduce) {
   .pnote, .swatch, .add-btn, .sndbtn, .ndel, .tool-btn, .ctx-item, .ctx-dot, .rgrip, .board-tab, .spanel,
-  .snd-caret, .board-tab-del, .stgrip { transition: none; }
+  .snd-caret, .board-tab-del, .stgrip,
+  .sp-modal, .sp-frame, .sp-navi { transition: none; }
+  .sp-frame, .sp-modal.open .sp-frame { transform: none; }
   .pnote.pop-in, .pnote.removing { animation: none; }
   .notice.show { animation: none; }
   .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
@@ -1458,15 +1607,40 @@ html[data-pro-theme="lavender"] #board {
   <p class="sp-small lic-msg" id="licMsg"></p>
 </div>
 
-<aside class="spanel" id="settingsPanel" aria-label="설정 패널">
-  <div class="sp-head">⚙️ 설정
-    <button type="button" class="notice-close sp-close" id="spClose" title="설정 닫기">✕</button>
+<!-- 설정 창 (⚙️) — 게임 환경설정 창 관용구: 화면 중앙 고정 프레임 + 딤, 좌측 카테고리 목록,
+     우측 내용 패널(#settingsPanel). 카테고리를 바꿔도 다른 섹션은 DOM 에 그대로 남는다
+     (셸 주입 훅·라이선스 고지 전문 보존). 캘린더 앱과 같은 구조·같은 관용구. -->
+<div class="sp-modal" id="settingsModal" aria-hidden="true">
+  <div class="sp-dim" id="spDim"></div>
+  <div class="sp-frame" role="dialog" aria-modal="false" aria-labelledby="spTitle">
+  <div class="sp-head" id="spTitle">⚙️ 설정
+    <button type="button" class="notice-close sp-close" id="spClose" title="설정 닫기 (Esc)">✕</button>
   </div>
 
-  <!-- 패널 순서 = 손대는 빈도. 메모 → 보드 → 느낌 → 안전 → 데이터 → 정보.
-       모든 컨트롤은 그대로다(하나도 없애지 않았다). 묶는 방식과 이름만 바꿨다. -->
+  <div class="sp-main">
+    <!-- 카테고리 목록 — 형제 앱(캘린더)과 공통 카테고리는 같은 이름·같은 순서다 -->
+    <nav class="sp-nav" id="spNav" role="tablist" aria-label="설정 분류">
+      <button type="button" class="sp-navi" id="spTab-display" role="tab" data-spcat="display"
+              aria-controls="settingsPanel" aria-selected="true">🖋 표시</button>
+      <button type="button" class="sp-navi" id="spTab-layout" role="tab" data-spcat="layout"
+              aria-controls="settingsPanel" aria-selected="false">🧲 배치</button>
+      <button type="button" class="sp-navi" id="spTab-fx" role="tab" data-spcat="fx"
+              aria-controls="settingsPanel" aria-selected="false">✨ 효과·소리</button>
+      <button type="button" class="sp-navi" id="spTab-safety" role="tab" data-spcat="safety"
+              aria-controls="settingsPanel" aria-selected="false">🛡 안전</button>
+      <button type="button" class="sp-navi" id="spTab-data" role="tab" data-spcat="data"
+              aria-controls="settingsPanel" aria-selected="false">💾 데이터</button>
+      <button type="button" class="sp-navi" id="spTab-about" role="tab" data-spcat="about"
+              aria-controls="settingsPanel" aria-selected="false">ℹ️ 정보</button>
+    </nav>
 
-  <div class="sp-sec">
+    <div class="sp-wrap" id="spWrap">
+<aside id="settingsPanel" role="tabpanel" tabindex="0" aria-label="설정 패널">
+
+  <!-- 섹션 순서 = 손대는 빈도. 모든 컨트롤은 그대로다(하나도 없애지 않았다).
+       data-spcat = 이 섹션이 속한 카테고리. 값이 없는 섹션(셸 주입분)은 첫 카테고리로 간다. -->
+
+  <div class="sp-sec" data-spcat="display">
     <h3>메모 글씨</h3>
     <div class="sp-row"><span class="sp-lab">글자 크기</span>
       <span class="seg" id="spFontSize">
@@ -1484,7 +1658,7 @@ html[data-pro-theme="lavender"] #board {
     <p class="sp-small">이미 붙여 둔 메모까지 함께 바뀌어요.</p>
   </div>
 
-  <div class="sp-sec">
+  <div class="sp-sec" data-spcat="display">
     <h3>새 메모 기본값</h3>
     <div class="sp-row"><span class="sp-lab">기본 색</span>
       <span class="sp-swatches" id="spDefColor">
@@ -1519,7 +1693,7 @@ html[data-pro-theme="lavender"] #board {
       우클릭 메뉴의 "내용에 맞추기"와 같은 계산이에요.</p>
   </div>
 
-  <div class="sp-sec">
+  <div class="sp-sec" data-spcat="layout">
     <h3>보드 정리</h3>
     <div class="sp-row"><span class="sp-lab">정리 방식</span>
       <select id="spArrange" class="theme-sel" aria-label="정리 방식">
@@ -1534,7 +1708,7 @@ html[data-pro-theme="lavender"] #board {
   </div>
 
   <!-- 움직임과 소리를 한 자리에 — 둘 다 "얼마나 조용한 앱이길 바라는가"에 대한 답이다 -->
-  <div class="sp-sec">
+  <div class="sp-sec" data-spcat="fx">
     <h3>움직임과 소리</h3>
     <div class="sp-row"><span class="sp-lab">애니메이션</span>
       <span class="seg" id="spAnim">
@@ -1553,7 +1727,7 @@ html[data-pro-theme="lavender"] #board {
     <p class="sp-small">툴바의 🔊 단추·▾ 음량 서랍과 항상 같이 움직여요.</p>
   </div>
 
-  <div class="sp-sec">
+  <div class="sp-sec" data-spcat="safety">
     <h3>안전</h3>
     <div class="sp-row"><span class="sp-lab">삭제 전 확인</span>
       <span class="seg" id="spConfirmDelete">
@@ -1564,7 +1738,7 @@ html[data-pro-theme="lavender"] #board {
     <p class="sp-small">켜면 메모·보드·스티커·배경·손상 백업을 지우기 전에 한 번 더 물어봐요. 지운 뒤의 실행 취소는 그대로 돼요.</p>
   </div>
 
-  <div class="sp-sec">
+  <div class="sp-sec" data-spcat="data">
     <h3>데이터</h3>
     <div class="sp-row">
       <button type="button" id="spExport" class="tool-btn" title="모든 보드의 메모를 파일로 저장">💾 내보내기</button>
@@ -1587,7 +1761,7 @@ html[data-pro-theme="lavender"] #board {
     </details>
   </div>
 
-  <div class="sp-sec sp-info">
+  <div class="sp-sec sp-info" data-spcat="about">
     <h3>정보</h3>
     <p>🗒️ 포스트잇 월 — 캘린더+포스트잇 월 rev.5 (오프라인 단일 파일, 이 컴퓨터에만 저장)</p>
     <p>단축키: Esc = 편집·메뉴·설정 닫기 · 메모 클릭 = 편집 · 위쪽 잡아 끌기 = 이동 · 오른쪽 아래 모서리 끌기 = 크기 조절 · 우클릭 = 메뉴</p>
@@ -1608,6 +1782,11 @@ html[data-pro-theme="lavender"] #board {
     </details>
   </div>
 </aside>
+      <span class="sp-hint" aria-hidden="true"></span>
+    </div><!-- /.sp-wrap -->
+  </div><!-- /.sp-main -->
+  </div><!-- /.sp-frame -->
+</div><!-- /#settingsModal -->
 
 <aside class="spanel dpanel" id="decorPanel" aria-label="꾸미기 패널">
   <div class="sp-head">🎨 꾸미기
@@ -5186,32 +5365,130 @@ html[data-pro-theme="lavender"] #board {
   }
   addBoardBtn.addEventListener('click', addBoard);
 
-  /* ── 설정 패널: 오른쪽 슬라이드, 비모달 — ESC/바깥 클릭 닫기, 열려 있어도 보드 조작 가능 ── */
+  /* ── 설정 창: 화면 중앙 모달(딤 + 고정 프레임) — 좌측 카테고리 + 우측 내용 패널.
+     Esc/✕/딤 클릭으로 닫고, 닫을 때 포커스는 ⚙️ 단추로 돌아간다.
+     #settingsPanel 은 여전히 .sp-sec 들의 직속 부모다 — 셸(preload)이 [백업]·[창 모드]·
+     [처음 안내] 섹션을 이 자리에 직접 붙이기 때문에 앵커를 바꾸지 않는다. ── */
 
   var settingsBtn = document.getElementById('settingsBtn');
   var spEl = document.getElementById('settingsPanel');
+  var spModal = document.getElementById('settingsModal');
+  var spNav = document.getElementById('spNav');
+  var spWrap = document.getElementById('spWrap');
+
+  var SP_CAT_DEFAULT = 'display';        /* 열 때 활성화되는 첫 카테고리 */
+  var spCat = SP_CAT_DEFAULT;
+
+  /* 섹션 → 카테고리. 셸이 나중에 붙이는 섹션에는 data-spcat 이 없다:
+     [백업]은 데이터로, 나머지(창 모드·처음 안내)는 첫 카테고리로 보낸다
+     — 설정을 열자마자 보이는 자리라 셸 진입점이 묻히지 않는다. */
+  function spSecCat(sec) {
+    var c = sec.getAttribute('data-spcat');
+    if (c) return c;
+    if (sec.hasAttribute('data-backup-section') || sec.querySelector('[data-backup-now]')) return 'data';
+    return SP_CAT_DEFAULT;
+  }
+
+  /* 넘침 어포던스 (발주 #12 관용구) — 실측(scrollHeight vs clientHeight)으로만 판정 */
+  function spUpdateOvf() {
+    if (!spWrap) return;
+    var max = spEl.scrollHeight - spEl.clientHeight;
+    var ovf = max > 1;
+    spWrap.classList.toggle('ovf', ovf);
+    spWrap.classList.toggle('at-top', !ovf || spEl.scrollTop <= 1);
+    spWrap.classList.toggle('at-bottom', !ovf || spEl.scrollTop >= max - 1);
+  }
+
+  function spApplyCat(scrollTop) {
+    var kids = spEl.children;
+    var first = true;
+    for (var i = 0; i < kids.length; i++) {
+      var sec = kids[i];
+      if (!sec.classList || !sec.classList.contains('sp-sec')) continue;
+      var on = spSecCat(sec) === spCat;
+      sec.classList.toggle('sp-on', on);
+      sec.classList.toggle('sp-first', on && first);
+      if (on) first = false;
+    }
+    var tabs = spNav ? spNav.querySelectorAll('.sp-navi') : [];
+    for (var j = 0; j < tabs.length; j++) {
+      var sel = tabs[j].getAttribute('data-spcat') === spCat;
+      tabs[j].classList.toggle('sel', sel);
+      tabs[j].setAttribute('aria-selected', sel ? 'true' : 'false');
+      tabs[j].tabIndex = sel ? 0 : -1;
+      if (sel) spEl.setAttribute('aria-labelledby', tabs[j].id);
+    }
+    if (scrollTop !== false) spEl.scrollTop = 0;
+    spUpdateOvf();
+  }
+
+  function spSetCat(cat, focusTab) {
+    spCat = cat;
+    spApplyCat();
+    if (focusTab && spNav) {
+      var t = spNav.querySelector('.sp-navi[data-spcat="' + cat + '"]');
+      try { if (t) t.focus({ preventScroll: true }); } catch (err) { /* 무시 */ }
+    }
+  }
+
+  if (spNav) {
+    spNav.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('.sp-navi') : null;
+      if (!t) return;
+      spSetCat(t.getAttribute('data-spcat'), true);
+      playTick();
+    });
+    /* 위/아래 화살표로 카테고리 이동 (환경설정 창 관용구) */
+    spNav.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      var list = Array.prototype.slice.call(spNav.querySelectorAll('.sp-navi'));
+      var at = list.map(function (b) { return b.getAttribute('data-spcat'); }).indexOf(spCat);
+      if (at < 0) return;
+      e.preventDefault();
+      var next = (at + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length;
+      spSetCat(list[next].getAttribute('data-spcat'), true);
+    });
+  }
+
+  spEl.addEventListener('scroll', spUpdateOvf, { passive: true });
+  window.addEventListener('resize', function () { if (settingsOpen()) spUpdateOvf(); });
+
+  /* 셸이 뒤늦게 붙이는 섹션도 카테고리에 편입 (preload 는 수정 불가 — 앱이 맞춘다) */
+  try {
+    new MutationObserver(function () { spApplyCat(false); }).observe(spEl, { childList: true });
+  } catch (err) { /* 관찰자 실패 시에도 기본 섹션은 그대로 동작 */ }
+
+  /* 셸의 [처음 안내 다시 보기]를 누르면 안내가 화면을 쓰므로 설정 창은 비켜 준다 */
+  spEl.addEventListener('click', function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('[data-onboarding-replay]') : null;
+    if (t) closeSettings();
+  });
 
   function settingsOpen() {
     return spEl.classList.contains('open');
   }
 
   function openSettings() {
-    closeDecorPanel();   /* 오른쪽 자리는 하나 — 꾸미기 패널과 겹치지 않게 */
-    /* 도구 선반 아래에서 시작 — 선반의 톱니·버튼이 패널에 가려지지 않게 (열 때마다 재계산) */
-    try { spEl.style.top = Math.min(shelfBottom(), Math.max(60, window.innerHeight - 220)) + 'px'; } catch (err) { /* 무시 */ }
-    spEl.classList.add('open');
+    closeDecorPanel();   /* 꾸미기 패널과 겹치지 않게 */
+    spModal.classList.add('open');
+    spModal.setAttribute('aria-hidden', 'false');
+    spEl.classList.add('open');   /* 셸(preload)이 이 클래스로 패널 열림을 관찰한다 */
     settingsBtn.setAttribute('aria-expanded', 'true');
     settingsBtn.title = '설정 닫기';
     syncPanelUI();
     refreshDataPanel();
+    spSetCat(SP_CAT_DEFAULT, true);   /* 열 때 첫 카테고리 활성 + 포커스는 모달 안으로 */
+    spUpdateOvf();
   }
 
   function closeSettings() {
     if (!settingsOpen()) return;
-    /* 패널 안에 포커스가 남아 있으면 토글 버튼으로 돌려보낸다 (숨은 패널 잔류 포커스 경고 방지) */
+    /* 창 안에 포커스가 남아 있으면 ⚙️ 단추로 돌려보낸다 (숨은 패널 잔류 포커스 방지) */
     try {
-      if (spEl.contains(document.activeElement)) settingsBtn.focus({ preventScroll: true });
+      if (spModal.contains(document.activeElement)) settingsBtn.focus({ preventScroll: true });
     } catch (err) { /* 무시 */ }
+    spModal.classList.remove('open');
+    spModal.setAttribute('aria-hidden', 'true');
     spEl.classList.remove('open');
     settingsBtn.setAttribute('aria-expanded', 'false');
     settingsBtn.title = '설정 열기';
@@ -5223,11 +5500,13 @@ html[data-pro-theme="lavender"] #board {
   });
   document.getElementById('spClose').addEventListener('click', closeSettings);
 
-  /* 바깥 클릭 = 닫기 — preventDefault 없음: 같은 클릭이 보드·노트 조작으로 그대로 이어진다 (비모달) */
+  /* 딤(배경) 클릭 = 닫기. 창 바깥에서 시작한 클릭도 닫는다 — preventDefault 는 없다 */
   document.addEventListener('pointerdown', function (e) {
     if (!settingsOpen()) return;
     var t = e.target;
-    if (t && t.closest && (t.closest('.spanel') || t.closest('#settingsBtn') || t.closest('.confirm-pop'))) return;
+    if (!t || !t.closest) return;
+    if (t.closest('.sp-dim')) { closeSettings(); return; }
+    if (t.closest('#settingsModal') || t.closest('#settingsBtn') || t.closest('.confirm-pop')) return;
     closeSettings();
   });
 

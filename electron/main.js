@@ -1,14 +1,15 @@
 // ============================================================================
 // 쁘띠캘린더 — Electron 셸 (main 프로세스)
 //
-// 계약 (protocol/SCORECARD.md rev.7):
-//   A42 — 병합 1창 탭 모드(기본): BrowserWindow 1개(제목 "쁘띠캘린더") 안에
-//         탭바(tabbar.html, 창의 기본 페이지) + 두 앱 WebContentsView(calendar·postit)를
-//         모두 생성·로드해 유지하고, 탭 전환은 z순서 재배치만 한다(리로드 금지 —
-//         webContents 유지 = 작성 상태 보존). [data-split] → 기존 2창 경로(rev.6 계약),
-//         분리 상태의 [data-merge] → 병합 복귀. 셸 설정(모드·기본 탭)은
-//         userData\shell-settings.json 에 영속. 저장소 원본 calendar.html·postit.html 은
-//         바이트 동일하게 loadFile — 빌드 변형·주입 금지 (주입이 필요하면 preload로만).
+// 계약 (protocol/SCORECARD.md rev.8):
+//   A42 — 단일 창 탭 모드(유일한 모드): BrowserWindow 는 언제나 정확히 1개
+//         (제목 "쁘띠캘린더"). 그 창 안에 탭바(tabbar.html, 창의 기본 페이지) +
+//         두 앱 WebContentsView(calendar·postit)를 모두 생성·로드해 유지하고,
+//         탭 전환은 z순서 재배치만 한다(리로드 금지 — webContents 유지 = 작성 상태 보존).
+//         셸 설정(기본 탭)은 userData\shell-settings.json 에 영속.
+//         저장소 원본 calendar.html·postit.html 은 바이트 동일하게 loadFile —
+//         빌드 변형·주입 금지 (주입이 필요하면 preload로만).
+//         ※ 창 분리(2창 구성)는 rev.8 에서 폐지됐다 — 어떤 경로로도 창을 늘리지 않는다.
 //   A44 — 외부 네트워크 요청 0. 이 파일은 http/https/net/dns/dgram/tls 를
 //         일절 require하지 않는다. 텔레메트리·autoUpdater 금지.
 //   A49 — 렌더러 격리: contextIsolation·sandbox 활성, nodeIntegration·webview 비활성,
@@ -36,7 +37,7 @@ if (process.env.PETIT_USERDATA) {
 }
 
 // ── 단일 인스턴스 잠금 — 두 번째 실행은 기존 창을 앞으로 가져오고 종료 ──────
-// (모드 무관: 병합 모드면 병합 창 1개, 분리 모드면 앱 창 2개가 전면으로 온다)
+// (창은 항상 1개뿐이므로 그 창을 복원·전면화한다)
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -54,7 +55,8 @@ if (!gotSingleInstanceLock) {
 
 // ============================================================================
 // 창 상태 기억 (셸 구현) — userData의 window-state.json에 bounds 저장·복원.
-// 키: 'calendar'·'postit'(분리 모드) + 'merged'(병합 모드 전용 — 서로 침범하지 않는다).
+// 키: 'merged' 하나뿐 (단일 창 — 이름은 기존 저장 파일 호환을 위해 유지한다).
+// 예전 버전이 남긴 'calendar'·'postit' 키는 더 이상 읽지도 쓰지도 않는다 — 있어도 무해.
 // 앱 내부(HTML)의 resizeTo 기반 모듈은 try/catch로 감싸져 있어 공존 무해.
 // ============================================================================
 
@@ -93,11 +95,12 @@ function sanitizeBounds(saved) {
 }
 
 // ============================================================================
-// 셸 설정 — userData\shell-settings.json { windowMode, defaultTab }
-// 손상·부재 시 크래시 없이 기본값(merged·postit)으로 강등 (아키텍처 원칙 5 준용).
+// 셸 설정 — userData\shell-settings.json { defaultTab }
+// 손상·부재 시 크래시 없이 기본값(postit)으로 강등 (아키텍처 원칙 5 준용).
+// 예전 버전이 남긴 windowMode 필드는 읽지 않는다 (창 분리 폐지 — rev.8).
 // ============================================================================
 
-const SHELL_SETTINGS_DEFAULTS = { windowMode: 'merged', defaultTab: 'postit' };
+const SHELL_SETTINGS_DEFAULTS = { defaultTab: 'postit' };
 
 function shellSettingsPath() {
   return path.join(app.getPath('userData'), 'shell-settings.json');
@@ -107,7 +110,6 @@ function loadShellSettings() {
   const raw = readJsonFile(shellSettingsPath());
   const s = { ...SHELL_SETTINGS_DEFAULTS };
   if (raw && typeof raw === 'object') {
-    if (raw.windowMode === 'merged' || raw.windowMode === 'separate') s.windowMode = raw.windowMode;
     if (raw.defaultTab === 'postit' || raw.defaultTab === 'calendar') s.defaultTab = raw.defaultTab;
   }
   return s;
@@ -118,20 +120,51 @@ function saveShellSettings(settings) {
 }
 
 // ============================================================================
+// 시작 프로그램 — 윈도우 시작 시 자동 실행
+// 단일 진실은 OS 다: Electron 의 app.setLoginItemSettings/getLoginItemSettings 가
+// HKCU\…\Run 항목을 대신 관리한다. 셸은 이 상태를 파일에 이중 저장하지 않고,
+// UI 초기값·동기화는 언제나 OS 실측값으로만 만든다.
+// 등록되는 실행 파일은 process.execPath — 패키지에서는 앱 exe, 개발 트리
+// (electron .)에서는 electron.exe 가 잡힌다(개발 기동의 정상 동작).
+// 외부 프로세스(PowerShell·.lnk 조작) 실행 0건 — 내장 API 만 쓴다.
+// ============================================================================
+
+/** 현재 OS 상태 — API 실패 시에도 크래시 없이 "꺼짐"으로 강등 */
+function getOpenAtLogin() {
+  try {
+    const s = app.getLoginItemSettings();
+    return !!(s && s.openAtLogin);
+  } catch (_err) {
+    return false;
+  }
+}
+
+/**
+ * 자동 실행을 켜고 끈다 — 적용 뒤 OS 값을 다시 읽어 실제 반영 여부를 돌려준다.
+ * (쓰기가 조용히 실패해도 호출측이 실패를 판정할 수 있게 하는 재판독 계약)
+ * @param {boolean} on
+ * @returns {boolean} 적용 후 실제 OS 상태
+ */
+function setOpenAtLogin(on) {
+  try {
+    app.setLoginItemSettings({ openAtLogin: on === true });
+  } catch (_err) { /* 아래 재판독이 실패로 판정한다 */ }
+  return getOpenAtLogin();
+}
+
+// ============================================================================
 // 셸 런타임 상태 (main 프로세스 단일 정의처)
 // ============================================================================
 
 const runtime = {
-  mode: 'merged',        // 현재 가동 중인 창 구성 ('merged' | 'separate')
-  settings: null,        // 저장된 셸 설정 (windowMode·defaultTab)
+  settings: null,        // 저장된 셸 설정 (defaultTab)
   state: null,           // window-state.json 전체 (참조 공유)
-  mergedWin: null,       // 병합 모드의 BrowserWindow (탭바 페이지 소유)
-  views: null,           // 병합 모드의 { calendar, postit } WebContentsView
-  layoutViews: null,     // 병합 모드의 뷰 배치 함수 (드로어 개폐·리사이즈 시 재호출)
-  activeTab: 'postit',   // 병합 모드의 활성 탭
+  win: null,             // 단 하나의 BrowserWindow (탭바 페이지 소유)
+  views: null,           // { calendar, postit } WebContentsView
+  layoutViews: null,     // 뷰 배치 함수 (드로어 개폐·리사이즈 시 재호출)
+  activeTab: 'postit',   // 활성 탭
   drawerOpen: false,     // 탭바 설정 드로어 개폐 (열리면 앱 뷰를 아래로 밀어 공간 확보)
-  transitioning: false,  // 분리↔병합 전환 중 (겹침 전환 구간에서 이중 전환·조기 종료 방지)
-  pendingAlarms: 0,      // 병합 모드에서 캘린더가 백그라운드 탭일 때 쌓인 일정 알림 건수 (탭바 배지)
+  pendingAlarms: 0,      // 캘린더가 백그라운드 탭일 때 쌓인 일정 알림 건수 (탭바 배지)
   lastAlarmText: ''      // 마지막 알림 텍스트 (탭바 미니 알림 스트립 표시용, ≤200자)
 };
 
@@ -148,7 +181,7 @@ const TABBAR_HEIGHT = 40;
 // 설정 드로어 높이(px) — tabbar.html 의 [data-shell-settings] 높이와 동기 유지.
 // 드로어가 열리면 앱 뷰를 이만큼 아래로 밀어, 창의 기본 페이지(탭바)에 그린
 // 드로어가 뷰에 가려지지 않게 한다 (뷰는 항상 기본 페이지 위에 그려진다).
-const SETTINGS_DRAWER_HEIGHT = 148;
+const SETTINGS_DRAWER_HEIGHT = 138;
 
 // A49 ② 정적 검사 대상 — 아래 보안 기본선은 절대 완화 금지.
 // preload: A49③ 화이트리스트 브리지(window.petit) + 셸 전용 UI 레이어(A43 카드·A47 온보딩).
@@ -173,24 +206,20 @@ function hardenWebContents(wc) {
 }
 
 /**
- * 첫 실행(저장 상태 없음) 기본 배치 — 작업영역이 가장 큰 디스플레이에 명시 배치.
- * Electron 기본 캐스케이드가 두 번째 창을 화면 아래로 밀어 OS가 높이를 줄이는 문제
+ * 첫 실행(저장 상태 없음) 기본 배치 — 작업영역이 가장 큰 디스플레이의 중앙에 명시 배치.
+ * Electron 기본 캐스케이드가 창을 화면 아래로 밀어 OS가 높이를 줄이는 문제
  * (A42 기본 크기 미달)를 피하고, 주 화면이 작은 노트북(예: 1280×680@150%)에서도
  * 계약 기본 크기 ≥1024×700 을 담을 수 있는 화면을 고른다.
- * @param {'calendar'|'postit'|'merged'} key 창 종류 (캘린더 좌측 / 포스트잇 우측 / 병합 중앙)
  * @param {{width:number,height:number}} defaults 기본 크기
  */
-function freshBoundsFor(key, defaults) {
+function freshBounds(defaults) {
   const wa = screen.getAllDisplays().reduce((best, d) =>
     (d.workArea.width * d.workArea.height > best.workArea.width * best.workArea.height ? d : best)
   ).workArea;
   const w = Math.min(defaults.width, wa.width - 24);
   const h = Math.min(defaults.height, wa.height - 12);
   const y = wa.y + Math.max(6, Math.floor((wa.height - h) / 2) - 8);
-  let x;
-  if (key === 'postit') x = wa.x + Math.max(12, wa.width - w - 24);
-  else if (key === 'calendar') x = wa.x + 24;
-  else x = wa.x + Math.max(12, Math.floor((wa.width - w) / 2)); // merged — 중앙
+  const x = wa.x + Math.max(12, Math.floor((wa.width - w) / 2));
   return { width: w, height: h, x, y };
 }
 
@@ -218,84 +247,8 @@ function wireWindowStatePersistence(win, state, key) {
 }
 
 // ============================================================================
-// 분리 모드 — 앱 창 2개 (rev.6 계약 경로 그대로: 제목·기본 크기·독립 종료)
-// ============================================================================
-
-/**
- * @param {object} state        window-state.json에서 읽은 전체 상태 객체 (참조 공유)
- * @param {string} key          상태 저장 키 ('calendar' | 'postit')
- * @param {string} htmlFile     로드할 저장소 원본 HTML 절대 경로
- * @param {string} windowTitle  고정 창 제목 (page-title-updated는 preventDefault)
- * @param {{width:number,height:number}} defaults 기본 크기
- */
-function createAppWindow(state, key, htmlFile, windowTitle, defaults) {
-  const saved = sanitizeBounds(state[key]);
-  const fresh = saved ? null : freshBoundsFor(key, defaults);
-
-  const win = new BrowserWindow({
-    width: saved ? saved.width : fresh.width,
-    height: saved ? saved.height : fresh.height,
-    ...(saved ? { x: saved.x, y: saved.y } : { x: fresh.x, y: fresh.y }),
-    minWidth: 480,
-    minHeight: 360,
-    title: windowTitle,
-    show: false,
-    webPreferences: { ...SECURE_WEB_PREFERENCES }
-  });
-
-  win.removeMenu(); // Edge 앱 모드와 동일한 무메뉴 창
-
-  // 믹스드 DPI 보정: 배율이 다른 모니터(예: 150% 노트북 + 100% 외장)의 음수 좌표로
-  // 생성자 x/y 를 주면 크기가 배율 오염되는 Electron/Chromium 이슈가 있어,
-  // 생성 직후 목표 사각형을 한 번 더 확정 적용한다.
-  // 저장 bounds 복원도 동일하게 재확정한다 — fresh 만 보정하면 혼성 DPI(150%+100%)에서
-  // 재기동마다 생성자 크기가 1/배율로 오염돼 창이 점점 줄어드는 붕괴가 발생한다(3차 점검 실증).
-  win.setBounds(fresh || saved);
-
-  if (state[key] && state[key].maximized) win.maximize();
-
-  // ── 제목 고정: HTML이 document.title을 바꿔도 셸 제목 유지 ──
-  // (주의: preventDefault로 네이티브 제목 변경을 막는 계약은 BrowserWindow 이벤트 쪽이다.
-  //  webContents의 동명 이벤트는 통지용이라 preventDefault가 무효.)
-  win.on('page-title-updated', (event) => {
-    event.preventDefault();
-  });
-
-  hardenWebContents(win.webContents);
-  wireWindowStatePersistence(win, state, key);
-
-  win.once('ready-to-show', () => {
-    win.show();
-    win.setTitle(windowTitle); // 로드 과정에서의 제목 변동 방지 — 최종 확정
-  });
-
-  // A42: 저장소 원본을 그대로 로드 — 경로 외 어떤 변형도 없다.
-  win.loadFile(htmlFile);
-
-  return win;
-}
-
-/** 분리 모드 진입: 앱 창 2개 (캘린더 좌 / 포스트잇 우) — 전환 순서 제어용으로 창 배열 반환 */
-function openSeparateWindows() {
-  const calWin = createAppWindow(
-    runtime.state,
-    'calendar',
-    path.join(REPO_ROOT, 'calendar.html'),
-    '쁘띠캘린더 — 캘린더',
-    { width: 1024, height: 740 }
-  );
-  const postitWin = createAppWindow(
-    runtime.state,
-    'postit',
-    path.join(REPO_ROOT, 'postit.html'),
-    '쁘띠캘린더 — 포스트잇 월',
-    { width: 1024, height: 740 }
-  );
-  return [calWin, postitWin];
-}
-
-// ============================================================================
-// 병합 모드 (기본) — BrowserWindow 1개: 탭바(기본 페이지) + 앱 WebContentsView 2개
+// 단일 창 탭 모드 (유일한 창 구성) — BrowserWindow 1개:
+// 탭바(기본 페이지) + 앱 WebContentsView 2개
 //
 // 두 앱 뷰는 시작 시 모두 생성·로드하고 이후 유지한다. 탭 전환은 contentView 의
 // z순서 재배치(addChildView 재호출 = 맨 위로)뿐이다 — 리로드 금지 = 작성 상태 보존
@@ -303,9 +256,9 @@ function openSeparateWindows() {
 // 백그라운드 탭의 타이머·저장 경로도 계속 돈다.
 // ============================================================================
 
-/** 병합 창의 활성 탭 전환 — 해당 뷰를 z순서 맨 위로 (이미 자식이면 재정렬만) */
+/** 활성 탭 전환 — 해당 뷰를 z순서 맨 위로 (이미 자식이면 재정렬만) */
 function setActiveTab(tab) {
-  const win = runtime.mergedWin;
+  const win = runtime.win;
   if (!win || win.isDestroyed() || !runtime.views || !runtime.views[tab]) return false;
   runtime.activeTab = tab;
   win.contentView.addChildView(runtime.views[tab]);
@@ -314,15 +267,29 @@ function setActiveTab(tab) {
     runtime.pendingAlarms = 0;
     runtime.lastAlarmText = '';
   }
-  pushTabbarUi();
+  pushShellUi();
   return true;
 }
 
-/** 탭바 페이지에 셸 상태를 밀어 넣는다 — 단축키 전환·알림 배지 등 탭바 요청 없이 바뀐 상태 반영 */
-function pushTabbarUi() {
-  const win = runtime.mergedWin;
-  if (!win || win.isDestroyed()) return;
-  try { win.webContents.send('petit:shell:ui-push', shellStatePayload()); } catch (_err) { /* 로드 전/파괴 중 — 무해 (탭바가 초기 getState 로 동기화) */ }
+/**
+ * 셸 상태를 탭바 + 두 앱 뷰에 밀어 넣는다 — 요청 없이 바뀐 상태(단축키 탭 전환, 알림
+ * 배지, 시작 프로그램 토글)를 모든 표면이 즉시 따라가게 한다. 어느 쪽에서 자동 실행을
+ * 바꿔도 반대쪽 UI 가 같은 값으로 갱신된다 (실패 시 실제 OS 값으로 되돌림 포함).
+ */
+function pushShellUi() {
+  const payload = shellStatePayload();
+  const targets = [];
+  const win = runtime.win;
+  if (win && !win.isDestroyed()) targets.push(win.webContents);
+  if (runtime.views) {
+    for (const key of ['calendar', 'postit']) {
+      const view = runtime.views[key];
+      if (view && view.webContents && !view.webContents.isDestroyed()) targets.push(view.webContents);
+    }
+  }
+  for (const wc of targets) {
+    try { wc.send('petit:shell:ui-push', payload); } catch (_err) { /* 로드 전/파괴 중 — 무해 (각 표면이 초기 조회로 동기화) */ }
+  }
 }
 
 /** 활성 탭 뷰에 키보드 포커스 — 탭 전환 직후 바로 타이핑할 수 있게 */
@@ -334,9 +301,14 @@ function focusActiveView() {
   } catch (_err) { /* 파괴 중 — 무해 */ }
 }
 
-function createMergedWindow(state, settings) {
+/**
+ * 앱의 유일한 창을 만든다 — 탭바(기본 페이지) + 두 앱 뷰.
+ * @param {object} state    window-state.json 전체 (bounds 키 'merged' — 저장 파일 호환 유지)
+ * @param {{defaultTab:string}} settings 셸 설정
+ */
+function createShellWindow(state, settings) {
   const saved = sanitizeBounds(state.merged);
-  const fresh = saved ? null : freshBoundsFor('merged', { width: 1024, height: 740 });
+  const fresh = saved ? null : freshBounds({ width: 1024, height: 740 });
 
   const win = new BrowserWindow({
     width: saved ? saved.width : fresh.width,
@@ -350,12 +322,19 @@ function createMergedWindow(state, settings) {
     webPreferences: { ...SECURE_WEB_PREFERENCES, preload: path.join(__dirname, 'tabbar-preload.js') }
   });
 
-  win.removeMenu();
-  // 믹스드 DPI 보정 — 저장 bounds 복원 경로 포함 (createAppWindow 와 동일 사유:
-  // saved 미보정 시 재기동마다 1/배율 축소 붕괴, 3차 점검 실증)
+  win.removeMenu(); // Edge 앱 모드와 동일한 무메뉴 창
+
+  // 믹스드 DPI 보정: 배율이 다른 모니터(예: 150% 노트북 + 100% 외장)의 음수 좌표로
+  // 생성자 x/y 를 주면 크기가 배율 오염되는 Electron/Chromium 이슈가 있어,
+  // 생성 직후 목표 사각형을 한 번 더 확정 적용한다. 저장 bounds 복원 경로도 동일하게
+  // 재확정한다 — saved 미보정 시 혼성 DPI(150%+100%)에서 재기동마다 생성자 크기가
+  // 1/배율로 오염돼 창이 점점 줄어드는 붕괴가 발생한다(3차 점검 실증).
   win.setBounds(fresh || saved);
   if (state.merged && state.merged.maximized) win.maximize();
 
+  // ── 제목 고정: 탭바 페이지가 document.title 을 바꿔도 셸 제목 유지 ──
+  // (주의: preventDefault 로 네이티브 제목 변경을 막는 계약은 BrowserWindow 이벤트 쪽이다.
+  //  webContents 의 동명 이벤트는 통지용이라 preventDefault 가 무효.)
   win.on('page-title-updated', (event) => {
     event.preventDefault();
   });
@@ -380,20 +359,20 @@ function createMergedWindow(state, settings) {
   win.contentView.addChildView(views.calendar);
   win.contentView.addChildView(views.postit);
 
-  runtime.mergedWin = win;
+  runtime.win = win;
   runtime.views = views;
   runtime.drawerOpen = false;
-  runtime.pendingAlarms = 0;   // 새 병합 창 — 배지 누적은 창 수명 단위
+  runtime.pendingAlarms = 0;   // 배지 누적은 창 수명 단위
   runtime.lastAlarmText = '';
 
-  // ── 병합 모드 탭 단축키 (Ctrl+Tab 순환 / Ctrl+1 포스트잇 / Ctrl+2 캘린더) ──
+  // ── 탭 단축키 (Ctrl+Tab 순환 / Ctrl+1 포스트잇 / Ctrl+2 캘린더) ──
   // before-input-event 는 렌더러가 키를 받기 전에 main 이 가로챈다 — 앱 입력 필드에
   // 포커스가 있어도 안전하다: Ctrl+Tab·Ctrl+숫자는 텍스트를 만들지 않는 조합이고,
   // 양 앱 모두 이 조합을 쓰지 않는다 (preventDefault 로 렌더러 전달도 차단).
   // 탭바 호스트·두 앱 뷰 모두에 배선 — 포커스가 어디 있든 동작한다.
   const wireTabShortcuts = (wc) => {
     wc.on('before-input-event', (event, input) => {
-      if (runtime.mode !== 'merged' || runtime.mergedWin !== win || win.isDestroyed()) return;
+      if (runtime.win !== win || win.isDestroyed()) return;
       // 텍스트 없는 키(Tab·수식 조합 숫자)는 keyDown 이 아니라 rawKeyDown 으로 온다 (실측)
       if (input.type !== 'keyDown' && input.type !== 'rawKeyDown') return;
       if (!input.control || input.alt || input.meta) return;
@@ -433,8 +412,8 @@ function createMergedWindow(state, settings) {
   setActiveTab(settings.defaultTab === 'calendar' ? 'calendar' : 'postit');
 
   win.on('closed', () => {
-    if (runtime.mergedWin === win) {
-      runtime.mergedWin = null;
+    if (runtime.win === win) {
+      runtime.win = null;
       runtime.views = null;
       runtime.layoutViews = null;
     }
@@ -453,110 +432,17 @@ function createMergedWindow(state, settings) {
 }
 
 // ============================================================================
-// 분리 ↔ 병합 전환
-//
-// 미저장 상태 유실 방지: 전환 전 웹콘텐츠 포커스를 해제(blur 유도)해 앱의 기존
-// 저장 경로(편집 확정·blur 저장)가 돌게 하고, 앱의 저장 디바운스(≤400ms)가
-// 비워질 여유를 준 뒤 웹콘텐츠를 정상 종료(unload/pagehide 발화)한다.
-// 전환은 창/뷰 재구성(재로드)으로 한다 — 병합 모드 "탭 전환"만은 무리로드 계약.
-//
-// 전환 순서(무창 깜빡임 제거): 저장 flush → "새 창 먼저 생성·표시" → 이전 창 정리.
-// 어느 순간에도 보이는 창이 0개가 되지 않는다 (겹침 구간에는 창이 잠시 3개 —
-// transitioning 가드가 이중 전환과 window-all-closed 종료를 계속 막는다).
-// ============================================================================
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// 앱 저장 디바운스(포스트잇 250ms·창 상태 400ms)가 비워질 유예
-const TRANSITION_FLUSH_MS = 700;
-
-// 새 창의 ready-to-show(→show)까지 기다리는 상한 — 초과 시에도 정리는 계속한다 (교착 방지)
-const TRANSITION_SHOW_TIMEOUT_MS = 10000;
-
-/** 창이 실제 표시(show)될 때까지 대기 — 이미 보이면 즉시, 파괴/시간 초과면 그대로 통과 */
-function whenWindowShown(win, timeoutMs) {
-  return new Promise((resolve) => {
-    if (!win || win.isDestroyed() || win.isVisible()) { resolve(); return; }
-    let settled = false;
-    const finish = () => { if (!settled) { settled = true; resolve(); } };
-    win.once('show', finish);
-    setTimeout(finish, timeoutMs);
-  });
-}
-
-async function runTransition(targetMode) {
-  try {
-    runtime.settings.windowMode = targetMode;
-    saveShellSettings(runtime.settings);
-
-    if (targetMode === 'separate') {
-      // ── 병합 → 분리: 새 창 2개를 먼저 표시한 뒤 병합 창을 정리 ──
-      const oldWin = runtime.mergedWin;
-      const oldViews = runtime.views;
-      runtime.mergedWin = null;
-      runtime.views = null;
-      runtime.layoutViews = null;
-      runtime.pendingAlarms = 0;
-      runtime.lastAlarmText = '';
-      if (oldWin && !oldWin.isDestroyed()) {
-        try { oldWin.webContents.focus(); } catch (_err) { /* blur 유도 실패 무해 */ }
-        await delay(TRANSITION_FLUSH_MS);
-      }
-      // 새 창의 preload 가 shell:state 로 분리 모드를 봐야 [data-merge] 를 주입한다 — 생성 전에 확정
-      runtime.mode = 'separate';
-      const newWins = openSeparateWindows();
-      await Promise.all(newWins.map((w) => whenWindowShown(w, TRANSITION_SHOW_TIMEOUT_MS)));
-      if (oldWin && !oldWin.isDestroyed()) {
-        if (oldViews) {
-          for (const v of [oldViews.postit, oldViews.calendar]) {
-            try { oldWin.contentView.removeChildView(v); } catch (_err) { /* 이미 분리됨 */ }
-            try { v.webContents.close(); } catch (_err) { /* 이미 종료됨 */ }
-          }
-        }
-        await delay(150);
-        try { oldWin.close(); } catch (_err) { /* 이미 닫힘 */ }
-      }
-    } else {
-      // ── 분리 → 병합: 병합 창을 먼저 표시한 뒤 이전 창 2개를 정리 ──
-      const oldWins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
-      for (const w of oldWins) {
-        try { w.blur(); } catch (_err) { /* 무해 */ }
-      }
-      await delay(TRANSITION_FLUSH_MS);
-      runtime.mode = 'merged';
-      const newWin = createMergedWindow(runtime.state, runtime.settings);
-      await whenWindowShown(newWin, TRANSITION_SHOW_TIMEOUT_MS);
-      for (const w of oldWins) {
-        try { if (!w.isDestroyed()) w.close(); } catch (_err) { /* 이미 닫힘 */ }
-      }
-    }
-  } finally {
-    runtime.transitioning = false;
-  }
-}
-
-/** IPC 핸들러에서 즉시 응답을 돌려준 뒤 전환을 비동기로 수행한다 (호출 창이 곧 닫히므로) */
-function scheduleTransition(targetMode) {
-  runtime.transitioning = true; // 응답 전에 세워 이중 전환·조기 종료를 막는다
-  setImmediate(() => {
-    runTransition(targetMode).catch(() => {
-      runtime.transitioning = false; // 전환 실패 시에도 종료 가드가 풀리게
-    });
-  });
-}
-
-// ============================================================================
 // 셸 IPC — preload 화이트리스트 채널의 main 측 종단
 // ============================================================================
 
 function shellStatePayload() {
   return {
     ok: true,
-    mode: runtime.mode,
     activeTab: runtime.activeTab,
-    windowMode: runtime.settings ? runtime.settings.windowMode : SHELL_SETTINGS_DEFAULTS.windowMode,
     defaultTab: runtime.settings ? runtime.settings.defaultTab : SHELL_SETTINGS_DEFAULTS.defaultTab,
-    // 병합 모드 백그라운드 캘린더의 일정 알림 누적 (탭바 배지·미니 스트립용 — additive 필드)
+    // 윈도우 시작 시 자동 실행 — 저장하지 않고 매번 OS 에서 읽는다 (단일 진실 = OS)
+    openAtLogin: getOpenAtLogin(),
+    // 백그라운드 캘린더 탭의 일정 알림 누적 (탭바 배지·미니 스트립용 — additive 필드)
     alarms: { count: runtime.pendingAlarms, text: runtime.lastAlarmText }
   };
 }
@@ -569,22 +455,18 @@ function registerShellIpc() {
 
   ipcMain.handle('petit:shell:switch-tab', (event, tab) => {
     assertTrustedSender(event);
-    if (runtime.mode !== 'merged') return { ok: false, reason: '분리 모드에서는 탭 전환이 없어요.' };
     const want = tab === 'calendar' ? 'calendar' : 'postit';
     if (!setActiveTab(want)) return { ok: false, reason: '탭을 전환하지 못했어요.' };
     focusActiveView();
     return shellStatePayload();
   });
 
-  // 설정 즉시 저장 (모드·기본 탭). panelOpen 은 비영속 필드 — 탭바 설정 드로어의
+  // 설정 즉시 저장 (기본 탭). panelOpen 은 비영속 필드 — 탭바 설정 드로어의
   // 개폐를 전달해 앱 뷰 배치를 갱신한다 (드로어는 창 기본 페이지에 그려지므로
   // 열려 있는 동안 뷰를 그 높이만큼 내려 가려지지 않게 한다).
   ipcMain.handle('petit:shell:set-settings', (event, patch) => {
     assertTrustedSender(event);
     const p = patch && typeof patch === 'object' ? patch : {};
-    if (p.windowMode === 'merged' || p.windowMode === 'separate') {
-      runtime.settings.windowMode = p.windowMode;
-    }
     if (p.defaultTab === 'postit' || p.defaultTab === 'calendar') {
       runtime.settings.defaultTab = p.defaultTab;
     }
@@ -596,35 +478,33 @@ function registerShellIpc() {
     return shellStatePayload();
   });
 
-  ipcMain.handle('petit:shell:split', (event) => {
+  // 시작 프로그램 토글 — 탭바 드로어와 앱 설정 모달이 같은 채널을 쓴다.
+  // 적용 후 실제 OS 값을 다시 읽어 반영 여부를 판정하고, 성패와 무관하게 모든 표면에
+  // 실측 상태를 push 한다 (실패한 쪽의 UI 도 실제 값으로 되돌아간다).
+  ipcMain.handle('petit:shell:set-startup', (event, on) => {
     assertTrustedSender(event);
-    if (runtime.transitioning) return { ok: false, reason: '창 구성을 바꾸는 중이에요.' };
-    if (runtime.mode !== 'merged') return { ok: false, reason: '이미 두 창으로 나뉘어 있어요.' };
-    scheduleTransition('separate');
-    return { ok: true };
+    const want = on === true;
+    const actual = setOpenAtLogin(want);
+    pushShellUi();
+    if (actual !== want) {
+      return { ok: false, openAtLogin: actual, reason: '윈도우 시작 설정을 바꾸지 못했어요.' };
+    }
+    return shellStatePayload();
   });
 
-  ipcMain.handle('petit:shell:merge', (event) => {
-    assertTrustedSender(event);
-    if (runtime.transitioning) return { ok: false, reason: '창 구성을 바꾸는 중이에요.' };
-    if (runtime.mode !== 'separate') return { ok: false, reason: '이미 한 창이에요.' };
-    scheduleTransition('merged');
-    return { ok: true };
-  });
-
-  // 병합 모드 알림 릴레이 — 캘린더 preload 가 [data-toast][data-toast-kind="alarm"] 표출을
-  // 감지해 보낸다. 병합 모드 + 발신자가 캘린더 페이지 + 활성 탭이 캘린더가 아닐 때만
-  // 배지에 누적하고 탭바로 push 한다. 분리 모드는 현행 유지(창이 그대로 보임 — 릴레이 없음).
+  // 알림 릴레이 — 캘린더 preload 가 [data-toast][data-toast-kind="alarm"] 표출을 감지해
+  // 보낸다. 발신자가 캘린더 페이지이고 활성 탭이 캘린더가 아닐 때만 배지에 누적하고
+  // 탭바로 push 한다 (보고 있는 탭의 알림은 이미 화면에 있으므로 릴레이하지 않는다).
   ipcMain.handle('petit:shell:alarm-relay', (event, text) => {
     assertTrustedSender(event);
-    if (runtime.mode !== 'merged' || !runtime.mergedWin || runtime.mergedWin.isDestroyed()) {
+    if (!runtime.win || runtime.win.isDestroyed()) {
       return { ok: true, relayed: false };
     }
     if (windowAppKind({ webContents: event.sender }) !== 'calendar') return { ok: true, relayed: false };
     if (runtime.activeTab === 'calendar') return { ok: true, relayed: false }; // 이미 보고 있다 — 생략
     runtime.pendingAlarms += 1;
     runtime.lastAlarmText = typeof text === 'string' ? text.slice(0, 200) : '';
-    pushTabbarUi();
+    pushShellUi();
     return { ok: true, relayed: true };
   });
 
@@ -644,7 +524,7 @@ function registerShellIpc() {
 function main() {
   registerMigrateIpc(); // 'petit:migrate:detect' / ':run' / ':status'
   registerBackupIpc();  // 'petit:backup:status' / ':choose-folder' / ':run-now' / ':set-auto' / ':set-include-images'
-  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':split' / ':merge' / ':alarm-relay' + 'petit:onboarding:set-done'
+  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':set-startup' / ':alarm-relay' + 'petit:onboarding:set-done'
 
   app.whenReady().then(() => {
     // A44: 세션 수준 스펠체커 완전 차단 — webPreferences.spellcheck:false 만으로는
@@ -661,23 +541,17 @@ function main() {
 
     runtime.state = loadWindowState();
     runtime.settings = loadShellSettings();
-    runtime.mode = runtime.settings.windowMode === 'separate' ? 'separate' : 'merged';
 
-    if (runtime.mode === 'merged') {
-      createMergedWindow(runtime.state, runtime.settings);
-    } else {
-      openSeparateWindows();
-    }
+    // 창 구성은 하나뿐이다 — 단일 창 탭 모드 (rev.8: 분리 경로 폐지)
+    createShellWindow(runtime.state, runtime.settings);
 
     // 예약 자동 백업 체커 기동 — Pro(postit-license 검증) + 설정 auto 일 때만 실행된다.
     // 창 생성 뒤에 시작해야 첫 체크가 저장소를 읽을 앱 페이지를 찾을 수 있다 (backup.js).
     startBackupScheduler();
   });
 
-  // 모든 창이 닫히면 종료 (병합 창 닫기 = 앱 종료 계약). 분리↔병합 전환 중의
-  // 일시적 0창 상태는 종료가 아니다 — transitioning 가드.
+  // 창을 닫으면 앱 종료 (창은 하나뿐 — 그 창 닫기 = 앱 종료 계약)
   app.on('window-all-closed', () => {
-    if (runtime.transitioning) return;
     app.quit();
   });
 }

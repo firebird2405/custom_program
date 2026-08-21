@@ -1,4 +1,4 @@
-# 채점표 — 캘린더 + 포스트잇 월 (v1 rev.7 — A42 병합 1창 탭 모드 재정의)
+# 채점표 — 캘린더 + 포스트잇 월 (v1 rev.8 — 창 분리 폐지, 단일 창 탭 모드 확정)
 
 전체 실행 한 줄: `npm test` (protocol/grader/ 안에서, Playwright 헤드리스. A13·A16 포함 — Edge/바탕화면 접근 불가 환경에서는 명시적 SKIP 출력)
 개별 항목: `npm test -- -g "A4:"` 형식
@@ -54,7 +54,7 @@
 | A39 | 앱 고정 프로필(.edge\calendar·.edge\postit)에 채점기가 마커 데이터를 심은 뒤 backup_snapshot.ps1 실행(exit 0, 120초 내) → `D:\custom_program\backups\` 에 두 앱 몫의 타임스탬프 파일명 `.json` 이 새로 생성되고 각각 유효 JSON 이며 심은 마커 값을 포함, 재실행 시 새 타임스탬프 파일이 추가된다(기존 파일 미덮어쓰기) | `npm test -- -g "A39:"` |
 | A40 | 두 앱 창(launch_all.vbs)과 디코이 Edge 앱 창(별도 임시 프로필·custom_program 외 HTML)이 떠 있는 상태에서 pin_top.ps1 실행 → 두 앱 창의 GWL_EXSTYLE 에 WS_EX_TOPMOST(0x8) 비트가 set 되고 디코이 창은 unset → unpin.ps1 실행 → 두 앱 창의 비트가 clear 된다. (Edge/대화형 데스크톱 부재 시 명시적 SKIP) | `npm test -- -g "A40:"` |
 | A41 | 노트 메뉴 '날짜 지정'([data-note-date] date 입력)으로 날짜 D 저장 → 2초 내 cal-events 의 D 에 `{id, time:"", text:"📌 "+노트텍스트}` 가 정확히 1건 생기고 같은 프로필로 calendar.html 을 열면 D 셀에 그 텍스트가 visible → 같은 날짜를 다시 저장해도 여전히 1건(중복 0), 날짜를 D2 로 바꾸면 D 의 연동 일정은 제거되고 D2 에 1건, 날짜 해제 시 연동 일정이 제거되어 재기동 후에도 부재, 기존 수동 일정은 불변이다 | `npm test -- -g "A41:"` |
-| A42 | (rev.7) Playwright `_electron.launch`(개발 트리, 패키지 exe는 EnableNodeCliInspectArguments fuse 유지)로 기동하면: **fresh 기동 = BrowserWindow 정확히 1개(병합 모드)** — 제목에 앱 이름 포함, 기본 크기 ≥1024×700, 셸 탭바([data-shell-tabbar], 탭 [data-tab="postit"]·[data-tab="calendar"], 분리 [data-split]) + **기본 활성 탭 = 포스트잇**(보드 visible). 탭 전환: [data-tab="calendar"] → 날짜 셀 ≥28 visible, 포스트잇 탭 복귀 시 **작성 상태가 리로드 없이 보존**(webContents 유지). 분리: [data-split] → BrowserWindow 2개(각 제목 브랜드·리사이즈·이동·독립 종료 — rev.6 계약), 재병합([data-merge]) → 1개 복귀. 설정 영속: 셸 설정([data-shell-settings])에서 모드(separate)·기본 탭(calendar) 변경 후 재기동 시 각각 반영. **출시-소스 동일성**: 패키지 리소스의 calendar.html·postit.html이 저장소 원본과 SHA256 동일(빌드 변형·인젝션 금지). **임계 서브셋 실검증**: A5·A6·A8·A9·A25·A26 시나리오를 Electron 컨텍스트(병합 기본 모드, 고정 userData, 환경변수 오버라이드 훅 격리)에서 재실행 — 완전 종료 후 재기동 보존 포함 | `npm test -- -g "A42:"` |
+| A42 | (rev.8 — 창 분리 폐지) Playwright `_electron.launch`(개발 트리, 패키지 exe는 EnableNodeCliInspectArguments fuse 유지)로 기동하면: **항상 BrowserWindow 정확히 1개(단일 창 탭 모드)** — 제목에 앱 이름 포함, 기본 크기 ≥1024×700, 리사이즈·이동 가능, 셸 탭바([data-shell-tabbar], 탭 [data-tab="postit"]·[data-tab="calendar"]) + **기본 활성 탭 = 포스트잇**(보드 visible). 탭 전환: [data-tab="calendar"] → 날짜 셀 ≥28 visible, 포스트잇 탭 복귀 시 **작성 상태가 리로드 없이 보존**(webContents 유지). **분리 모드 부재 단언**: [data-split]·[data-merge] 훅이 어디에도 존재하지 않고, 어떤 조작으로도 BrowserWindow가 2개가 되지 않는다. 설정 영속: 셸 설정([data-shell-settings])에서 기본 탭(calendar) 변경 후 재기동 시 캘린더 탭 활성. **출시-소스 동일성**: 패키지 리소스의 calendar.html·postit.html이 저장소 원본과 SHA256 동일(빌드 변형·인젝션 금지). **임계 서브셋 실검증**: A5·A6·A8·A9·A25·A26 시나리오를 Electron 컨텍스트(고정 userData, 환경변수 오버라이드 훅 격리)에서 재실행 — 완전 종료 후 재기동 보존 포함 | `npm test -- -g "A42:"` |
 | A43 | 마이그레이션: 도구가 소스 프로필 경로 인자를 받고(채점기는 tmpdir 픽스처 프로필을 msedge로 시딩 — 실사용 .edge 불가침), **전 범위 이전**이 항목별 관찰된다 — 모든 `cal-*`/`postit-*` localStorage 키(다중 보드 postit-notes-b*, 보드 이름, cal-repeats, 설정, 창 상태) + IndexedDB `postit-decor`·`cal-decor` 전수(배경 이미지·사진 스티커). 원본 불가침(읽기 전용) + 사본 독립성(원본 수정 후 사본 불변). **병합·멱등**: Electron 저장소에 선-데이터가 있어도 무손실 병합, 2회 실행 중복 0. **발견성**: 기존 .edge 프로필 감지 시 첫 실행에 이전 제안 UI([data-migrate]) visible, 거절 후에도 설정에서 재진입 가능 | `npm test -- -g "A43:"` |
 | A44 | 외부 요청 0 — 감시 범위 = **렌더러 전 세션 + main 프로세스 + 모든 자식 프로세스**: ① electronApp.evaluate로 defaultSession+전 파티션 webRequest 카운터 설치 → 대표 시나리오 조작 → http(s) 0건, ② main·preload 정적 검사 — http/https/net/dns/dgram/tls require·net.request·autoUpdater 0건, ③ 실행 중 앱 PID 트리 아웃바운드 소켓 OS 레벨(netstat) 0건. (각주: MS Store 결제·업데이트는 WinRT 브로커/스토어 프로세스 소관 — 앱 내 통신 0과 양립) | `npm test -- -g "A44:"` |
 | A45 | Free/Pro 경계 — **Free 하한 = 2026-08-18 동결 빌드의 실제 기능 집합 전체**(사진 첨부·사진 스티커·배경 업로드·스티커 3세트·스킨 3종·꾸미기 전부·보드 3개까지 포함). 회귀 안티-테스트: 이 중 하나라도 잠기면 FAIL. **Pro = 순수 신규 가치만**: 신규 스티커 ≥2팩(팩당 ≥8종, 기존과 중복 0, 매니페스트로 검증)·신규 프리미엄 스킨/테마 ≥2종(기존과 색거리 ≥40)·보드 4개째부터·Electron 예약 자동 백업. 라이선스 = **서명 파일 방식**(앱엔 공개키만, WebCrypto 오프라인 검증): 잠금 UI([data-pro-lock]) 관찰 → 커밋된 테스트 라이선스([data-license-import]) 적용 → 즉시 해제+재기동 유지 → 바이트 변조 라이선스는 거부 | `npm test -- -g "A45:"` |
@@ -178,8 +178,8 @@
 - 3-a. 온보딩 60초는 사람 시사 기준으로 판정하고, 자동 게이트는 "안내 지목 대상에 대한 사용자 입력 액션 ≤8스텝"으로 번역한다 (→ A47 근거)
 
 ---
-채점기 SHA256 기대값: 9479bbe3170d107834ced1614229a3a72f2fcc55379bfd9bc085ed7f76fa57b2
-(기록: 2026-08-20, rev.7 A42 병합 탭 모드 재정의(a42 재작성 + a49 확대 + 헬퍼 추가 전용) 동결 — 이 줄 위의 기대값 줄은 64자리 hex만 허용됨. Node lib/hash.js와 INDEPENDENT_HASH.txt PowerShell 한 줄 이중 계산 일치 확인. 직전 rev.6 값: aef15ad1…)
+채점기 SHA256 기대값: 4999fc3dc4aa94127bee58fd40095aa140c1abbedce2cf20cfb1126916d9f2b0
+(기록: 2026-08-20, rev.8 창 분리 폐지(A42 단일 창 계약 + 분리 부재 5중 단언) 동결 — 이 줄 위의 기대값 줄은 64자리 hex만 허용됨. Node lib/hash.js와 INDEPENDENT_HASH.txt PowerShell 한 줄 이중 계산 일치 확인. 직전 rev.7 값: 9479bbe3…)
 
 독립 검증 명령 (환경변수가 깨끗한 **새 PowerShell 창**에서 실행 — 채점기 자기 출력은 참고용일 뿐, 아래 한 줄의 출력이 위 기대값과 일치하는지 사용자가 직접 확인):
 

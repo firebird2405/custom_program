@@ -22,6 +22,42 @@ G1 자기실행 지표(**채널 포스팅 12회 이상**)의 실행 원장을 �
 | 인스타·X 계정 | ❌ 미개설 | 사용자 액션 (D-7 체크리스트 7번) |
 | 스토어 링크 | ⏳ 심사 후 확정 | 아래 문안의 `(스토어 링크)` 전부 치환 |
 
+## 지인 배포판 만들기 (G0 검증용 — `make_dist.ps1`)
+
+스토어 심사 전 **G0(지인 검증)** 단계에서 손으로 건네는 산출물. 설치 없이 압축만 풀면 도는 포터블 ZIP이다.
+
+```
+cd D:\custom_program\electron
+npm run dist                                   # electron\dist\win-unpacked 생성 (빌드가 최신이면 생략)
+powershell -ExecutionPolicy Bypass -File D:\custom_program\make_dist.ps1 -Contact "uto2405@gmail.com"
+```
+
+| 항목 | 값 |
+|---|---|
+| 산출 경로 | `D:\custom_program\dist_out\PetitCalendar-<버전>-portable.zip` |
+| 실측(0.9.0) | 117.9MB (원본 win-unpacked 280.7MB · 엔트리 27개) |
+| ZIP 최상위 | `PetitCalendar-<버전>\` 폴더 하나 — 풀어도 흩어지지 않음 |
+| 동봉 문서 | `읽어주세요.txt` (해요체 — 실행법·저장 위치·삭제 방법·문의처·무료/광고 없음) |
+| 출력 | 완료 시 크기 + SHA256 (파일 전달 시 같이 알려 주면 수신자가 검증 가능) |
+
+- **개인 데이터 블랙리스트 검사**가 스크립트에 내장 — `backups`·`.edge`·`protocol`·`.git`·`Local Storage`·
+  `IndexedDB`·`Session Storage`·`*.log`·`*.ldb`·`*.sqlite`·`window-state.json`·`shell-settings.json` 중
+  하나라도 있으면 ZIP을 만들지 않고 중단한다(패키지 폴더 + 완성된 ZIP 양쪽 검사).
+  기준은 채점기 A46과 동일 — **"지인 배포판도 동일 검사 통과가 1주차 완료 조건"**(SCORECARD A46) 충족.
+- 저장소 HTML이 패키지보다 새로우면 "이전 빌드가 나간다"고 **경고**한다. 경고가 뜨면 `npm run dist` 부터 다시.
+- `-Contact` 를 안 주면 문의처가 자리표시자로 남고 스크립트가 경고한다 — **보내기 전에 반드시 채울 것**.
+- `dist_out\` 은 `.gitignore` 등재(100MB대). 커밋 대신 그때그때 재생성한다.
+
+### 전달할 때 함께 말해 줄 것 (지인 안내 문구)
+
+> 설치 없이 압축만 풀면 되는 프로그램이에요. 폴더 안 `PetitCalendar.exe` 를 더블클릭해 주세요.
+> 처음 열 때 "Windows의 PC 보호" 파란 창이 뜨는데, 아직 코드 서명을 안 넣어서 그래요 —
+> [추가 정보] → [실행] 누르시면 돼요. 인터넷을 아예 안 쓰고, 적은 내용은 그 PC에만 저장돼요.
+> 지우실 땐 폴더째 삭제하시면 되고, 자세한 건 안에 있는 `읽어주세요.txt` 에 적어 뒀어요.
+
+- 코드 서명(SmartScreen 경고 제거)은 EV 인증서 비용 이슈로 G0 단계에서는 하지 않는다 — 스토어판이 그 역할을 대신한다.
+- G0 피드백은 `protocol/REVIEWS.md` 에 모은다.
+
 ## 채널별 문안 초안
 
 ### D0 — 인스타그램 릴스 (캡션)

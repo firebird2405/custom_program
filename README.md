@@ -25,6 +25,8 @@
 | `assets\`, `ASSETS.md` | 앱 장식 에셋(코르크 질감·손글씨 폰트)과 출처·라이선스 기록 — 삭제하면 앱 모양이 깨집니다 |
 | `.edge\calendar`, `.edge\postit` | 각 앱 전용 Edge 프로필 (**데이터 저장소** — 자동 생성됨) |
 | `electron\` | 스토어판(Electron) 셸 — MS 스토어 배포 트랙. 두 앱이 한 창의 탭으로 열립니다 |
+| `make_dist.ps1` | 지인 배포판(포터블 ZIP) 생성 — `dist_out\PetitCalendar-<버전>-portable.zip` |
+| `dist_out\` | `make_dist.ps1` 산출물 보관 폴더 (자동 생성 · git 제외) |
 | `store-assets\` | MS 스토어 등록 자료 — 설명문(국문·영문)과 스크린샷 |
 | `PRIVACY.md`, `PRIVACY.en.md` | 개인정보처리방침 (수집 0) — 한국어판 / 영어판 |
 | `protocol\` | 개발·채점 체계(채점표·채점기·상태/사업 문서) — 일반 사용 시 몰라도 되는 폴더 |
@@ -162,6 +164,58 @@
   보드 4개째부터 · 예약 자동 백업) 예정이며, 첫 출시는 무료 단독입니다.
 - 출시 절차는 `protocol/STORE-GUIDE.md`, 사업 검토는 `protocol/MARKET.md`,
   개인정보처리방침은 `PRIVACY.md`(영어판 `PRIVACY.en.md`)를 참고하세요.
+
+## 지인 배포판 만들기 (make_dist.ps1)
+
+스토어 심사 전에 지인에게 먼저 써 보게 할 때 쓰는 **포터블 ZIP**을 한 명령으로 만듭니다.
+설치 없이 압축만 풀면 실행되는 형태이고, 개인 데이터가 섞여 나가지 않는지 스크립트가 직접 검사합니다.
+
+**1) 먼저 Electron 패키지를 빌드합니다** (이미 빌드해 뒀으면 건너뜁니다)
+
+```
+cd D:\custom_program\electron
+npm ci
+npm run dist
+```
+
+→ `electron\dist\win-unpacked\` 생성 (이 폴더가 배포판의 원본입니다)
+
+**2) 배포판 ZIP을 만듭니다**
+
+```
+powershell -ExecutionPolicy Bypass -File D:\custom_program\make_dist.ps1
+```
+
+문의처를 미리 채워 넣으려면 `-Contact` 를 붙입니다.
+
+```
+powershell -ExecutionPolicy Bypass -File D:\custom_program\make_dist.ps1 -Contact "uto2405@gmail.com"
+```
+
+**산출물**
+
+- `D:\custom_program\dist_out\PetitCalendar-<버전>-portable.zip` (예: `PetitCalendar-0.9.0-portable.zip`, 약 118MB)
+- ZIP 최상위는 `PetitCalendar-<버전>\` 폴더 하나 — 풀어도 파일이 흩어지지 않습니다.
+- 그 안에 **`읽어주세요.txt`** 가 함께 들어갑니다 (실행법 · 저장 위치 · 삭제 방법 · 문의처 · 무료/광고 없음 안내).
+- 실행 후 콘솔에 ZIP **크기와 SHA256**이 출력됩니다 — 파일을 보낼 때 이 해시를 같이 알려주면 받는 쪽이 검증할 수 있습니다.
+
+**스크립트가 자동으로 막아 주는 것**
+
+- `electron\dist\win-unpacked` 가 없으면 위 빌드 명령을 안내하고 **중단**합니다 (빈 ZIP 방지).
+- **개인 데이터 블랙리스트 검사** — `backups` · `.edge` · `protocol` · `.git` · `Local Storage` ·
+  `IndexedDB` · `Session Storage` · `*.log` · `*.ldb` · `*.sqlite` · `window-state.json` ·
+  `shell-settings.json` 중 하나라도 있으면 **중단**합니다. 검사는 패키지 폴더와 완성된 ZIP 양쪽에서 합니다.
+  (채점기 A46이 쓰는 것과 같은 기준입니다.)
+- 저장소의 `calendar.html`/`postit.html` 이 패키지 안의 것보다 새로우면 **"이전 빌드가 나간다"고 경고**합니다.
+  이 경고가 보이면 `npm run dist` 로 다시 빌드한 뒤 배포판을 만드세요.
+
+**주의**
+
+- `dist_out\` 은 `.gitignore` 에 등록되어 있습니다 (100MB대 산출물 — 커밋하지 않습니다).
+- 코드 서명이 아직 없어서 받는 사람 PC에서 **"Windows의 PC 보호"** 창이 뜹니다.
+  `읽어주세요.txt` 에 [추가 정보] → [실행] 안내가 들어 있으니, 보낼 때 한 번 더 짚어 주세요.
+- 보내기 전에 **다른 계정/다른 PC에서 압축을 풀고 실행**되는지 한 번 확인하는 것을 권합니다.
+- 확산 문안·배포 채널은 `protocol/LAUNCH-KIT.md` 를 참고하세요.
 
 ## 문제 해결
 

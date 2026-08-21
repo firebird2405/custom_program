@@ -2065,6 +2065,10 @@ html[data-pro-theme="lavender"] #board {
   var NOTE_H = 150;
   var CHECK_RE = /^- \[( |x)\] /;           // 체크리스트 마커 (A22 — 줄 시작 고정 문법)
   var IMG_URI_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;   // 검증된 이미지 데이터 URI (B-1 예외)
+  /* IndexedDB(postit-decor) 안에서 앱이 스스로 만드는 키 모양 — 이미지 GC 판정 대상은 이 둘뿐이다.
+     그 밖의 레코드(외부 도구·마이그레이션이 넣어 둔 것)는 우리 것이 아니므로 고아 판정에서 제외한다. */
+  var DECOR_BG_KEY_RE = /^bg-(b\d+)$/;     // 보드 배경 사진 (보드 전용 키)
+  var DECOR_IMG_KEY_RE = /^img-[\w-]+$/;   // 사진 스티커 원본
 
   /* 이미지 다운스케일 상한 — 용도별 (최장변 px / 데이터 URI 길이 바이트) */
   var NOTE_IMG_MAX_SIDE = 640;                  // 노트 사진 (A26 — 판정은 저장 길이 상한)
@@ -2087,6 +2091,7 @@ html[data-pro-theme="lavender"] #board {
   var NOTICE_MS = 15000;             // 일반 안내 토스트 유지 시간
   var UNDO_NOTICE_MS = 8000;         // 실행 취소 토스트 유지 시간 (A20 — 최소 5초 이상)
   var IMAGE_SWEEP_DELAY_MS = 9000;   // 삭제한 사진 원본(IndexedDB) 정리 지연 — undo 토스트 8초 + 여유
+  var ORPHAN_SWEEP_DELAY_MS = 1500;  // 기동 고아 청소 시작 지연 — 첫 렌더가 끝난 뒤에 돈다
 
   /* 크기 클램프 (px) */
   var NOTE_MIN_PX = 120;             // 노트 한 변 최소 (A23)
@@ -2155,6 +2160,7 @@ html[data-pro-theme="lavender"] #board {
   var stDrag = null;                         /* 스티커 드래그/리사이즈 상태 */
   var bgLoadToken = 0;                       /* 보드 전환 중 비동기 배경 로드 경합 방지 */
   var imgCache = {};                         /* IndexedDB 이미지 캐시 (key -> data URI | null) */
+  var idbFresh = {};                         /* 이 창이 방금 넣은 이미지 키 (기동 고아 청소와의 경합 방지) */
   var nukki = null;                          /* 열려 있는 누끼 편집 카드 상태 (발주 #10) — 없으면 null */
   var nukkiRunToken = 0;                     /* 비동기 처리 경합 방지 (카드 닫힘·재조작 시 무효화) */
 
@@ -2686,6 +2692,7 @@ html[data-pro-theme="lavender"] #board {
   }
 
   function idbPut(key, val, done) {
+    idbFresh[key] = Date.now();   /* 방금 넣은 키는 레이아웃 저장이 뒤따를 때까지 고아 청소에서 보호 */
     openDecorDB(function (db) {
       if (!db) { done(false); return; }
       try {
@@ -2722,8 +2729,12 @@ html[data-pro-theme="lavender"] #board {
     });
   }
 
-  /* 전 이미지 순회 (내보내기 "이미지 포함" 용) — 실패 시 null */
+  /* 전 이미지 순회 (내보내기 "이미지 포함" 용) — 실패 시 null.
+     지금 어느 보드도 참조하지 않는 고아는 동봉하지 않는다 — 담는 기준은 기동 고아 청소가
+     남기는 기준과 같다(isOrphanDecorImage). 참조 판정이 불가하면 예전처럼 전부 담는다
+     (내보내기에서 빠뜨리는 쪽이 더 나쁘다). */
   function collectDecorImages(cb) {
+    var refs = collectDecorRefs();
     openDecorDB(function (db) {
       if (!db) { cb(null); return; }
       try {
@@ -2732,7 +2743,8 @@ html[data-pro-theme="lavender"] #board {
         rq.onsuccess = function () {
           var cur = rq.result;
           if (cur) {
-            if (typeof cur.value === 'string' && IMG_URI_RE.test(cur.value)) out[String(cur.key)] = cur.value;
+            var k = String(cur.key);
+            if (typeof cur.value === 'string' && IMG_URI_RE.test(cur.value) && !isOrphanDecorImage(k, refs)) out[k] = cur.value;
             cur['continue']();
           } else cb(out);
         };
@@ -3041,20 +3053,161 @@ html[data-pro-theme="lavender"] #board {
     playTick();   /* 직접 제스처(팔레트 클릭) 내부 */
   }
 
-  /* 어느 보드에서도 더 안 쓰는 사진만 IndexedDB 에서 지운다 */
-  function maybeDeleteDecorImage(key) {
-    var used = false;
-    var all = readDecorAll();
-    var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
-    Object.keys(bs).forEach(function (bid) {
-      var list = bs[bid] && Array.isArray(bs[bid].stickers) ? bs[bid].stickers : [];
-      list.forEach(function (s2) { if (s2 && s2.img === key) used = true; });
-    });
-    decor.stickers.forEach(function (s2) { if (s2.img === key) used = true; });
-    if (!used) {
-      delete imgCache[key];
-      idbDel(key, function () {});
+  /* ══ IndexedDB 이미지 GC ═══════════════════════════════════════════════════
+     원칙 셋.
+     1) 판정 대상은 앱이 스스로 만드는 키 모양뿐 — bg-b<N>(보드 배경) / img-<uid>(사진 스티커).
+        그 밖의 레코드는 우리 것이 아니므로 절대 건드리지 않는다.
+     2) 참조 판정에 필요한 저장분(postit-decor-layout)을 읽지 못하거나 손상돼 있으면 "모른다"로
+        보고 한 건도 지우지 않는다 — 지우지 않는 쪽이 언제나 안전하다.
+     3) bg-b<N> 은 보드가 사라졌을 때만 고아다. 프리셋 배경으로 바꿔 둔 "내 사진"은 보드가
+        살아 있는 한 되살릴 수 있어야 하므로 보존한다 (기존 동작 유지).
+     ────────────────────────────────────────────────────────────────────────── */
+
+  /* 전 보드가 지금 참조하는 이미지 키 집합 + 꾸미기 항목이 있는 보드 id 집합.
+     판정 불가(저장소 접근 실패·JSON 손상)면 null — 호출측은 아무것도 지우지 않는다. */
+  function collectDecorRefs() {
+    var raw = null;
+    try { raw = localStorage.getItem(DECOR_KEY); } catch (err) { return null; }
+    var all = {};
+    if (raw !== null) {
+      try { all = JSON.parse(raw); } catch (err) { return null; }
+      if (!all || typeof all !== 'object' || Array.isArray(all)) return null;
     }
+    var keys = {};
+    var bids = {};
+    var bs = (all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards)) ? all.boards : {};
+    Object.keys(bs).forEach(function (bid) {
+      var e = bs[bid];
+      if (!e || typeof e !== 'object') return;
+      bids[bid] = true;
+      if (e.bg && typeof e.bg === 'object' && e.bg.type === 'image') keys['bg-' + bid] = true;
+      var list = Array.isArray(e.stickers) ? e.stickers : [];
+      list.forEach(function (s) {
+        if (s && s.type === 'photo' && typeof s.img === 'string' && s.img) keys[s.img] = true;
+      });
+    });
+    /* 활성 보드는 저장 직전 상태일 수 있으니 메모리 몫도 사용 중으로 본다 */
+    bids[boardId] = true;
+    if (decor && typeof decor === 'object') {
+      if (decor.bg && decor.bg.type === 'image') keys['bg-' + boardId] = true;
+      (decor.stickers || []).forEach(function (s) {
+        if (s && s.type === 'photo' && typeof s.img === 'string' && s.img) keys[s.img] = true;
+      });
+    }
+    return { keys: keys, bids: bids };
+  }
+
+  /* 보드가 아직 살아 있는가 — 탭 목록·노트 키·꾸미기 항목 중 하나라도 있으면 살아 있다.
+     저장소를 못 읽으면 "살아 있다"로 본다 (지우지 않는 쪽). */
+  function boardAlive(id, refs) {
+    if (boards.indexOf(id) !== -1) return true;
+    if (refs && refs.bids[id]) return true;
+    try {
+      if (localStorage.getItem(storeKey(id)) !== null) return true;
+    } catch (err) { return true; }
+    return false;
+  }
+
+  /* 이 창이 방금 넣은 키인가 — 갓 올린 사진을 기동 청소가 걷어가지 않도록 */
+  function idbFreshProtected(key) {
+    var t = idbFresh[key];
+    return typeof t === 'number' && (Date.now() - t) < IMAGE_SWEEP_DELAY_MS;
+  }
+
+  /* 지금 이 키가 고아인가 (refs 가 null = 판정 불가면 언제나 false = 보존) */
+  function isOrphanDecorImage(key, refs) {
+    if (!refs || refs.keys[key]) return false;
+    var m = DECOR_BG_KEY_RE.exec(key);
+    if (m) return !boardAlive(m[1], refs);
+    return DECOR_IMG_KEY_RE.test(key);
+  }
+
+  /* 실제 삭제 한 지점 — 캐시와 IndexedDB 를 함께 비운다 */
+  function dropDecorImage(key) {
+    delete imgCache[key];
+    delete idbFresh[key];
+    idbDel(key, function () {});
+  }
+
+  /* 어느 보드에서도 더 안 쓰는 사진만 IndexedDB 에서 지운다 (판정 불가면 보존) */
+  function maybeDeleteDecorImage(key) {
+    var refs = collectDecorRefs();
+    if (!refs || refs.keys[key]) return;
+    dropDecorImage(key);
+  }
+
+  /* 삭제한 보드 몫 이미지 지연 정리 — undo 토스트가 사라진 뒤에 돈다.
+     실행 취소로 보드가 되살아났으면 boardAlive 가 참이 되어 한 건도 지우지 않는다. */
+  function scheduleBoardImageSweep(id, snapDecor) {
+    var keys = ['bg-' + id];
+    var list = (snapDecor && Array.isArray(snapDecor.stickers)) ? snapDecor.stickers : [];
+    list.forEach(function (s) {
+      if (s && s.type === 'photo' && typeof s.img === 'string' && s.img) keys.push(s.img);
+    });
+    setTimeout(function () {
+      var refs = collectDecorRefs();
+      if (!refs) return;                  /* 판정 불가 — 보존 */
+      if (boardAlive(id, refs)) return;   /* 복원됐다 — 전부 보존 */
+      keys.forEach(function (k) {
+        if (refs.keys[k]) return;         /* 다른 보드가 쓰는 중 */
+        dropDecorImage(k);
+      });
+    }, IMAGE_SWEEP_DELAY_MS);
+  }
+
+  /* 같은 보드 id 를 다시 쓸 때 예전 보드의 잔존물을 먼저 걷는다 (배경 사진 부활 차단).
+     ─ id 생성 규칙(max+1)은 그대로 둔다: 보드 정렬·기본 이름("보드N")·저장 키(postit-notes-bN)가
+       모두 이 규칙에 묶여 있어 규칙을 바꾸면 관측 가능한 동작까지 함께 바뀐다.
+       잔존물을 걷는 쪽이 국소적이고 되돌릴 것이 없다. */
+  function purgeBoardResidue(id) {
+    var refs = collectDecorRefs();
+    if (refs && refs.bids[id]) {
+      var stale = [];
+      var all = readDecorAll();
+      var bs = (all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards)) ? all.boards : {};
+      var e = bs[id];
+      var list = (e && Array.isArray(e.stickers)) ? e.stickers : [];
+      list.forEach(function (s) {
+        if (s && s.type === 'photo' && typeof s.img === 'string' && s.img) stale.push(s.img);
+      });
+      writeDecorEntry(id, null);   /* 예전 꾸미기 항목부터 걷는다 — 스티커 부활 차단 */
+      stale.forEach(function (k) { maybeDeleteDecorImage(k); });
+    }
+    /* 배경 사진은 보드 전용 키라 그냥 두면 새 보드에 그대로 부활한다 */
+    dropDecorImage('bg-' + id);
+    imgCache['bg-' + id] = null;   /* "내 사진" 세그가 다시 조회하지 않도록 없음으로 못박는다 */
+  }
+
+  /* 기동 1회 고아 청소: 커서로 후보만 모으고(readonly), 마지막에 참조를 한 번 더 확인한 뒤 지운다. */
+  var orphanSweepDone = false;
+  function sweepOrphanDecorImages() {
+    if (orphanSweepDone) return;
+    orphanSweepDone = true;
+    var refs = collectDecorRefs();
+    if (!refs) return;   /* 판정 불가 — 이번 기동에는 아무것도 지우지 않는다 */
+    openDecorDB(function (db) {
+      if (!db) return;
+      try {
+        var doomed = [];
+        var rq = db.transaction('images', 'readonly').objectStore('images').openCursor();
+        rq.onsuccess = function () {
+          var cur = rq.result;
+          if (cur) {
+            var k = String(cur.key);
+            if (!idbFreshProtected(k) && isOrphanDecorImage(k, refs)) doomed.push(k);
+            cur['continue']();
+            return;
+          }
+          if (!doomed.length) return;
+          var refs2 = collectDecorRefs();   /* 커서를 도는 사이 바뀌었을 수 있다 — 다시 확인 */
+          if (!refs2) return;
+          doomed.forEach(function (k) {
+            if (!idbFreshProtected(k) && isOrphanDecorImage(k, refs2)) dropDecorImage(k);
+          });
+        };
+        rq.onerror = function () { /* 판독 실패 — 아무것도 지우지 않는다 */ };
+      } catch (err) { /* 무시 */ }
+    });
   }
 
   /* 스티커 떼어내기: 저장소에서는 즉시 제거하되(A20 관용구) 토스트의 "실행 취소"로 복원할 수 있다.
@@ -4389,12 +4542,30 @@ html[data-pro-theme="lavender"] #board {
   /* v2 확장 복원: decor 레이아웃은 보드별 병합, decorImages 는 검증 후 IndexedDB 재기록 */
   function importDecorPayload(obj) {
     var changed = false;
+    var stale = [];       /* 교체되기 전 항목이 참조하던 이미지 키 — 교체가 끝난 뒤 정리한다 */
+    var supplied = {};    /* 이 payload 가 직접 싣고 온 이미지 키 (있으면 교체본이므로 지우지 않는다) */
+    if (obj.decorImages && typeof obj.decorImages === 'object' && !Array.isArray(obj.decorImages)) {
+      Object.keys(obj.decorImages).forEach(function (k) { supplied[k] = true; });
+    }
     if (obj.decor && typeof obj.decor === 'object' && !Array.isArray(obj.decor) &&
         obj.decor.boards && typeof obj.decor.boards === 'object' && !Array.isArray(obj.decor.boards)) {
+      var prevAll = readDecorAll();
+      var prevBs = (prevAll.boards && typeof prevAll.boards === 'object' && !Array.isArray(prevAll.boards)) ? prevAll.boards : {};
       Object.keys(obj.decor.boards).forEach(function (bid) {
         if (!/^b\d+$/.test(bid)) return;
         var entry = decorEntryPlain(sanitizeDecor(obj.decor.boards[bid]));
         if (entry) {
+          var prev = prevBs[bid];
+          if (prev && typeof prev === 'object') {
+            var plist = Array.isArray(prev.stickers) ? prev.stickers : [];
+            plist.forEach(function (s) {
+              if (s && s.type === 'photo' && typeof s.img === 'string' && s.img) stale.push(s.img);
+            });
+            /* 사진 배경도 교체 대상 — 새 항목이 사진 배경이 아니고 payload 가 대체본도 안 실었으면
+               남아 있는 사진은 교체 전 자료다 */
+            if (prev.bg && prev.bg.type === 'image' && !(entry.bg && entry.bg.type === 'image') &&
+                !supplied['bg-' + bid]) stale.push('bg-' + bid);
+          }
           writeDecorEntry(bid, entry);
           changed = true;
         }
@@ -4412,6 +4583,10 @@ html[data-pro-theme="lavender"] #board {
       });
     }
     if (changed) applyDecor();   /* 활성 보드 화면 즉시 갱신 */
+    /* 교체된 항목이 더는 참조하지 않는 예전 이미지 정리 — 되돌리기가 없는 경로라 즉시 판정한다.
+       반드시 applyDecor() 뒤에 돈다: 그 전에는 활성 보드의 메모리(decor)가 아직 교체 전 스티커를
+       들고 있어 "사용 중"으로 오판된다. 다른 보드가 아직 쓰고 있으면 maybeDeleteDecorImage 가 남긴다. */
+    stale.forEach(function (k) { maybeDeleteDecorImage(k); });
   }
 
   /* 가져오기 본체: 신형식({version, boards:{키:노트[]}}) = 전 보드 병합 / 구형식(배열·{notes:[]}) = 활성 보드 */
@@ -5407,6 +5582,9 @@ html[data-pro-theme="lavender"] #board {
       ? (allDecor.boards[id] || null) : null;
     try { localStorage.removeItem(sk); } catch (err) { /* 무시 */ }
     writeDecorEntry(id, null);
+    /* 이 보드가 쓰던 이미지(배경 사진·사진 스티커)는 undo 토스트가 사라진 뒤 정리한다 —
+       실행 취소로 보드가 되살아나면 한 건도 지우지 않는다 */
+    scheduleBoardImageSweep(id, snapDecor);
     var snapName = readBoardNames()[id] || null;   /* 이름도 스냅샷 — undo 때 되살린다 */
     if (snapName) writeBoardName(id, null);
     boards = boards.filter(function (b) { return b !== id; });
@@ -5521,9 +5699,14 @@ html[data-pro-theme="lavender"] #board {
       if (isFinite(num) && num > maxN) maxN = num;
     });
     var nid = 'b' + (maxN + 1);
+    /* 삭제로 비었던 id 를 다시 쓰는 경우 — 예전 보드의 배경 사진·꾸미기가 부활하지 않게 먼저 걷는다.
+       다른 창이 이미 이 id 로 보드를 만들어 두었으면(노트 키 존재) 손대지 않는다 (기존 방어와 동형) */
+    var freshId = false;
+    try { freshId = localStorage.getItem(storeKey(nid)) === null; } catch (err) { freshId = false; }
+    if (freshId) purgeBoardResidue(nid);
     boards.push(nid);
     try {
-      if (localStorage.getItem(storeKey(nid)) === null) localStorage.setItem(storeKey(nid), '[]');
+      if (freshId) localStorage.setItem(storeKey(nid), '[]');
     } catch (err) { /* 무시 */ }
     playTick();   /* 직접 제스처(버튼·메뉴 클릭) 내부 */
     switchBoard(nid);
@@ -5864,19 +6047,14 @@ html[data-pro-theme="lavender"] #board {
     }
   }
 
-  /* undo 토스트(8초) 소멸 뒤에만 배경 원본 정리 — 그 사이 복원되었으면 지우지 않는다 */
+  /* undo 토스트(8초) 소멸 뒤에만 배경 원본 정리 — 그 사이 복원되었으면 지우지 않는다.
+     참조 판정은 GC 공용 경로(collectDecorRefs)를 쓴다 — 판정 불가면 보존한다 */
   function scheduleBgImageSweep(bid) {
     setTimeout(function () {
-      var stillImage = boardId === bid && decor.bg && decor.bg.type === 'image';
-      var all = readDecorAll();
-      var bs = all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards : {};
-      var e = bs[bid];
-      if (e && e.bg && e.bg.type === 'image') stillImage = true;
-      if (!stillImage) {
-        delete imgCache['bg-' + bid];
-        idbDel('bg-' + bid, function () {});
-        syncDecorUI();   /* "내 사진" 세그 표시 갱신 */
-      }
+      var refs = collectDecorRefs();
+      if (!refs || refs.keys['bg-' + bid]) return;
+      dropDecorImage('bg-' + bid);
+      syncDecorUI();   /* "내 사진" 세그 표시 갱신 */
     }, IMAGE_SWEEP_DELAY_MS);
   }
 
@@ -7763,6 +7941,9 @@ html[data-pro-theme="lavender"] #board {
   boardId = act0 && boards.indexOf(act0) !== -1 ? act0 : 'b1';
   renderTabs();
   loadBoard();
+
+  /* 기동 후 한 박자 뒤 고아 이미지 1회 청소 — 첫 렌더와 경쟁하지 않게 늦춘다 */
+  setTimeout(sweepOrphanDecorImages, ORPHAN_SWEEP_DELAY_MS);
 })();
 </script>
 <script>

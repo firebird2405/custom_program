@@ -7,8 +7,8 @@
 
 - 로컬 트랙: 발주 #1~#9b 완료 — 설정·꾸미기·삭제 확인·보드 이름·창 기억·탭 우클릭 메뉴까지. 상세는 `protocol/STATUS.md`.
 - **출시 트랙 v2 가동 중** (브랜드: **쁘띠캘린더/PetitCalendar**): Electron 셸(`electron/`) — **병합 1창 탭 모드 기본**(분리/재병합·설정 영속), 마이그레이션·온보딩·Pro 서명 라이선스·클라우드 폴더 백업·MSIX 아이콘 세트 완비. 상업 전환 승인됨(확정문 v2 — `protocol/COMMERCIAL.md`·`MARKET.md`).
-- 채점표 **rev.7 (A1~A50)** 가동 중 — 전체 87테스트 **85 green** (허용 red 1 = A48② 파트너센터 identity 대기, 허용 SKIP 1 = A50 MSIX).
-- 채점기 SHA256 기대값 `9479bbe3…` SCORECARD 하단에 동결 기재, A12 green. 잠금(deny) 복원 상태.
+- 채점표 **rev.8 (A1~A50, 창 분리 폐지)** 가동 중 — 전체 87테스트 **85 green** (허용 red 1 = A48② 파트너센터 identity 대기, 허용 SKIP 1 = A50 MSIX).
+- 채점기 SHA256 기대값 `4999fc3d…` SCORECARD 하단에 동결 기재, A12 green. 잠금(deny) 복원 상태.
 - git: 원격 origin `github.com/firebird2405/custom_program` — push는 사용자 액션.
 - 대기 게이트: **파트너센터 identity 3값 전달**(`protocol/STORE-GUIDE.md`) → appx 빌드 → 4주차 제출. G0(지인 검증)·확산 준비는 `protocol/MARKET.md`·`LAUNCH-KIT.md`.
 
@@ -61,7 +61,7 @@
 규칙:
 - **같은 지점에서 3회 실패하면 중단**하고, 무엇을 시도했고 왜 막혔는지 상태를 정리해 보고한다. 임의 우회(테스트 수정·기준 완화)는 금지.
 - 현재 기준선은 **87테스트 중 85 green** (2026-08-20 실증 — 허용 red 1: A48② identity 대기 / 허용 SKIP 1: A50) — 그 외 red가 생기면 회귀이며, 원인은 앱/스크립트 쪽에서 찾는다 (채점기 수정 금지).
-- A12는 채점기 해시(`9479bbe3…`, SCORECARD 하단 기재)와 일치해야 green — 채점기 파일을 건드리면 즉시 red가 된다.
+- A12는 채점기 해시(`4999fc3d…`, SCORECARD 하단 기재)와 일치해야 green — 채점기 파일을 건드리면 즉시 red가 된다.
 
 ## 채점 명령
 

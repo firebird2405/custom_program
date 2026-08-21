@@ -575,6 +575,75 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
   repeating-linear-gradient(90deg, rgba(96,66,36,.4) 0 1px, transparent 1px 3px),
   linear-gradient(135deg, #f2e6c8, #cbb18e);}
 
+/* ---------- 설정 검색 (발주 #15) — .spFrame 직속 자식, .spMain 바로 앞.
+ *  .spBody/.spNav 를 건드리지 않으므로 spApplyCat()·MutationObserver 와 완전 무간섭이다.
+ *  결과 팝은 absolute 오버레이라 열려도 .spBody 의 scrollHeight 실측(spUpdateOvf)이 흔들리지 않는다.
+ *  색은 이 파일의 기존 토큰만 쓴다(다크 프리셋은 #settingsPanel 스코프에서 이미 재정의됨). */
+.spSearch{position:relative; flex:none; padding:9px 16px 10px; border-bottom:1px solid var(--border);}
+.spSearchIn{
+  width:100%; box-sizing:border-box; font-family:inherit; font-size:15px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+  padding:7px 30px 8px 10px;
+}
+.spSearchIn::placeholder{color:var(--muted);}
+.spSearchIn:focus{outline:none; border-color:var(--accent);}
+/* 네이티브 ✕ 중복 제거 — 우리 버튼 하나만 남긴다 */
+.spSearchIn::-webkit-search-cancel-button{display:none; -webkit-appearance:none; appearance:none;}
+.spSearchX{
+  position:absolute; right:22px; top:14px; width:22px; height:22px; padding:0;
+  line-height:1; font-size:11px; text-align:center;
+}
+.spSearchX[hidden]{display:none;}
+.spSearchPop{
+  position:absolute; left:16px; right:16px; top:calc(100% - 4px); z-index:6;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:0 14px 34px rgba(0,0,0,.32);
+  max-height:min(360px, 52vh); overflow-y:auto; padding:6px;
+}
+.spSearchPop[hidden]{display:none;}
+.spSearchList{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px;}
+.spSr{
+  display:grid; grid-template-columns:1fr auto; column-gap:8px; align-items:baseline;
+  padding:7px 9px 8px; border-radius:9px; cursor:pointer;
+}
+.spSrName{font-size:14px; color:var(--text); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.spSrCat{font-size:11px; color:var(--muted); white-space:nowrap; flex:none;}
+.spSrSub{
+  grid-column:1 / -1; font-size:12px; color:var(--muted); margin-top:2px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.spSr.act, .spSr:hover{background:var(--accent-soft);}
+.spSr mark{background:transparent; color:var(--accent); font-weight:700; padding:0;}
+.spSearchPill{display:flex; align-items:center; gap:6px; padding:3px 4px 7px; flex-wrap:wrap;}
+.spSearchPill[hidden]{display:none;}
+.spPillTag{
+  display:inline-flex; align-items:center; gap:4px; background:var(--accent); color:var(--on-accent);
+  border-radius:999px; padding:3px 5px 4px 10px; font-size:13px; font-weight:600;
+}
+.spPillX{border:0; background:transparent; color:inherit; cursor:pointer; font-family:inherit; font-size:11px; padding:0 4px;}
+.spPillX:hover{background:transparent; border:0;}
+.spPillCnt{font-size:12px; color:var(--muted);}
+.spSearchChips{display:flex; flex-wrap:wrap; gap:5px; padding:5px 4px 4px;}
+.spSearchChips[hidden]{display:none;}
+.spChipHint{width:100%; font-size:12px; color:var(--muted); padding:1px 5px 3px;}
+.spTagChip{
+  border:1px solid var(--border); background:var(--surface2); color:var(--text);
+  border-radius:999px; padding:3px 10px 4px; font-size:13px; font-family:inherit; cursor:pointer;
+}
+.spTagChip.act, .spTagChip:hover{background:var(--accent); color:var(--on-accent); border-color:var(--accent);}
+.spTagChip.spChipMore{background:transparent; color:var(--muted);}
+.spTagChip.spChipMore.act, .spTagChip.spChipMore:hover{background:var(--accent-soft); color:var(--text);}
+.spSearchNone{padding:8px 9px 10px; font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:7px; align-items:flex-start;}
+.spSearchNone[hidden]{display:none;}
+.spNoneQ{color:var(--text);}
+.spNoneCats{display:flex; flex-wrap:wrap; gap:5px;}
+/* 스크린리더 전용 결과 개수 안내 */
+.spSearchLive{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;}
+/* 결과에서 이동했을 때 대상 강조 — 정지 아웃라인(항상) + transform 펄스(모션 허용 시에만).
+ * 위 [data-anim]/prefers-reduced-motion 전역 규칙이 애니메이션만 걷어내고 아웃라인은 남긴다. */
+@keyframes spJumpPulse{0%,100%{transform:scale(1);} 50%{transform:scale(1.03);}}
+.spJump{outline:2px solid var(--accent); outline-offset:3px; border-radius:8px; animation:spJumpPulse .5s ease-out 2;}
+
 /* ---------- 애니메이션 설정 (설정 패널 [효과]) — 줄임: 모션 최소화 / 끔: 전면 해제 ---------- */
 html[data-anim="reduced"] *, html[data-anim="reduced"] *::before, html[data-anim="reduced"] *::after{
   animation-duration:.01ms !important;
@@ -689,6 +758,27 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
   <div class="spHead">
     <span class="spTitle" id="spTitleText">설정</span>
     <button type="button" id="settingsClose" title="설정 닫기 (ESC)">×</button>
+  </div>
+  <!-- 설정 검색 (발주 #15) — 자연어 + '#' 태그. .spFrame 직속 자식이며 .spMain 바로 앞이다.
+       .spBody/.spNav 바깥이라 카테고리 필터(spApplyCat)·셸 주입 앵커와 겹치지 않는다.
+       훅: [data-settings-search](입력) · [data-settings-search-results](결과 목록) · [data-settings-hit](결과 행).
+       메모 검색 훅 [data-search] 와 이름이 겹치지 않게 한다 (형제 앱 A24 계약 보호). -->
+  <div class="spSearch" id="spSearchBar">
+    <input type="search" id="spSearchInput" class="spSearchIn"
+           data-settings-search
+           role="combobox" aria-expanded="false" aria-controls="spSearchList"
+           aria-autocomplete="list" aria-label="설정 검색" autocomplete="off"
+           placeholder="🔍 설정 찾기 — 예: 글자 크기, 자동시작, #백업">
+    <button type="button" id="spSearchClear" class="spSearchX" hidden
+            aria-label="검색어 지우기" title="지우기 (Esc)">✕</button>
+    <div class="spSearchPop" id="spSearchPop" hidden>
+      <div class="spSearchPill" id="spSearchPill" hidden></div>
+      <ul class="spSearchList" id="spSearchList" data-settings-search-results
+          role="listbox" aria-label="검색 결과"></ul>
+      <div class="spSearchChips" id="spSearchChips" hidden></div>
+      <div class="spSearchNone" id="spSearchNone" hidden></div>
+    </div>
+    <span class="spSearchLive" id="spSearchLive" role="status" aria-live="polite"></span>
   </div>
   <div class="spMain">
     <!-- 카테고리 목록 — 형제 앱(포스트잇 월)과 공통 카테고리는 같은 이름·같은 순서다 -->
@@ -2959,6 +3049,777 @@ function checkAlarms(){
   }
 }
 setInterval(checkAlarms, ALARM_POLL_MS);
+
+/* ---------- 설정 검색 (발주 #15) — 자연어 질의 + '#' 태그 브라우징 ----------
+ * 설계 원칙
+ *  1) 전부 로컬 계산이다. 사전(SP_DICT)은 앱 소유 리터럴이고 런타임 네트워크 요청은 0건이다.
+ *  2) 기존 마크업은 한 줄도 고치지 않는다. 사전이 기존 id/[data-*] 셀렉터를 들고 있고,
+ *     이동은 그 셀렉터로 찾은 요소를 스크롤·포커스하는 것으로 끝난다.
+ *  3) 결과 렌더는 createElement/textContent 전용이다 (<mark> 도 createElement).
+ *  4) 검색 상태는 메모리(세션)에만 둔다 — 신규 저장 키 0개.
+ *  5) 셸(preload)이 뒤늦게 붙이는 [백업]·[시작 프로그램] 항목은 DOM 이 생긴 시점에 색인에 편입되고,
+ *     브라우저(셸 없음)에서는 DOM 부재로 자동 제외된다.
+ */
+(function(){
+var inEl = $('spSearchInput'), popEl = $('spSearchPop'), listEl = $('spSearchList');
+var pillEl = $('spSearchPill'), chipsEl = $('spSearchChips'), noneEl = $('spSearchNone');
+var clearEl = $('spSearchClear'), liveEl = $('spSearchLive'), barEl = $('spSearchBar');
+if (!inEl || !popEl || !listEl || !pillEl || !chipsEl || !noneEl) return;
+
+/* ── 정규화: 소문자화 + 한글/영숫자만 남기기 (공백·가운뎃점·하이픈·이모지 전부 탈락) ── */
+function spKeep(c){
+  return (c >= 48 && c <= 57) || (c >= 97 && c <= 122) ||
+         (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0x3131 && c <= 0x318E);
+}
+/* 원문 좌표를 되돌릴 수 있는 정규화 — map[i] = 정규화 i번째 글자의 원문 인덱스 */
+function spNormMap(s){
+  s = (s == null) ? '' : String(s);
+  var out = '', map = [], i, ch, lo;
+  for (i = 0; i < s.length; i++){
+    ch = s.charAt(i);
+    lo = ch.toLowerCase();
+    if (lo.length !== 1) lo = ch;          /* 길이가 변하는 특수 케이스는 원문 유지 */
+    if (spKeep(lo.charCodeAt(0))){ out += lo; map.push(i); }
+  }
+  return { n: out, map: map };
+}
+function spNorm(s){ return spNormMap(s).n; }
+
+/* ── 한글 자모 분해 (초성 검색·부분 조합 검색용) ── */
+var SP_CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+var SP_JUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
+var SP_JONG = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+function spJamo(n){
+  var out = '', i, c, k;
+  for (i = 0; i < n.length; i++){
+    c = n.charCodeAt(i);
+    if (c >= 0xAC00 && c <= 0xD7A3){
+      k = c - 0xAC00;
+      out += SP_CHO[Math.floor(k / 588)] + SP_JUNG[Math.floor((k % 588) / 28)] + SP_JONG[k % 28];
+    } else out += n.charAt(i);
+  }
+  return out;
+}
+function spChoOf(n){
+  var out = '', i, c;
+  for (i = 0; i < n.length; i++){
+    c = n.charCodeAt(i);
+    if (c >= 0xAC00 && c <= 0xD7A3) out += SP_CHO[Math.floor((c - 0xAC00) / 588)];
+    else out += n.charAt(i);
+  }
+  return out;
+}
+/* 질의가 전부 자음(ㄱ~ㅎ)인가 = 초성 검색 의도 */
+function spIsCho(t){
+  if (t.length < 2) return false;
+  for (var i = 0; i < t.length; i++){
+    var c = t.charCodeAt(i);
+    if (c < 0x3131 || c > 0x314E) return false;
+  }
+  return true;
+}
+
+/* ── 점수표 — 동의어 레이어는 태그 레이어 −4 ── */
+var SP_S = {
+  labelExact:100, labelPrefix:72, labelSub:54,
+  tagExact:60,    tagPrefix:42,   tagSub:34,
+  synExact:56,    synPrefix:38,   synSub:30,
+  optExact:44,    optSub:30,
+  labelIn:50,     tagIn:30,       synIn:26,     /* 역포함: 토큰이 사전 낱말을 품은 경우 (조사·어미가 붙은 입력) */
+  jamo:26, cho:14, help:12
+};
+var SP_MIN = 10;      /* 이 점수 미만은 결과에서 뺀다 */
+var SP_MAX_ROWS = 8;  /* 자연어 질의 결과 상한 (태그 결과는 상한 없음) */
+
+/* ── 사전 — 설정 항목 1개 = 원소 1개.
+ *    label/syn 은 형제 앱(포스트잇 월)의 같은 항목과 바이트 동일하게 맞춘다(미러 규약).
+ *    help 는 이 앱 섹션의 실제 안내문에서 따온다. ── */
+var SP_DICT = [
+  { id:'cal.font.size', label:'글자 크기', cat:'display', sel:'#setFontSeg', panel:null, shell:false,
+    tags:['표시','크기','접근성'],
+    syn:['글씨크기','폰트크기','텍스트크기','잘안보여','눈아파','확대','축소','노안','fontsize','글씨커','글씨작'],
+    opts:['작게','보통','크게'], help:'달력 숫자와 일정 목록 글자가 함께 커지고 작아져요.' },
+  { id:'cal.week.start', label:'주 시작 요일', cat:'display', sel:'#setWeekStartSeg', panel:null, shell:false,
+    tags:['표시','날짜'],
+    syn:['시작요일','월요일시작','일요일시작','첫요일','월요일부터','일요일부터','요일순서','weekstart','monday','sunday','달력시작'],
+    opts:['일요일','월요일'], help:'달력의 첫 칸을 일요일로 둘지 월요일로 둘지 정해요.' },
+  { id:'cal.lunar', label:'음력 표시', cat:'display', sel:'#setLunar', panel:null, shell:false,
+    tags:['표시','날짜','기념일'],
+    syn:['음력','구정','설날','생일','음력날짜','lunar','절기','한자'],
+    opts:[], help:'날짜 칸 아래에 음력 날짜를 작게 같이 보여줘요.' },
+  { id:'cal.dday', label:'D-day 배지', cat:'display', sel:'#setDday', panel:null, shell:false,
+    tags:['표시','날짜','기념일'],
+    syn:['dday','디데이','남은날','며칠남았','카운트다운','anniversary','countdown','배지'],
+    opts:[], help:'기념일로 표시한 일정에 남은 날짜 배지를 붙여요.' },
+  { id:'cal.shell.startup', label:'윈도우 시작 시 자동 실행', cat:'display', sel:'[data-startup-toggle]', panel:null, shell:true,
+    tags:['시작','자동','시스템'],
+    syn:['자동시작','자동실행','부팅','켤때','켜질때','컴퓨터켤때','시작프로그램','스타트업','로그인','윈도우시작','시작시','자동으로열기','자동으로켜기','자동띄우기','startup','autostart','autorun','boot','login','openatlogin'],
+    opts:[], help:'컴퓨터를 켜면 창이 알아서 함께 열려요.' },
+  { id:'cal.alarm.on', label:'일정 시간 알림', cat:'alarm', sel:'#setAlarm', panel:null, shell:false,
+    tags:['알림','일정'],
+    syn:['알림','알람','팝업','notification','alert','울림','띵','알려줘','깜빡'],
+    opts:[], help:'일정에 적어 둔 시각이 되면 화면 아래에 알려 드려요.' },
+  { id:'cal.alarm.lead', label:'알림 시점', cat:'alarm', sel:'#setAlarmLead', panel:null, shell:false,
+    tags:['알림','일정'],
+    syn:['몇분전','미리알림','선행','사전알림','정각','5분전','15분전','lead','before','미리','전에','분전','미리알려'],
+    opts:['정각','5분 전','15분 전'], help:'일정 시각보다 얼마나 미리 알려 줄지 정해요.' },
+  { id:'cal.decor.bg', label:'배경', cat:'decor', sel:'#setDecorSeg', panel:null, shell:false,
+    tags:['꾸미기','배경'],
+    syn:['배경','바탕','종이','리넨','질감','벽지','background','내이미지','사진배경'],
+    opts:['기본','종이','리넨','내 이미지'], help:'배경은 카드 뒤에 은은하게 깔려요. 기본을 고르면 원래 화면 그대로예요.' },
+  { id:'cal.decor.image', label:'내 이미지', cat:'decor', sel:'#setDecorImgBtn', panel:null, shell:false,
+    tags:['꾸미기','배경','이미지'],
+    syn:['내사진','사진배경','이미지선택','이미지제거','사진넣기','custombackground'],
+    opts:['이미지 선택','제거'], help:'가지고 있는 사진을 골라 은은한 배경으로 깔 수 있어요.' },
+  { id:'cal.decor.alpha', label:'강도', cat:'decor', sel:'#setDecorAlpha', panel:null, shell:false,
+    tags:['꾸미기','배경'],
+    syn:['진하기','투명도','연하게','진하게','흐리게','opacity','alpha'],
+    opts:[], help:'배경 무늬가 얼마나 진하게 비칠지 조절해요.' },
+  { id:'cal.anim', label:'애니메이션', cat:'fx', sel:'#setAnimSeg', panel:null, shell:false,
+    tags:['효과','접근성'],
+    syn:['모션','움직임','애니','부드럽게','끄기','줄이기','버벅','렉','어지러','멀미','animation','motion','reducemotion'],
+    opts:['켬','줄임','끔'], help:'화면 전환과 목록이 움직이는 정도를 정해요.' },
+  { id:'cal.sound.mute', label:'음소거', cat:'fx', sel:'#setMute', panel:null, shell:false,
+    tags:['소리','효과'],
+    syn:['소리끄기','무음','조용히','시끄러','효과음','삐소리','mute','silent','sound','소리안나게'],
+    opts:[], help:'효과음을 한 번에 끄고 켜요.' },
+  { id:'cal.sound.vol', label:'볼륨', cat:'fx', sel:'#setVol', panel:null, shell:false,
+    tags:['소리'],
+    syn:['음량','소리크기','volume','vol','소리줄이기'],
+    opts:[], help:'헤더의 볼륨 슬라이더와 항상 같이 움직여요.' },
+  { id:'cal.safe.confirmdelete', label:'삭제 전 확인', cat:'safety', sel:'#setConfirmDelSeg', panel:null, shell:false,
+    tags:['안전','복구'],
+    syn:['삭제확인','지우기전','실수로삭제','되묻기','한번더물어보기','확인창','실수방지','날아감','confirm','delete'],
+    opts:['끔','켬'], help:'켜면 일정·배경 이미지·손상 백업을 지우기 전에 한 번 더 물어봐요.' },
+  { id:'cal.data.export', label:'내보내기', cat:'data', sel:'#setExport', panel:null, shell:false,
+    tags:['데이터','파일','백업'],
+    syn:['저장','백업파일','json','파일로저장','다운로드','옮기기','이사','export','save','dump'],
+    opts:[], help:'모든 일정을 JSON 파일 하나로 저장해요.' },
+  { id:'cal.data.import', label:'가져오기', cat:'data', sel:'#setImport', panel:null, shell:false,
+    tags:['데이터','파일','복구'],
+    syn:['불러오기','복원','되살리기','합치기','병합','import','load','restore','옮겨오기'],
+    opts:[], help:'백업 파일의 일정을 지금 일정에 합쳐요. 덮어쓰지 않아요.' },
+  { id:'cal.data.usage', label:'저장 용량', cat:'data', sel:'#setGaugeBar', panel:null, shell:false,
+    tags:['데이터','저장용량'],
+    syn:['용량','얼마나','공간','꽉참','가득','부족','남은용량','사진용량','quota','storage','usage','저장안됨'],
+    opts:[], help:'지금 저장 공간을 얼마나 쓰고 있는지 막대로 보여줘요.' },
+  { id:'cal.data.corrupt', label:'손상 백업', cat:'data', sel:'#setCorruptList', panel:null, shell:false,
+    tags:['데이터','복구','백업','안전'],
+    syn:['손상','깨짐','깨진','깨진데이터','오류','백업키','corrupt','망가짐','찌꺼기','모두정리','cleanup'],
+    opts:[], help:'저장 데이터가 깨졌을 때 따로 보관해 둔 원본 목록이에요.' },
+  { id:'cal.shell.backup.folder', label:'백업 저장 폴더', cat:'data', sel:'[data-backup-folder]', panel:null, shell:true,
+    tags:['백업','클라우드','시스템'],
+    syn:['백업위치','어디에저장','폴더경로','저장경로','원드라이브','onedrive','구글드라이브','드롭박스','동기화폴더','path','folder'],
+    opts:[], help:'백업 파일이 저장될 폴더예요. 클라우드 동기화 폴더를 고르면 자동으로 올라가요.' },
+  { id:'cal.shell.backup.now', label:'지금 백업', cat:'data', sel:'[data-backup-now]', panel:null, shell:true,
+    tags:['백업','데이터'],
+    syn:['지금백업','바로백업','수동백업','즉시','backupnow','manualbackup'],
+    opts:[], help:'기다리지 않고 지금 바로 백업 파일을 하나 만들어요.' },
+  { id:'cal.shell.backup.auto', label:'매일 자동 백업', cat:'data', sel:'[data-backup-auto]', panel:null, shell:true,
+    tags:['백업','자동','프리미엄'],
+    syn:['자동백업','매일백업','예약백업','정기백업','스케줄','하루한번','알아서백업','autobackup','daily','프로','pro','유료'],
+    opts:[], help:'하루에 한 번 알아서 백업해 둬요.' },
+  { id:'cal.about.version', label:'앱 정보·버전', cat:'about', sel:'#setInfoSec', panel:null, shell:false,
+    tags:['정보'],
+    syn:['버전','about','version','몇버전','빌드','앱정보','제품정보'],
+    opts:[], help:'캘린더 — 캘린더 + 포스트잇 월 (2026-08)' },
+  { id:'cal.about.shortcuts', label:'단축키 안내', cat:'about', sel:'#setInfoSec', panel:null, shell:false,
+    tags:['정보','안내'],
+    syn:['단축키','키보드','핫키','esc','조작법','shortcut','hotkey','keyboard','주간','월간','오늘'],
+    opts:[], help:'단축키: ← → 이동 · T 오늘 · W 주간/월간 · ESC 닫기' },
+  { id:'cal.about.licenses', label:'에셋·오픈소스 고지', cat:'about', sel:'[data-licenses]', panel:null, shell:false,
+    tags:['정보','라이선스'],
+    syn:['라이선스','저작권','오픈소스','고지','출처','폰트출처','cc0','ofl','mit','license','credit'],
+    opts:[], help:'번들한 글꼴·질감·라이브러리의 출처와 라이선스를 전부 적어 뒀어요.' },
+  /* ── 설정 창 밖의 항목 (툴바·일정 추가 폼) — 고르면 설정을 닫고 그 자리로 데려간다 ── */
+  { id:'cal.theme', label:'테마 프리셋', cat:'display', sel:'#themeSel', panel:'toolbar', shell:false,
+    tags:['표시','꾸미기','색'],
+    syn:['테마','다크','다크모드','어둡게','밝게','라이트','야간','눈부심','화이트','theme','dark','light','night'],
+    opts:['기본','다크','화이트'], help:'창 전체 색을 기본·다크·화이트 중에서 골라요.' },
+  { id:'cal.view.week', label:'주간 보기', cat:'display', sel:'#weekBtn', panel:'toolbar', shell:false,
+    tags:['표시','날짜'],
+    syn:['주간','한주','일주일','주보기','월간','월간보기','한달','뷰전환','보기전환','week','weekly','month'],
+    opts:[], help:'한 주만 크게 보는 화면으로 바꿔요. 단축키 W.' },
+  { id:'cal.event.category', label:'분류 색', cat:'display', sel:'#catPick', panel:'form', shell:false,
+    tags:['표시','색','일정'],
+    syn:['카테고리','카테고리색','분류','분류색','색깔','라벨','태그색','구분','색점','일정색','category','label','tag'],
+    opts:[], help:'일정에 색을 달아 두면 달력에 색 점으로 표시돼요.' },
+  { id:'cal.event.repeat', label:'반복 일정', cat:'display', sel:'#repeatSel', panel:'form', shell:false,
+    tags:['일정','날짜','자동'],
+    syn:['반복','매주','되풀이','정기','주간반복','반복없음','repeat','weekly','recurring'],
+    opts:['반복 없음','매주'], help:'매주 같은 요일에 되풀이되는 일정을 만들 수 있어요.' },
+  { id:'cal.event.dday', label:'기념일로 표시', cat:'display', sel:'#addDday', panel:'form', shell:false,
+    tags:['일정','기념일','날짜'],
+    syn:['기념일','디데이','dday','생일','기념','남은날짜','anniversary'],
+    opts:[], help:'기념일로 표시하면 달력에 D-day 배지가 붙어요.' }
+];
+
+/* ── 색인 빌드 — 파생 필드 계산 + DOM 실존 확인 (셸 주입분은 생긴 뒤에 편입) ── */
+var SP_INDEX = [];
+function spBuild(){
+  var out = [], i, j, it;
+  for (i = 0; i < SP_DICT.length; i++){
+    it = SP_DICT[i];
+    var el = null;
+    try{ el = it.sel ? document.querySelector(it.sel) : null; }catch(e){ el = null; }
+    if (!el) continue;                       /* DOM 에 없는 설정은 검색에도 없다 */
+    var n = spNorm(it.label);
+    var rec = {
+      id: it.id, label: it.label, cat: it.cat, panel: it.panel, sel: it.sel,
+      tags: it.tags, opts: it.opts, help: it.help, el: el,
+      _n: n, _nj: spJamo(n), _cho: spChoOf(n),
+      _tags: [], _syn: [], _opts: [], _help: spNorm(it.help), _choT: [], _jamoT: []
+    };
+    for (j = 0; j < it.tags.length; j++) rec._tags.push(spNorm(it.tags[j]));
+    for (j = 0; j < it.syn.length; j++) rec._syn.push(spNorm(it.syn[j]));
+    for (j = 0; j < it.opts.length; j++) rec._opts.push(spNorm(it.opts[j]));
+    for (j = 0; j < rec._tags.length; j++){ rec._choT.push(spChoOf(rec._tags[j])); rec._jamoT.push(spJamo(rec._tags[j])); }
+    for (j = 0; j < rec._syn.length; j++){ rec._choT.push(spChoOf(rec._syn[j])); rec._jamoT.push(spJamo(rec._syn[j])); }
+    out.push(rec);
+  }
+  SP_INDEX = out;
+}
+
+/* 카테고리 배지 라벨 — 좌측 탭의 표기를 그대로 읽어 온다 (한 곳에서만 관리) */
+var SP_CATLAB = {};
+function spCatLabels(){
+  var tabs = spNavEl ? spNavEl.querySelectorAll('.spNavi[data-spcat]') : [];
+  for (var i = 0; i < tabs.length; i++){
+    SP_CATLAB[tabs[i].getAttribute('data-spcat')] = (tabs[i].textContent || '').trim();
+  }
+}
+function spBadge(it){
+  if (it.panel === 'toolbar') return '🧰 툴바';
+  if (it.panel === 'form') return '📝 일정 추가';
+  return SP_CATLAB[it.cat] || '⚙️ 설정';
+}
+
+/* ── 한 항목 × 토큰 1개 점수 ── */
+function spTokScore(it, t){
+  if (!t) return 0;
+  var best = 0, i, s;
+  if (spIsCho(t)){
+    if (it._cho.indexOf(t) >= 0) best = SP_S.cho + 6;
+    for (i = 0; i < it._choT.length; i++) if (it._choT[i].indexOf(t) >= 0){ best = Math.max(best, SP_S.cho); break; }
+    return best;
+  }
+  /* 한 글자 토큰은 정확 일치만 인정한다 — '안'·'잘' 같은 조각이 명칭 부분일치로 1위를 채가는 것을 막는다 */
+  if (t.length === 1){
+    if (it._n === t) return SP_S.labelExact;
+    for (i = 0; i < it._tags.length; i++) if (it._tags[i] === t) return SP_S.tagExact;
+    for (i = 0; i < it._syn.length; i++) if (it._syn[i] === t) return SP_S.synExact;
+    for (i = 0; i < it._opts.length; i++) if (it._opts[i] === t) return SP_S.optExact;
+    return 0;
+  }
+  /* 명칭 (역포함 = '일주일만'처럼 조사·어미가 붙은 토큰이 낱말을 품은 경우) */
+  if (it._n === t) best = SP_S.labelExact;
+  else if (it._n.indexOf(t) === 0) best = SP_S.labelPrefix;
+  else if (it._n.indexOf(t) > 0) best = SP_S.labelSub;
+  else if (it._n.length >= 2 && t.indexOf(it._n) >= 0) best = SP_S.labelIn;
+  /* 태그 */
+  for (i = 0; i < it._tags.length && best < SP_S.tagExact; i++){
+    s = it._tags[i];
+    if (s === t) best = Math.max(best, SP_S.tagExact);
+    else if (s.indexOf(t) === 0) best = Math.max(best, SP_S.tagPrefix);
+    else if (s.indexOf(t) > 0) best = Math.max(best, SP_S.tagSub);
+    else if (s.length >= 2 && t.indexOf(s) >= 0) best = Math.max(best, SP_S.tagIn);
+  }
+  /* 동의어 (태그 레이어 −4) */
+  for (i = 0; i < it._syn.length && best < SP_S.synExact; i++){
+    s = it._syn[i];
+    if (s === t) best = Math.max(best, SP_S.synExact);
+    else if (s.indexOf(t) === 0) best = Math.max(best, SP_S.synPrefix);
+    else if (s.indexOf(t) > 0) best = Math.max(best, SP_S.synSub);
+    else if (s.length >= 2 && t.indexOf(s) >= 0) best = Math.max(best, SP_S.synIn);
+  }
+  /* 값(옵션) */
+  for (i = 0; i < it._opts.length && best < SP_S.optExact; i++){
+    s = it._opts[i];
+    if (s === t) best = Math.max(best, SP_S.optExact);
+    else if (s.indexOf(t) >= 0) best = Math.max(best, SP_S.optSub);
+  }
+  /* 안내문 */
+  if (best < SP_S.help && t.length >= 2 && it._help.indexOf(t) >= 0) best = Math.max(best, SP_S.help);
+  /* 자모 부분 일치 (조합 중인 입력·오탈자 흡수) */
+  if (best < SP_S.jamo && t.length >= 2){
+    var tj = spJamo(t);
+    if (it._nj.indexOf(tj) >= 0) best = Math.max(best, SP_S.jamo);
+    else {
+      for (i = 0; i < it._jamoT.length; i++){
+        if (it._jamoT[i].indexOf(tj) >= 0){ best = Math.max(best, SP_S.jamo - 6); break; }
+      }
+    }
+  }
+  return best;
+}
+
+/* ── 항목 총점: 토큰별 최고점 평균 × 커버리지 보정, 전체 질의 일치와 비교해 큰 쪽 ── */
+function spScore(it, toks, whole){
+  var sum = 0, matched = 0, i, s;
+  for (i = 0; i < toks.length; i++){
+    s = spTokScore(it, toks[i]);
+    sum += s;
+    if (s > 0) matched++;
+  }
+  /* 맞은 토큰의 평균 점수를 커버리지로 가중한다. 총 토큰 수로 나누면 '일주일만 보고 싶어'처럼
+     조사·어미 토큰이 많은 자연문이 통째로 탈락하므로 분모는 matched 로 둔다. */
+  var score = 0;
+  if (matched > 0){
+    var cov = matched / toks.length;
+    score = (sum / matched) * (0.35 + 0.65 * cov);
+  }
+  if (toks.length >= 2) score = Math.max(score, spTokScore(it, whole));
+  return score;
+}
+
+/* ── 하이라이트: 정규화 좌표 → 원문 좌표 역매핑 후 간격 2 이하 구간 병합 ── */
+function spHlRanges(text, toks){
+  var nm = spNormMap(text), raw = [], i, t, from, at, prev;
+  for (i = 0; i < toks.length; i++){
+    t = toks[i];
+    if (!t || spIsCho(t)) continue;
+    from = 0;
+    for(;;){
+      at = nm.n.indexOf(t, from);
+      if (at < 0) break;
+      raw.push([nm.map[at], nm.map[at + t.length - 1] + 1]);
+      from = at + 1;
+    }
+  }
+  raw.sort(function(a, b){ return (a[0] - b[0]) || (a[1] - b[1]); });
+  var out = [];
+  for (i = 0; i < raw.length; i++){
+    prev = out.length ? out[out.length - 1] : null;
+    if (prev && raw[i][0] - prev[1] <= 2){ if (raw[i][1] > prev[1]) prev[1] = raw[i][1]; }
+    else out.push([raw[i][0], raw[i][1]]);
+  }
+  return out;
+}
+/* 구간을 <mark> 로 감싸 채운다 — createElement/textContent 전용 */
+function spFillHl(host, text, ranges){
+  var at = 0, i, mk;
+  for (i = 0; i < ranges.length; i++){
+    if (ranges[i][0] > at) host.appendChild(document.createTextNode(text.slice(at, ranges[i][0])));
+    mk = document.createElement('mark');
+    mk.textContent = text.slice(ranges[i][0], ranges[i][1]);
+    host.appendChild(mk);
+    at = ranges[i][1];
+  }
+  if (at < text.length) host.appendChild(document.createTextNode(text.slice(at)));
+}
+
+/* ── 상태 ── */
+var spTag = null;            /* 확정된 #태그 (TAGPICKED) */
+var spNavList = [];          /* 현재 키보드로 오갈 수 있는 항목 [{el, run}] */
+var spActive = -1;
+var spJumpEl = null, spJumpT = null;
+var SP_REP_TAGS = ['표시','날짜','알림','소리','효과','안전','데이터','백업'];
+var spAllTags = false;       /* [모든 태그 보기] 펼침 여부 */
+
+function spClearNav(){ spNavList = []; spActive = -1; inEl.removeAttribute('aria-activedescendant'); }
+function spSetActive(i){
+  var k;
+  for (k = 0; k < spNavList.length; k++){
+    spNavList[k].el.classList.remove('act');
+    if (spNavList[k].el.getAttribute('role') === 'option') spNavList[k].el.setAttribute('aria-selected', 'false');
+  }
+  spActive = (i >= 0 && i < spNavList.length) ? i : -1;
+  if (spActive < 0){ inEl.removeAttribute('aria-activedescendant'); return; }
+  var el = spNavList[spActive].el;
+  el.classList.add('act');
+  if (el.getAttribute('role') === 'option') el.setAttribute('aria-selected', 'true');
+  if (el.id) inEl.setAttribute('aria-activedescendant', el.id);
+  try{ el.scrollIntoView({block:'nearest'}); }catch(e){}
+}
+function spOpenPop(){ popEl.hidden = false; inEl.setAttribute('aria-expanded', 'true'); }
+function spClosePop(){
+  popEl.hidden = true;
+  inEl.setAttribute('aria-expanded', 'false');
+  spClearNav();
+}
+function spSay(msg){ if (liveEl) liveEl.textContent = msg; }
+function spWipe(){
+  while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+  while (chipsEl.firstChild) chipsEl.removeChild(chipsEl.firstChild);
+  while (noneEl.firstChild) noneEl.removeChild(noneEl.firstChild);
+  while (pillEl.firstChild) pillEl.removeChild(pillEl.firstChild);
+  listEl.hidden = false; chipsEl.hidden = true; noneEl.hidden = true; pillEl.hidden = true;
+  spClearNav();
+}
+function spReset(focus){
+  spTag = null; spAllTags = false;
+  inEl.value = '';
+  clearEl.hidden = true;
+  spWipe();
+  spClosePop();
+  spSay('');
+  if (focus){ try{ inEl.focus(); }catch(e){} }
+}
+
+/* ── 이동: 결과를 고르면 그 설정 자리로 데려간다 ── */
+function spFlash(el){
+  if (spJumpEl){ spJumpEl.classList.remove('spJump'); spJumpEl = null; }
+  if (spJumpT){ clearTimeout(spJumpT); spJumpT = null; }
+  if (!el) return;
+  var host = (el.closest ? (el.closest('.spRow') || el.closest('.spCheck')) : null) || el;
+  try{ host.scrollIntoView({block:'center', behavior: reducedMotion() ? 'auto' : 'smooth'}); }
+  catch(e){ try{ host.scrollIntoView(); }catch(e2){} }
+  host.classList.add('spJump');
+  spJumpEl = host;
+  spJumpT = setTimeout(function(){
+    if (spJumpEl){ spJumpEl.classList.remove('spJump'); spJumpEl = null; }
+    spJumpT = null;
+  }, 1700);
+  var f = null;
+  try{
+    if (el.matches && el.matches('input,select,button,textarea,summary')) f = el;
+    else if (el.querySelector) f = el.querySelector('input,select,button,textarea,summary');
+  }catch(e){ f = null; }
+  try{ if (f && f.focus) f.focus({preventScroll:true}); }catch(e){}
+}
+function spGo(it){
+  var el = it.el;
+  try{ if (!el || !el.isConnected) el = document.querySelector(it.sel); }catch(e){}
+  spReset(false);
+  if (it.panel === 'toolbar' || it.panel === 'form'){
+    closeSettings();
+    spFlash(el);
+    return;
+  }
+  if (it.cat && it.cat !== spCat) spSetCat(it.cat, false);
+  if (el && el.closest){
+    var d = el.closest('details');
+    if (d && !d.open) d.open = true;
+  }
+  spUpdateOvf();
+  spFlash(el);
+}
+function spGoCat(cat){
+  spReset(false);
+  spSetCat(cat, true);
+}
+
+/* ── 결과 행 ── */
+function spSubText(it, toks){
+  var i, j, hitOpt = false;
+  for (i = 0; i < it._opts.length && !hitOpt; i++){
+    for (j = 0; j < toks.length; j++){
+      if (toks[j] && it._opts[i].indexOf(toks[j]) >= 0){ hitOpt = true; break; }
+    }
+  }
+  if (hitOpt && it.opts.length) return it.opts.join(' · ');
+  if (it.help) return it.help.length > 60 ? (it.help.slice(0, 60) + '…') : it.help;
+  if (it.opts.length) return it.opts.join(' · ');
+  return '#' + it.tags.join(' #');
+}
+function spRow(it, toks, i){
+  var li = document.createElement('li');
+  li.className = 'spSr';
+  li.id = 'spSr-' + i;
+  li.setAttribute('role', 'option');
+  li.setAttribute('aria-selected', 'false');
+  li.setAttribute('data-settings-hit', '');
+  li.setAttribute('data-sk', it.id);
+  var nm = document.createElement('span');
+  nm.className = 'spSrName';
+  spFillHl(nm, it.label, spHlRanges(it.label, toks));
+  var ct = document.createElement('span');
+  ct.className = 'spSrCat';
+  ct.textContent = spBadge(it);
+  var sb = document.createElement('span');
+  sb.className = 'spSrSub';
+  var sub = spSubText(it, toks);
+  spFillHl(sb, sub, spHlRanges(sub, toks));
+  li.appendChild(nm); li.appendChild(ct); li.appendChild(sb);
+  li.addEventListener('mousedown', function(e){ e.preventDefault(); });
+  /* 행을 지운 뒤 document 의 바깥클릭 감시가 detach 된 타깃을 보고 설정을 닫아버리는 것을 막는다 */
+  li.addEventListener('click', function(e){ e.stopPropagation(); spGo(it); });
+  return li;
+}
+
+/* ── 태그 칩 ── */
+function spChip(text, cls, run){
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'spTagChip' + (cls ? (' ' + cls) : '');
+  b.textContent = text;
+  b.addEventListener('mousedown', function(e){ e.preventDefault(); });
+  b.addEventListener('click', function(e){ e.stopPropagation(); run(); });
+  return b;
+}
+function spTagCount(tag){
+  var n = 0;
+  for (var i = 0; i < SP_INDEX.length; i++) if (SP_INDEX[i].tags.indexOf(tag) >= 0) n++;
+  return n;
+}
+function spTagsAll(){
+  var seen = {}, out = [], i, j, t;
+  for (i = 0; i < SP_INDEX.length; i++){
+    for (j = 0; j < SP_INDEX[i].tags.length; j++){
+      t = SP_INDEX[i].tags[j];
+      if (!Object.prototype.hasOwnProperty.call(seen, t)){ seen[t] = 1; out.push(t); }
+    }
+  }
+  out.sort(function(a, b){ return a.localeCompare(b, 'ko'); });   /* 코드포인트 정렬 금지 */
+  return out;
+}
+function spPickTag(tag){
+  spTag = tag;
+  inEl.value = '#' + tag;
+  clearEl.hidden = false;
+  spRender();
+  try{ inEl.focus(); }catch(e){}
+}
+function spTagRunner(t){ return function(){ spPickTag(t); }; }
+function spGoRunner(x){ return function(){ spGo(x); }; }
+function spCatRunner(c){ return function(){ spGoCat(c); }; }
+function spAllTagsRunner(){ spAllTags = true; inEl.value = '#'; spTag = null; spRender(); try{ inEl.focus(); }catch(e){} }
+function spTagModeRunner(){ spTag = null; spAllTags = false; inEl.value = '#'; clearEl.hidden = false; spRender(); try{ inEl.focus(); }catch(e){} }
+
+/* ── 모드별 렌더 ── */
+function spRenderTagList(){
+  spWipe();
+  listEl.hidden = true;
+  chipsEl.hidden = false;
+  var hint = document.createElement('span');
+  hint.className = 'spChipHint';
+  hint.textContent = '태그를 골라 보세요';
+  chipsEl.appendChild(hint);
+  var tags = spAllTags ? spTagsAll() : SP_REP_TAGS.filter(function(t){ return spTagCount(t) > 0; });
+  var i, b;
+  for (i = 0; i < tags.length; i++){
+    b = spChip('#' + tags[i], '', spTagRunner(tags[i]));
+    chipsEl.appendChild(b);
+    spNavList.push({ el: b, run: spTagRunner(tags[i]) });
+  }
+  if (!spAllTags){
+    b = spChip('모든 태그 보기', 'spChipMore', spAllTagsRunner);
+    chipsEl.appendChild(b);
+    spNavList.push({ el: b, run: spAllTagsRunner });
+  }
+  spOpenPop();
+  spSay('태그 ' + tags.length + '개');
+}
+function spRenderTagFilter(frag){
+  spWipe();
+  listEl.hidden = true;
+  var all = spTagsAll(), hit = [], i, b;
+  for (i = 0; i < all.length; i++) if (spNorm(all[i]).indexOf(frag) === 0) hit.push(all[i]);
+  if (!hit.length) for (i = 0; i < all.length; i++) if (spNorm(all[i]).indexOf(frag) > 0) hit.push(all[i]);
+  hit = hit.slice(0, 12);
+  if (!hit.length){
+    noneEl.hidden = false;
+    var p = document.createElement('span');
+    p.className = 'spNoneQ';
+    p.textContent = '#' + frag + ' 로 시작하는 태그가 없어요.';
+    noneEl.appendChild(p);
+    b = spChip('모든 태그 보기', 'spChipMore', spAllTagsRunner);
+    noneEl.appendChild(b);
+    spNavList.push({ el: b, run: spAllTagsRunner });
+    spOpenPop();
+    spSay('결과 없음');
+    return;
+  }
+  chipsEl.hidden = false;
+  for (i = 0; i < hit.length; i++){
+    b = spChip('#' + hit[i], '', spTagRunner(hit[i]));
+    chipsEl.appendChild(b);
+    spNavList.push({ el: b, run: spTagRunner(hit[i]) });
+  }
+  spSetActive(0);
+  spOpenPop();
+  spSay('태그 ' + hit.length + '개');
+}
+function spRenderTagPicked(){
+  spWipe();
+  pillEl.hidden = false;
+  var pill = document.createElement('span');
+  pill.className = 'spPillTag';
+  var pt = document.createElement('span');
+  pt.textContent = '#' + spTag;
+  var px = document.createElement('button');
+  px.type = 'button';
+  px.className = 'spPillX';
+  px.setAttribute('aria-label', '태그 해제');
+  px.title = '태그 해제';
+  px.textContent = '✕';
+  px.addEventListener('mousedown', function(e){ e.preventDefault(); });
+  px.addEventListener('click', function(e){ e.stopPropagation(); spTag = null; spAllTags = false; inEl.value = '#'; spRender(); try{ inEl.focus(); }catch(err){} });
+  pill.appendChild(pt); pill.appendChild(px);
+  pillEl.appendChild(pill);
+  var hits = [], i;
+  for (i = 0; i < SP_INDEX.length; i++) if (SP_INDEX[i].tags.indexOf(spTag) >= 0) hits.push(SP_INDEX[i]);
+  var cnt = document.createElement('span');
+  cnt.className = 'spPillCnt';
+  cnt.textContent = '설정 ' + hits.length + '개';
+  pillEl.appendChild(cnt);
+  if (!hits.length){
+    listEl.hidden = true;
+    noneEl.hidden = false;
+    var p = document.createElement('span');
+    p.className = 'spNoneQ';
+    p.textContent = '#' + spTag + ' 에 해당하는 설정이 없어요.';
+    noneEl.appendChild(p);
+    spOpenPop();
+    spSay('결과 없음');
+    return;
+  }
+  for (i = 0; i < hits.length; i++){
+    var li = spRow(hits[i], [], i);
+    listEl.appendChild(li);
+    spNavList.push({ el: li, run: spGoRunner(hits[i]) });
+  }
+  spSetActive(0);
+  spOpenPop();
+  spSay('결과 ' + hits.length + '개');
+}
+function spRenderQuery(q){
+  spWipe();
+  var whole = spNorm(q);
+  var toks = q.split(/\s+/).map(spNorm).filter(function(t){ return t.length > 0; });
+  if (!toks.length){ spClosePop(); return; }
+  var scored = [], i, k, s, lab, li;
+  for (i = 0; i < SP_INDEX.length; i++){
+    s = spScore(SP_INDEX[i], toks, whole);
+    if (s < SP_MIN) continue;
+    /* 동점이면 명칭에 질의어가 그대로 든 쪽을 앞세운다 ('백업' → [손상 백업] > [내보내기]) */
+    lab = 0;
+    for (k = 0; k < toks.length; k++) if (SP_INDEX[i]._n.indexOf(toks[k]) >= 0){ lab = 1; break; }
+    scored.push({ it: SP_INDEX[i], s: s, lab: lab, at: i });
+  }
+  scored.sort(function(a, b){
+    if (b.s !== a.s) return b.s - a.s;
+    if (b.lab !== a.lab) return b.lab - a.lab;
+    if (a.it.label.length !== b.it.label.length) return a.it.label.length - b.it.label.length;
+    return a.at - b.at;
+  });
+  scored = scored.slice(0, SP_MAX_ROWS);
+  if (!scored.length){
+    listEl.hidden = true;
+    noneEl.hidden = false;
+    var line = document.createElement('span');
+    line.className = 'spNoneQ';
+    line.textContent = "'" + q + "'에 맞는 설정을 못 찾았어요.";
+    noneEl.appendChild(line);
+    var bTag = spChip('# 태그로 찾아보기', 'spChipMore', spTagModeRunner);
+    noneEl.appendChild(bTag);
+    spNavList.push({ el: bTag, run: spTagModeRunner });
+    var sub = document.createElement('span');
+    sub.textContent = '또는 분류에서 찾기:';
+    noneEl.appendChild(sub);
+    var box = document.createElement('div');
+    box.className = 'spNoneCats';
+    var tabs = spNavEl ? spNavEl.querySelectorAll('.spNavi[data-spcat]') : [];
+    for (i = 0; i < tabs.length; i++){
+      var cat = tabs[i].getAttribute('data-spcat');
+      var cb = spChip((tabs[i].textContent || '').trim(), '', spCatRunner(cat));
+      box.appendChild(cb);
+      spNavList.push({ el: cb, run: spCatRunner(cat) });
+    }
+    noneEl.appendChild(box);
+    spOpenPop();
+    spSay('결과 없음');
+    return;
+  }
+  for (i = 0; i < scored.length; i++){
+    li = spRow(scored[i].it, toks, i);
+    listEl.appendChild(li);
+    spNavList.push({ el: li, run: spGoRunner(scored[i].it) });
+  }
+  spSetActive(0);
+  spOpenPop();
+  spSay('결과 ' + scored.length + '개');
+}
+
+function spRender(){
+  spBuild();
+  spCatLabels();
+  var raw = inEl.value;
+  var q = raw.trim();
+  clearEl.hidden = (raw.length === 0);
+  if (!q){ spTag = null; spAllTags = false; spWipe(); spClosePop(); spSay(''); return; }
+  if (spTag){ spRenderTagPicked(); return; }
+  if (q.charAt(0) === '#'){
+    var frag = spNorm(q.slice(1));
+    if (!frag) spRenderTagList();
+    else spRenderTagFilter(frag);
+    return;
+  }
+  spAllTags = false;
+  spRenderQuery(q);
+}
+
+/* ── 이벤트 ── */
+inEl.addEventListener('input', function(){ spTag = null; spRender(); });
+inEl.addEventListener('focus', function(){ spBuild(); if (inEl.value.trim()) spRender(); });
+inEl.addEventListener('blur', function(){
+  setTimeout(function(){
+    if (barEl && !barEl.contains(document.activeElement)) spClosePop();
+  }, 0);
+});
+clearEl.addEventListener('mousedown', function(e){ e.preventDefault(); });
+clearEl.addEventListener('click', function(e){ e.stopPropagation(); spReset(true); });
+
+inEl.addEventListener('keydown', function(e){
+  var k = e.key, n = spNavList.length;
+  if (k === 'ArrowDown' || k === 'ArrowUp'){
+    if (popEl.hidden && inEl.value.trim()){ spRender(); n = spNavList.length; }
+    if (!n) return;
+    e.preventDefault();
+    if (k === 'ArrowDown') spSetActive(spActive + 1 >= n ? 0 : spActive + 1);
+    else if (spActive < 0) spSetActive(n - 1);
+    else if (spActive === 0) spSetActive(-1);
+    else spSetActive(spActive - 1);
+    return;
+  }
+  if ((k === 'Home' || k === 'End') && !popEl.hidden && n){
+    e.preventDefault();
+    spSetActive(k === 'Home' ? 0 : n - 1);
+    return;
+  }
+  if (k === 'Enter'){
+    if (popEl.hidden || !n) return;
+    e.preventDefault();
+    var i = spActive >= 0 ? spActive : 0;
+    if (spNavList[i]) spNavList[i].run();
+  }
+});
+
+/* Esc 3단 — window 캡처라 기존 document 캡처(설정 닫기)보다 먼저 판정한다.
+   1단: 결과 팝만 닫기 · 2단: 질의/태그 비우기 · 3단: 흘려보내 설정 창이 닫히게 둔다. */
+window.addEventListener('keydown', function(e){
+  if (e.key !== 'Escape') return;
+  if (!isSettingsOpen()) return;
+  if (ctxMenu && !ctxMenu.hidden) return;
+  if (confirmPop) return;
+  if (!popEl.hidden){
+    spClosePop();
+    e.stopPropagation();
+    e.preventDefault();
+    try{ inEl.focus(); }catch(err){}
+    return;
+  }
+  if (inEl.value.length > 0 || spTag){
+    spReset(true);
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
+
+/* 설정 창이 열리고 닫힐 때 검색 상태를 초기화 — closeSettings/openSettings 를 고치지 않고
+   class 변화만 관찰한다 (기존 함수 무수정). */
+try{
+  new MutationObserver(function(){
+    if (isSettingsOpen()){ spBuild(); spCatLabels(); }
+    else if (inEl.value || !popEl.hidden || spTag) spReset(false);
+  }).observe(settingsPanel, { attributes:true, attributeFilter:['class'] });
+}catch(e){}
+/* 셸이 [백업]·[시작 프로그램] 섹션을 붙이면 색인을 다시 만든다 */
+try{ new MutationObserver(function(){ spBuild(); }).observe(spBodyEl, { childList:true }); }catch(e){}
+
+spCatLabels();
+spBuild();
+})();
 
 /* ---------- init ---------- */
 /* 첫 렌더는 무애니메이션 — 창 자체가 이제 막 나타나는 시점이라 페이드가 보이지 않는 데다,

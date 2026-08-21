@@ -1385,6 +1385,149 @@ body.fx-off .sp-wrap.ovf:not(.at-bottom) .sp-hint { animation: none; transition:
 .tool-btn.sp-danger:hover { background: rgba(179,53,44,0.2); color: #8f271f; }
 .sp-hr { margin: 10px 0 0; border-top: 1px dashed rgba(94,62,24,0.22); }
 
+/* ── 설정 검색 (발주 #15): 자연어 + #태그 ──
+   자리: .sp-frame 의 직속 자식(.sp-head 와 .sp-main 사이). #settingsPanel 의 자식 목록을
+   건드리지 않으므로 카테고리 필터(spApplyCat)·MutationObserver·넘침 어포던스와 무간섭이다.
+   팝업은 절대 위치 오버레이라 열려도 .sp-main 의 실측 높이를 바꾸지 않는다.
+   모션은 opacity/transform 전용 — fx-calm/fx-off 와 prefers-reduced-motion 에서 즉시 상태. */
+.sp-search { position: relative; flex: none; margin-top: 8px; }
+.sp-search-in {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 7px 30px 8px 10px;
+  border: 1px solid rgba(94,62,24,0.32);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.74);
+  color: #4a3421;
+}
+.sp-search-in::-webkit-search-cancel-button { display: none; }
+.sp-search-in::placeholder { color: rgba(107,77,46,0.6); }
+.sp-search-in:focus { outline: 2px solid #8c5a2b; outline-offset: 1px; }
+.sp-search-x {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  border: 0;
+  border-radius: 8px;
+  padding: 3px 8px 4px;
+  background: rgba(94,62,24,0.12);
+  color: #6b4d2e;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sp-search-x:hover { background: rgba(94,62,24,0.22); }
+.sp-search-pop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 6;
+  max-height: min(360px, 52vh);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,252,244,0.995), rgba(248,240,222,0.995));
+  box-shadow: 0 12px 30px rgba(43,24,8,0.35), inset 0 0 0 1px rgba(140,90,43,0.28);
+}
+.sp-search-list { margin: 0; padding: 0; list-style: none; }
+.sp-sr {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 8px;
+  align-items: baseline;
+  padding: 7px 9px 8px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.sp-sr + .sp-sr { margin-top: 2px; }
+.sp-sr-name { font-size: 15px; color: #4a3421; }
+.sp-sr-name mark, .sp-sr-sub mark { background: #FFD966; color: #4a3421; border-radius: 3px; padding: 0 1px; }
+.sp-sr-cat { font-size: 12.5px; color: #6b4d2e; opacity: 0.85; white-space: nowrap; }
+.sp-sr-sub { grid-column: 1 / -1; margin-top: 2px; font-size: 12.5px; line-height: 1.35; color: #6b4d2e; opacity: 0.82; word-break: keep-all; }
+.sp-sr.act, .sp-sr:hover { background: rgba(255,217,102,0.5); }
+.sp-sr.act { box-shadow: inset 0 0 0 1px rgba(140,90,43,0.45); }
+.sp-search-chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 4px 3px 2px; }
+.sp-tag {
+  border: 1px solid rgba(94,62,24,0.3);
+  border-radius: 11px;
+  padding: 3px 10px 4px;
+  background: rgba(255,255,255,0.78);
+  color: #6b4d2e;
+  font-family: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.sp-tag:hover, .sp-tag.act { background: #FFD966; color: #4a3421; }
+.sp-tag.act { box-shadow: 0 1px 0 rgba(122,84,34,0.4); }
+.sp-search-pill { display: flex; align-items: center; gap: 6px; padding: 3px 3px 6px; font-size: 13.5px; color: #6b4d2e; }
+.sp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 11px;
+  padding: 3px 4px 4px 10px;
+  background: #FFD966;
+  color: #4a3421;
+  font-size: 13.5px;
+}
+.sp-pill-x {
+  border: 0;
+  border-radius: 9px;
+  padding: 1px 6px 2px;
+  background: rgba(94,62,24,0.16);
+  color: #4a3421;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sp-pill-x:hover { background: rgba(94,62,24,0.3); }
+.sp-search-none { padding: 8px 9px 6px; font-size: 13.5px; line-height: 1.45; color: #6b4d2e; word-break: keep-all; }
+.sp-search-none .sp-none-act { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+.sp-search-lab { padding: 5px 4px 2px; font-size: 12.5px; color: #6b4d2e; opacity: 0.78; }
+.sp-search-chips .sp-search-lab { flex: 0 0 100%; }
+.sp-sr-none { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* 이동 후 강조 — 어디로 갔는지 눈으로 잡아 준다. 색만 얹고 레이아웃은 건드리지 않는다. */
+.sp-hl { animation: sp-hl-pulse 1.9s ease-out 1; border-radius: 10px; }
+@keyframes sp-hl-pulse {
+  0%   { box-shadow: 0 0 0 3px rgba(255,217,102,0.95), 0 0 0 5px rgba(140,90,43,0.5); }
+  70%  { box-shadow: 0 0 0 3px rgba(255,217,102,0.75), 0 0 0 5px rgba(140,90,43,0.35); }
+  100% { box-shadow: 0 0 0 3px rgba(255,217,102,0), 0 0 0 5px rgba(140,90,43,0); }
+}
+body.fx-calm .sp-hl, body.fx-off .sp-hl { animation: none; box-shadow: 0 0 0 3px rgba(255,217,102,0.95), 0 0 0 5px rgba(140,90,43,0.5); }
+body.fx-calm .sp-search-in, body.fx-calm .sp-tag, body.fx-calm .sp-sr { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sp-hl { animation: none; box-shadow: 0 0 0 3px rgba(255,217,102,0.95), 0 0 0 5px rgba(140,90,43,0.5); }
+  .sp-search-in, .sp-tag, .sp-sr { transition: none; }
+}
+/* 다크 프리셋 조화 */
+html[data-theme-preset="dark"] .sp-search-in {
+  background: rgba(172,162,215,0.14);
+  border-color: rgba(160,150,200,0.42);
+  color: #e8e4f4;
+}
+html[data-theme-preset="dark"] .sp-search-in::placeholder { color: rgba(220,214,244,0.6); }
+html[data-theme-preset="dark"] .sp-search-in:focus { outline-color: #cfc8e6; }
+html[data-theme-preset="dark"] .sp-search-x { background: rgba(172,162,215,0.2); color: #e8e4f4; }
+html[data-theme-preset="dark"] .sp-search-x:hover { background: rgba(172,162,215,0.34); }
+html[data-theme-preset="dark"] .sp-search-pop {
+  background: linear-gradient(180deg, rgba(60,56,80,0.99), rgba(44,41,60,0.99));
+  box-shadow: 0 12px 30px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(150,140,195,0.34);
+}
+html[data-theme-preset="dark"] .sp-sr-name { color: #e8e4f4; }
+html[data-theme-preset="dark"] .sp-sr-cat,
+html[data-theme-preset="dark"] .sp-sr-sub,
+html[data-theme-preset="dark"] .sp-search-none,
+html[data-theme-preset="dark"] .sp-search-lab,
+html[data-theme-preset="dark"] .sp-search-pill { color: #d6d0ee; }
+html[data-theme-preset="dark"] .sp-sr.act, html[data-theme-preset="dark"] .sp-sr:hover { background: rgba(172,162,215,0.3); }
+html[data-theme-preset="dark"] .sp-tag { background: rgba(172,162,215,0.16); border-color: rgba(160,150,200,0.42); color: #e8e4f4; }
+html[data-theme-preset="dark"] .sp-tag:hover, html[data-theme-preset="dark"] .sp-tag.act { background: #FFD966; color: #4a3421; }
+
 /* ── 설정: 애니메이션 줄임/끔 (기본 = 클래스 없음 → 현행 그대로) ── */
 body.fx-calm .pnote, body.fx-calm .swatch, body.fx-calm .add-btn, body.fx-calm .sndbtn, body.fx-calm .ndel,
 body.fx-calm .tool-btn, body.fx-calm .ctx-item, body.fx-calm .ctx-dot, body.fx-calm .rgrip,
@@ -1617,6 +1760,29 @@ html[data-pro-theme="lavender"] #board {
     <button type="button" class="notice-close sp-close" id="spClose" title="설정 닫기 (Esc)">✕</button>
   </div>
 
+
+  <!-- 설정 검색 (발주 #15) — .sp-frame 직속 자식이라 #settingsPanel 의 카테고리 필터와 무간섭.
+       훅: [data-settings-search](입력) · [data-settings-search-results](결과 목록) ·
+       [data-settings-hit](결과 행, data-sk = 사전 id) · [data-settings-tag](태그 칩) ·
+       [data-settings-tag-pill](선택된 태그) · [data-settings-search-none](빈 결과).
+       기존 [data-search](메모 검색)와 이름이 겹치지 않는다. -->
+  <div class="sp-search" id="spSearchBar">
+    <input type="search" id="spSearchInput" class="sp-search-in"
+           data-settings-search
+           role="combobox" aria-expanded="false" aria-controls="spSearchList"
+           aria-autocomplete="list" aria-label="설정 검색" autocomplete="off"
+           placeholder="🔍 설정 찾기 — 예: 글자 크기, 자동시작, #백업">
+    <button type="button" id="spSearchClear" class="sp-search-x" hidden
+            aria-label="검색어 지우기" title="지우기 (Esc)">✕</button>
+    <div class="sp-search-pop" id="spSearchPop" hidden>
+      <div class="sp-search-pill" id="spSearchPill" hidden></div>
+      <ul class="sp-search-list" id="spSearchList" data-settings-search-results
+          role="listbox" aria-label="검색 결과"></ul>
+      <div class="sp-search-chips" id="spSearchChips" hidden></div>
+      <div class="sp-search-none" id="spSearchNone" data-settings-search-none hidden></div>
+    </div>
+    <span class="sp-sr-none" id="spSearchLive" role="status" aria-live="polite"></span>
+  </div>
   <div class="sp-main">
     <!-- 카테고리 목록 — 형제 앱(캘린더)과 공통 카테고리는 같은 이름·같은 순서다 -->
     <nav class="sp-nav" id="spNav" role="tablist" aria-label="설정 분류">
@@ -5478,6 +5644,8 @@ html[data-pro-theme="lavender"] #board {
     syncPanelUI();
     refreshDataPanel();
     spSetCat(SP_CAT_DEFAULT, true);   /* 열 때 첫 카테고리 활성 + 포커스는 모달 안으로 */
+    spBuildIndex();                   /* 설정 검색 색인 갱신 — 셀이 나중에 붙인 섹션까지 포함 */
+    spResetSearch();                  /* 검색상자는 항상 빈 상태로 열린다 (저장 키 없음) */
     spUpdateOvf();
   }
 
@@ -5492,6 +5660,7 @@ html[data-pro-theme="lavender"] #board {
     spEl.classList.remove('open');
     settingsBtn.setAttribute('aria-expanded', 'false');
     settingsBtn.title = '설정 열기';
+    spResetSearch();              /* 검색 상자는 닫을 때 비운다 */
   }
 
   settingsBtn.addEventListener('click', function () {
@@ -6736,6 +6905,855 @@ html[data-pro-theme="lavender"] #board {
       applySettings();
     }
   });
+
+  /* ══ 설정 검색 (발주 #15) — 자연어 질의 + # 태그 ══════════════════════════════
+     · 전부 이 컴퓨터 안에서 계산한다. 네트워크 요청 0건(사전은 아래 리터럴이 전부).
+     · DOM 삽입은 textContent/createElement 만 쓴다 (하이라이트 <mark> 포함).
+     · 저장 키를 새로 만들지 않는다 — 검색 상태는 이 세션의 메모리에만 있다.
+     · 기존 [data-search](메모 검색)와 훅 이름이 겹치지 않는다: [data-settings-search].
+     ────────────────────────────────────────────────────────────────────────── */
+
+  /* 결과 배지에 쓰는 카테고리 이름 — 좌측 카테고리 목록의 라벨과 같은 문자열 */
+  var SP_CAT_LABEL = {
+    display: '🖋 표시', layout: '🧲 배치', fx: '✨ 효과·소리',
+    safety: '🛡 안전', data: '💾 데이터', about: 'ℹ️ 정보',
+    decor: '🎨 꾸미기 패널', toolbar: '🧰 툴바'
+  };
+
+  /* 사전 1행 = 설정 1개. sel 은 기존 요소를 그대로 가리킨다(신규 속성 부착 없음).
+     shell:true = Electron 셸이 주입하는 항목 — DOM 에 없으면 색인에서 자동으로 빠진다. */
+  var SP_DICT = [
+    { id: 'pt.font.size', label: '글자 크기', cat: 'display', sel: '#spFontSize', panel: null, shell: false,
+      tags: ['표시', '메모', '글씨', '크기', '접근성'],
+      syn: ['글씨크기', '폰트크기', '텍스트크기', '잘안보여', '눈아파', '확대', '축소', '노안', 'fontsize', '글씨커', '글씨작', '작게보기', '크게보기'],
+      opts: ['작게', '보통', '크게'],
+      help: '이미 붙여 둔 메모까지 함께 바뀌어요.' },
+    { id: 'pt.font.family', label: '글꼴', cat: 'display', sel: '#spFont', panel: null, shell: false,
+      tags: ['표시', '메모', '글씨'],
+      syn: ['폰트', '서체', '손글씨', '필기체', '고딕', '명조', '글씨체', '반듯한글씨', 'font', 'typeface', '가독성'],
+      opts: ['손글씨', '고딕'],
+      help: '이미 붙여 둔 메모까지 함께 바뀌어요.' },
+    { id: 'pt.new.color', label: '새 메모 기본 색', cat: 'display', sel: '#spDefColor', panel: null, shell: false,
+      tags: ['표시', '메모', '색', '자동'],
+      syn: ['기본색', '색상', '컬러', '노랑', '분홍', '연두', '하늘', '하양', '자동순환', '처음색', 'defaultcolor', 'color'],
+      opts: ['자동 순환', '노랑', '분홍', '연두', '하늘', '하양'],
+      help: '앞으로 만드는 메모에만 적용돼요 — 이미 붙인 메모는 그대로예요.' },
+    { id: 'pt.new.size', label: '새 메모 기본 크기', cat: 'display', sel: '#spDefSize', panel: null, shell: false,
+      tags: ['표시', '메모', '크기'],
+      syn: ['기본크기', '메모크기', '포스트잇크기', '처음크기', '크게만들기', '넓게', 'notesize'],
+      opts: ['기본', '크게'],
+      help: '앞으로 만드는 메모에만 적용돼요 — 이미 붙인 메모는 그대로예요.' },
+    { id: 'pt.new.tilt', label: '새 메모 기울임', cat: 'display', sel: '#spTilt', panel: null, shell: false,
+      tags: ['표시', '메모', '꾸미기'],
+      syn: ['기울기', '회전', '삐뚤', '비뚤', '각도', '반듯', '똑바로', '정렬', 'tilt', 'rotate'],
+      opts: ['자연스럽게', '반듯하게'],
+      help: '앞으로 만드는 메모에만 적용돼요 — 이미 붙인 메모는 그대로예요.' },
+    { id: 'pt.new.autofit', label: '쓰면 크기 자동', cat: 'display', sel: '#spAutoFit', panel: null, shell: false,
+      tags: ['메모', '크기', '자동'],
+      syn: ['자동크기', '내용에맞추기', '자동맞춤', '늘어나기', '글많으면커짐', '자동조절', 'autofit', 'autosize', '넘침'],
+      opts: ['끔', '켬'],
+      help: '켜면 입력을 마칠 때 그 메모만 내용에 맞는 크기로 바뀌어요.' },
+    { id: 'pt.shell.startup', label: '윈도우 시작 시 자동 실행', cat: 'display', sel: '[data-startup-toggle]', panel: null, shell: true,
+      tags: ['시작', '자동', '시스템'],
+      syn: ['자동시작', '자동실행', '부팅', '켤때', '켜질때', '컴퓨터켤때', '시작프로그램', '스타트업', '로그인', '윈도우시작', '시작시', '자동으로열기', '자동으로켜기', '자동띄우기', 'startup', 'autostart', 'autorun', 'boot', 'login', 'openatlogin'],
+      opts: [],
+      help: '컴퓨터를 켜면 이 앱이 스스로 열려요.' },
+    { id: 'pt.shell.onboarding', label: '처음 안내 다시 보기', cat: 'display', sel: '[data-onboarding-replay]', panel: null, shell: true,
+      tags: ['안내', '시작', '정보'],
+      syn: ['튜토리얼', '온보딩', '사용법', '처음', '다시보기', '도움말', '가이드', '설명', '어떻게쓰나', '초보', 'tutorial', 'onboarding', 'help', 'guide'],
+      opts: [],
+      help: '처음 실행 때 봤던 안내를 다시 처음부터 보여줘요.' },
+    { id: 'pt.arrange.mode', label: '보드 정리 방식', cat: 'layout', sel: '#spArrange', panel: null, shell: false,
+      tags: ['보드', '자동', '메모'],
+      syn: ['정리', '자동정리', '한번에정리', '겹침', '겹쳐', '정렬', '배열', '격자', '그리드', '마소너리', '시간순', '최근순', '읽는순서', 'arrange', 'tidy', '어질러'],
+      opts: ['기본 (읽는 순서)', '3×3 격자', '2×2 격자', '동적 마소너리', '시간순'],
+      help: '✨ 정리 단추와 보드 우클릭 메뉴의 “한 번에 정리”가 이 방식을 사용해요.' },
+    { id: 'pt.anim', label: '애니메이션', cat: 'fx', sel: '#spAnim', panel: null, shell: false,
+      tags: ['효과', '접근성'],
+      syn: ['모션', '움직임', '애니', '부드럽게', '끄기', '줄이기', '버벅', '렉', '어지러', '멀미', 'animation', 'motion', 'reducemotion'],
+      opts: ['켬', '줄임', '끔'],
+      help: '움직임을 줄이거나 아예 끌 수 있어요.' },
+    { id: 'pt.sound.mute', label: '음소거', cat: 'fx', sel: '#spMute', panel: null, shell: false,
+      tags: ['소리', '효과'],
+      syn: ['소리끄기', '무음', '조용히', '시끄러', '효과음', '삐소리', 'mute', 'silent', 'sound', '소리안나게'],
+      opts: [],
+      help: '툴바의 🔊 단추와 항상 같이 움직여요.' },
+    { id: 'pt.sound.vol', label: '음량', cat: 'fx', sel: '#spVol', panel: null, shell: false,
+      tags: ['소리'],
+      syn: ['볼륨', '소리크기', '음량조절', 'volume', 'vol', '소리줄이기'],
+      opts: [],
+      help: '툴바의 ▾ 음량 서랍과 항상 같이 움직여요.' },
+    { id: 'pt.safe.confirmdelete', label: '삭제 전 확인', cat: 'safety', sel: '#spConfirmDelete', panel: null, shell: false,
+      tags: ['안전', '복구'],
+      syn: ['삭제확인', '지우기전', '실수로삭제', '되묻기', '한번더물어보기', '확인창', '실수방지', '날아감', 'confirm', 'delete'],
+      opts: ['끔', '켬'],
+      help: '켜면 메모·보드·스티커·배경·손상 백업을 지우기 전에 한 번 더 물어봐요.' },
+    { id: 'pt.data.export', label: '내보내기', cat: 'data', sel: '#spExport', panel: null, shell: false,
+      tags: ['데이터', '파일', '백업'],
+      syn: ['저장', '백업파일', 'json', '파일로저장', '다운로드', '옮기기', '이사', 'export', 'save', 'dump'],
+      opts: [],
+      help: '모든 보드의 메모를 파일 하나로 저장해요.' },
+    { id: 'pt.data.import', label: '가져오기', cat: 'data', sel: '#spImport', panel: null, shell: false,
+      tags: ['데이터', '파일', '복구'],
+      syn: ['불러오기', '복원', '되살리기', '합치기', '병합', 'import', 'load', 'restore', '옮겨오기'],
+      opts: [],
+      help: '내보낸 파일에서 메모를 다시 불러와요.' },
+    { id: 'pt.data.exportimages', label: '내보내기에 이미지 포함', cat: 'data', sel: '#spExportImages', panel: null, shell: false,
+      tags: ['데이터', '이미지', '저장용량'],
+      syn: ['사진포함', '이미지포함', '배경포함', '스티커포함', '용량', '파일커짐', '무거워', 'includeimages'],
+      opts: [],
+      help: '배경·사진 스티커까지 함께 내보내요 — 파일이 커져요.' },
+    { id: 'pt.data.usage', label: '저장 용량', cat: 'data', sel: '#spGaugeFill', panel: null, shell: false,
+      tags: ['데이터', '저장용량'],
+      syn: ['용량', '얼마나', '공간', '꽉참', '가득', '부족', '남은용량', '사진용량', 'quota', 'storage', 'usage', '저장안됨'],
+      opts: [],
+      help: '이 컴퓨터에 저장된 용량 추정치예요.' },
+    { id: 'pt.data.corrupt', label: '손상 백업', cat: 'data', sel: '#spCorruptList', panel: null, shell: false,
+      tags: ['데이터', '복구', '백업', '안전'],
+      syn: ['손상', '깨짐', '오류', '백업키', 'corrupt', '망가짐', '찌꺼기', '모두정리', 'cleanup'],
+      opts: [],
+      help: '저장 데이터가 깨졌을 때 원본을 따로 보관해 둔 것들이에요.' },
+    { id: 'pt.shell.backup.folder', label: '백업 저장 폴더', cat: 'data', sel: '[data-backup-folder]', panel: null, shell: true,
+      tags: ['백업', '클라우드', '시스템'],
+      syn: ['백업위치', '어디에저장', '폴더경로', '저장경로', '원드라이브', 'onedrive', '구글드라이브', '드롭박스', '동기화폴더', 'path', 'folder'],
+      opts: [],
+      help: '백업 파일이 놓이는 폴더예요. 클라우드 동기화 폴더로 두면 자동으로 올라가요.' },
+    { id: 'pt.shell.backup.choose', label: '폴더 변경', cat: 'data', sel: '[data-backup-choose]', panel: null, shell: true,
+      tags: ['백업', '클라우드', '파일'],
+      syn: ['폴더바꾸기', '위치변경', '경로변경', '폴더선택', '백업폴더', 'choosefolder'],
+      opts: [],
+      help: '백업 파일을 둘 폴더를 직접 고를 수 있어요.' },
+    { id: 'pt.shell.backup.now', label: '지금 백업', cat: 'data', sel: '[data-backup-now]', panel: null, shell: true,
+      tags: ['백업', '데이터'],
+      syn: ['지금백업', '바로백업', '수동백업', '즉시', 'backupnow', 'manualbackup'],
+      opts: [],
+      help: '기다리지 않고 이 순간의 백업을 바로 한 번 만들어요.' },
+    { id: 'pt.shell.backup.images', label: '백업에 이미지 포함', cat: 'data', sel: '[data-backup-images]', panel: null, shell: true,
+      tags: ['백업', '이미지', '저장용량'],
+      syn: ['사진포함', '이미지포함', '배경사진', '스티커사진', '용량커짐', 'includeimages'],
+      opts: [],
+      help: '배경·사진 스티커까지 백업에 담아요 — 파일이 커져요.' },
+    { id: 'pt.shell.backup.auto', label: '매일 자동 백업', cat: 'data', sel: '[data-backup-auto]', panel: null, shell: true,
+      tags: ['백업', '자동', '프리미엄'],
+      syn: ['자동백업', '매일백업', '예약백업', '정기백업', '스케줄', '하루한번', '알아서백업', 'autobackup', 'daily', '프로', 'pro', '유료'],
+      opts: [],
+      help: '하루 한 번 알아서 백업을 만들어요 (프리미엄).' },
+    { id: 'pt.about.version', label: '앱 정보·버전', cat: 'about', sel: '.sp-info', panel: null, shell: false,
+      tags: ['정보'],
+      syn: ['버전', 'about', 'version', '몇버전', '빌드', '앱정보', '제품정보'],
+      opts: [],
+      help: '이 앱의 이름과 판(rev)을 적어 둔 자리예요.' },
+    { id: 'pt.about.shortcuts', label: '단축키 안내', cat: 'about', sel: '.sp-info', panel: null, shell: false,
+      tags: ['정보', '안내'],
+      syn: ['단축키', '키보드', '핫키', 'esc', '조작법', 'shortcut', 'hotkey', 'keyboard'],
+      opts: [],
+      help: 'Esc = 닫기 · 메모 클릭 = 편집 · 위쪽 끌기 = 이동 · 우클릭 = 메뉴.' },
+    { id: 'pt.about.licenses', label: '에셋·오픈소스 고지', cat: 'about', sel: '[data-licenses]', panel: null, shell: false,
+      tags: ['정보', '라이선스'],
+      syn: ['라이선스', '저작권', '오픈소스', '고지', '출처', '폰트출처', 'cc0', 'ofl', 'mit', 'license', 'credit'],
+      opts: [],
+      help: '쓰인 폰트·질감·오픈소스의 출처와 라이선스를 적어 둔 자리예요.' },
+    { id: 'pt.theme', label: '보드 테마', cat: 'display', sel: '#themeSel', panel: 'toolbar', shell: false,
+      tags: ['표시', '꾸미기', '색'],
+      syn: ['테마', '다크', '다크모드', '어둡게', '밝게', '라이트', '야간', '눈부심', 'theme', 'dark', 'light', 'night'],
+      opts: ['기본', '다크', '화이트'],
+      help: '툴바의 테마 고르개에서 바로 바꿀 수 있어요.' },
+    { id: 'pt.decor.bg', label: '보드 배경', cat: 'decor', sel: '#dpBg', panel: 'decor', shell: false,
+      tags: ['꾸미기', '배경', '보드'],
+      syn: ['배경', '바탕', '코르크', '나무', '우드', '리넨', '칠판', '벽지', '배경화면', 'background', 'wallpaper'],
+      opts: ['기본 코르크', '나무', '리넨', '칠판', '내 사진'],
+      help: '배경은 보드마다 따로 저장돼요.' },
+    { id: 'pt.decor.bgimage', label: '내 사진 배경', cat: 'decor', sel: '#dpBgUpload', panel: 'decor', shell: false,
+      tags: ['꾸미기', '배경', '이미지'],
+      syn: ['내사진', '사진배경', '사진넣기', '배경사진', '채우기', '타일', '배경제거', 'custombackground', 'upload'],
+      opts: ['채우기', '타일', '배경 제거'],
+      help: '사진은 이 컴퓨터의 이미지 저장소(IndexedDB)에 보관돼요.' },
+    { id: 'pt.decor.sticker', label: '스티커', cat: 'decor', sel: '#dpStSeason', panel: 'decor', shell: false,
+      tags: ['꾸미기', '보드'],
+      syn: ['스티커', '이모지', '장식', '붙이기', '계절', '자연', '기분', '사무', 'sticker', 'emoji', 'decoration'],
+      opts: ['계절·자연', '기분', '사무'],
+      help: '누르면 보드 가운데쯤에 붙어요. 스티커는 늘 포스트잇 뒤에 깔려요.' },
+    { id: 'pt.decor.photo', label: '사진 스티커', cat: 'decor', sel: '#dpPhotoAdd', panel: 'decor', shell: false,
+      tags: ['꾸미기', '이미지'],
+      syn: ['사진스티커', '폴라로이드', '액자', '사진붙이기', 'photo', 'polaroid'],
+      opts: [],
+      help: '폴라로이드 액자로 보드에 붙어요.' },
+    { id: 'pt.decor.tape', label: '테이프 색', cat: 'decor', sel: '#dpTapeColor', panel: 'decor', shell: false,
+      tags: ['꾸미기', '색', '메모'],
+      syn: ['테이프', '마스킹테이프', 'washi', 'tape', '테이프색상'],
+      opts: ['기본', '노랑', '분홍', '민트', '하늘'],
+      help: '테이프는 모든 보드에 함께 적용돼요.' },
+    { id: 'pt.decor.tapepattern', label: '테이프 무늬', cat: 'decor', sel: '#dpTapePattern', panel: 'decor', shell: false,
+      tags: ['꾸미기', '메모'],
+      syn: ['무늬', '줄무늬', '물방울', '무지', '패턴', 'pattern', 'stripe', 'dot'],
+      opts: ['무지', '줄무늬', '물방울'],
+      help: '테이프는 모든 보드에 함께 적용돼요.' },
+    { id: 'pt.decor.frame', label: '보드 프레임', cat: 'decor', sel: '#dpFrame', panel: 'decor', shell: false,
+      tags: ['꾸미기', '보드', '색'],
+      syn: ['프레임', '액자', '테두리', '틀', '그린', '네이비', '로즈', 'frame', 'border'],
+      opts: ['기본', '그린', '네이비', '로즈'],
+      help: '프레임은 모든 보드에 함께 적용돼요.' },
+    { id: 'pt.pro.license', label: '프리미엄 잠금 해제', cat: 'decor', sel: '#dpProLock', panel: 'decor', shell: false,
+      tags: ['프리미엄', '라이선스'],
+      syn: ['프리미엄', '프로', 'pro', 'premium', '유료', '결제', '잠금해제', '라이선스', '정품', '활성화', 'unlock', 'activate', 'license', '보드무제한'],
+      opts: [],
+      help: '라이선스 파일을 고르면 이 컴퓨터에서 서명을 확인한 뒤 잠금이 풀려요.' },
+    { id: 'pt.pro.theme', label: '프리미엄 테마', cat: 'decor', sel: '#dpProTheme', panel: 'decor', shell: false,
+      tags: ['프리미엄', '꾸미기', '표시'],
+      syn: ['심해블루', '라벤더안개', '프리미엄테마', 'deepsea', 'lavender', '유료테마'],
+      opts: ['심해 블루', '라벤더 안개', '끄기'],
+      help: '프리미엄 테마는 기본 테마 위에 얹혀요.' }
+  ];
+
+  /* 정규화: 소문자 + 공백·구분기호 제거. 사전·질의에 같은 함수를 쓴다. */
+  var SP_DROP = '\u00B7\u002D\u005F\u002E\u002C\u0028\u0029\u005B\u005D\u007B\u007D\u002F\u007E\u00D7\u0021\u003F\u003A\u003B\u0027\u0022\u0023\u0026\u002B\u002A\u0025\u0040\u007C\u003C\u003E\u005E\u0060\u2014\u2013\u2018\u2019\u201C\u201D';   /* 제거 대상 구분기호 (따옴표·#·괄호·줌표 등) */
+  function spNorm(s) {
+    var low = String(s == null ? '' : s).toLowerCase();
+    var out = '';
+    for (var i = 0; i < low.length; i++) {
+      var c = low.charAt(i);
+      if (low.charCodeAt(i) <= 32) continue;
+      if (SP_DROP.indexOf(c) !== -1) continue;
+      out += c;
+    }
+    return out;
+  }
+  /* 정규화 좌표 → 원문 좌표 역매핑 (하이라이트 구간 계산용) */
+  function spNormMap(s) {
+    var src = String(s == null ? '' : s);
+    var low = src.toLowerCase();
+    if (low.length !== src.length) return { n: spNorm(src), map: null };
+    var out = '';
+    var map = [];
+    for (var i = 0; i < low.length; i++) {
+      var c = low.charAt(i);
+      if (low.charCodeAt(i) <= 32) continue;
+      if (SP_DROP.indexOf(c) !== -1) continue;
+      out += c;
+      map.push(i);
+    }
+    return { n: out, map: map };
+  }
+
+  /* 한글 자모 분해 — 중간 입력·초성 검색을 받아 준다 */
+  var SP_CHO = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ',
+                'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+  var SP_JUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ',
+                 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ'];
+  var SP_JONG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ',
+                 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ',
+                 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+  function spJamo(s) {
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      var v = s.charCodeAt(i) - 0xAC00;
+      if (v >= 0 && v <= 11171) out += SP_CHO[Math.floor(v / 588)] + SP_JUNG[Math.floor((v % 588) / 28)] + SP_JONG[v % 28];
+      else out += s.charAt(i);
+    }
+    return out;
+  }
+  function spChoOf(s) {
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      var v = s.charCodeAt(i) - 0xAC00;
+      if (v >= 0 && v <= 11171) out += SP_CHO[Math.floor(v / 588)];
+      else out += s.charAt(i);
+    }
+    return out;
+  }
+  function spIsChoQuery(t) {
+    if (t.length < 2) return false;
+    for (var i = 0; i < t.length; i++) if (SP_CHO.indexOf(t.charAt(i)) === -1) return false;
+    return true;
+  }
+
+  /* 점수표 — 층이 낮을수록 약한 근거다. 동의어 층 = 태그 층 − 4. */
+  var SP_S = {
+    labelExact: 100, labelWord: 84, labelPrefix: 72, labelSub: 54,
+    tagExact: 60, tagPrefix: 42, tagSub: 30,
+    synExact: 56, synPrefix: 38, synSub: 26,
+    optSub: 26, helpSub: 12, jamoSub: 14, choLabel: 30, choTag: 20,
+    revPrefix: 26, revSub: 20, coverage: 30, floor: 12, limit: 8, tagLimit: 40
+  };
+
+  function spLayer(tok, v, ex, pre, sub) {
+    if (!v) return 0;
+    if (v === tok) return ex;
+    var at = v.indexOf(tok);
+    if (at === 0) return pre;
+    if (at > 0) return sub;
+    if (v.length >= 2) {                 /* 질의가 더 긴 경우: "부팅시" ⊃ "부팅" */
+      var rat = tok.indexOf(v);
+      if (rat === 0) return SP_S.revPrefix;
+      if (rat > 0) return SP_S.revSub;
+    }
+    return 0;
+  }
+  function spLayerList(tok, list, ex, pre, sub) {
+    var best = 0;
+    for (var i = 0; i < list.length; i++) {
+      var s = spLayer(tok, list[i], ex, pre, sub);
+      if (s > best) best = s;
+    }
+    return best;
+  }
+
+  var spIndex = [];      /* 색인(파생 필드 포함) */
+  var spTagList = [];    /* 가나다순 태그 목록 */
+
+  function spBuildIndex() {
+    spIndex = [];
+    for (var i = 0; i < SP_DICT.length; i++) {
+      var d = SP_DICT[i];
+      var el = null;
+      try { el = d.sel ? document.querySelector(d.sel) : null; } catch (err) { el = null; }
+      if (d.shell && !el) continue;                    /* 셸 미탑재(브라우저) — 색인에서 제외 */
+      var it = {
+        id: d.id, label: d.label, cat: d.cat, sel: d.sel, panel: d.panel,
+        tags: d.tags, syn: d.syn, opts: d.opts, help: d.help, ord: i, el: el
+      };
+      it._n = spNorm(d.label);
+      it._nj = spJamo(it._n);
+      it._cho = spChoOf(it._n);
+      it._words = String(d.label).split(/\s+/).map(spNorm).filter(function (w) { return !!w; });
+      it._tags = d.tags.map(spNorm);
+      it._syn = d.syn.map(spNorm);
+      it._opts = d.opts.map(spNorm);
+      it._help = spNorm(d.help);
+      it._altJ = it._tags.concat(it._syn).map(spJamo);
+      it._altC = it._tags.concat(it._syn).map(spChoOf);
+      spIndex.push(it);
+    }
+    var seen = {};
+    spTagList = [];
+    for (var k = 0; k < spIndex.length; k++) {
+      var tg = spIndex[k].tags;
+      for (var j = 0; j < tg.length; j++) {
+        if (seen[tg[j]]) continue;
+        seen[tg[j]] = 1;
+        spTagList.push(tg[j]);
+      }
+    }
+    spTagList.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
+  }
+
+  function spTokens(q) {
+    var parts = String(q || '').split(/\s+/);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var t = spNorm(parts[i]);
+      if (t) out.push(t);
+    }
+    return out;
+  }
+
+  function spScore(it, toks) {
+    var total = 0;
+    var hits = 0;
+    for (var i = 0; i < toks.length; i++) {
+      var tok = toks[i];
+      var best = 0;
+      var fields = 0;
+      var s = spLayer(tok, it._n, SP_S.labelExact, SP_S.labelPrefix, SP_S.labelSub);
+      /* 명칭의 한 낱말과 통째로 같으면 접두 일치보다 세게 본다 — 첫 낱말이면 조금 더 (백업 ↔ "백업 저장 폴더") */
+      for (var w = 0; w < it._words.length; w++) {
+        if (it._words[w] !== tok) continue;
+        var ws = SP_S.labelWord + (w === 0 ? 4 : 0);
+        if (s < ws) s = ws;
+      }
+      if (s) { fields++; if (s > best) best = s; }
+      var st = spLayerList(tok, it._tags, SP_S.tagExact, SP_S.tagPrefix, SP_S.tagSub);
+      if (st) { fields++; if (st > best) best = st; }
+      var sy = spLayerList(tok, it._syn, SP_S.synExact, SP_S.synPrefix, SP_S.synSub);
+      if (sy) { fields++; if (sy > best) best = sy; }
+      var so = 0;
+      for (var o = 0; o < it._opts.length; o++) { if (it._opts[o].indexOf(tok) >= 0) { so = SP_S.optSub; break; } }
+      if (so) { fields++; if (so > best) best = so; }
+      if (it._help && it._help.indexOf(tok) >= 0) { fields++; if (SP_S.helpSub > best) best = SP_S.helpSub; }
+      if (!best && tok.length >= 2) {                 /* 자모열 부분 일치 */
+        var tj = spJamo(tok);
+        if (it._nj.indexOf(tj) >= 0) { best = SP_S.jamoSub; fields++; }
+        else {
+          for (var a = 0; a < it._altJ.length; a++) {
+            if (it._altJ[a].indexOf(tj) >= 0) { best = SP_S.jamoSub - 2; fields++; break; }
+          }
+        }
+      }
+      if (!best && spIsChoQuery(tok)) {               /* 초성 질의 */
+        if (it._cho.indexOf(tok) === 0) best = SP_S.choLabel;
+        else if (it._cho.indexOf(tok) > 0) best = SP_S.choLabel - 4;
+        else {
+          for (var c = 0; c < it._altC.length; c++) {
+            if (it._altC[c].indexOf(tok) === 0) { best = SP_S.choTag; break; }
+          }
+        }
+        if (best) fields++;
+      }
+      /* 여러 갈래에서 함께 맞으면 아주 약한 가산 — 동점 정리용이라 3갈래에서 멈춘다 */
+      if (best) { total += best + Math.min(fields, 3) * 0.5; hits++; }
+    }
+    if (!hits) return 0;
+    return total + (hits - 1) * SP_S.coverage;
+  }
+
+  function spQuery(q) {
+    var toks = spTokens(q);
+    if (!toks.length) return [];
+    var out = [];
+    for (var i = 0; i < spIndex.length; i++) {
+      var sc = spScore(spIndex[i], toks);
+      if (sc >= SP_S.floor) out.push({ it: spIndex[i], score: sc });
+    }
+    out.sort(function (a, b) { return (b.score - a.score) || (a.it.ord - b.it.ord); });
+    return out.slice(0, SP_S.limit);
+  }
+
+  function spByTag(tag) {
+    var out = [];
+    for (var i = 0; i < spIndex.length; i++) {
+      if (spIndex[i].tags.indexOf(tag) !== -1) out.push({ it: spIndex[i], score: 0 });
+    }
+    return out.slice(0, SP_S.tagLimit);
+  }
+
+  /* ── 하이라이트: 정규화 좌표를 원문 좌표로 되돌려 <mark> 로 감싼다 (innerHTML 없음) ── */
+  function spRanges(text, toks) {
+    if (!toks || !toks.length) return [];
+    var nm = spNormMap(text);
+    if (!nm.map || nm.map.length !== nm.n.length) return [];
+    var rs = [];
+    for (var i = 0; i < toks.length; i++) {
+      var tok = toks[i];
+      if (!tok) continue;
+      var from = 0;
+      var at = nm.n.indexOf(tok, from);
+      while (at >= 0 && rs.length < 40) {
+        rs.push([nm.map[at], nm.map[at + tok.length - 1] + 1]);
+        from = at + tok.length;
+        at = nm.n.indexOf(tok, from);
+      }
+    }
+    rs.sort(function (a, b) { return a[0] - b[0]; });
+    var merged = [];
+    for (var k = 0; k < rs.length; k++) {
+      var last = merged.length ? merged[merged.length - 1] : null;
+      if (last && rs[k][0] <= last[1] + 2) { if (rs[k][1] > last[1]) last[1] = rs[k][1]; }
+      else merged.push([rs[k][0], rs[k][1]]);
+    }
+    return merged;
+  }
+  function spFillMarked(host, text, toks) {
+    var s = String(text == null ? '' : text);
+    var rs = spRanges(s, toks);
+    if (!rs.length) { host.textContent = s; return; }
+    var pos = 0;
+    for (var i = 0; i < rs.length; i++) {
+      if (rs[i][0] > pos) host.appendChild(document.createTextNode(s.slice(pos, rs[i][0])));
+      var m = document.createElement('mark');
+      m.textContent = s.slice(rs[i][0], rs[i][1]);
+      host.appendChild(m);
+      pos = rs[i][1];
+    }
+    if (pos < s.length) host.appendChild(document.createTextNode(s.slice(pos)));
+  }
+
+  /* ── UI 상태 ── */
+  var spIn = document.getElementById('spSearchInput');
+  var spClearBtn = document.getElementById('spSearchClear');
+  var spPop = document.getElementById('spSearchPop');
+  var spPillEl = document.getElementById('spSearchPill');
+  var spListEl = document.getElementById('spSearchList');
+  var spChipsEl = document.getElementById('spSearchChips');
+  var spNoneEl = document.getElementById('spSearchNone');
+  var spLiveEl = document.getElementById('spSearchLive');
+  var spPickedTag = null;      /* 확정된 #태그 (문자열) */
+  var spNavItems = [];         /* 방향키 대상 (결과 행 또는 태그 칩) */
+  var spActive = -1;
+  var spHlEl = null;
+  var spHlTimer = null;
+
+  function spClearNode(n) {
+    while (n.firstChild) n.removeChild(n.firstChild);
+  }
+
+  function spCatLabelOf(it) {
+    if (it.panel === 'decor') return SP_CAT_LABEL.decor;
+    if (it.panel === 'toolbar') return SP_CAT_LABEL.toolbar;
+    var el = it.el;
+    var sec = el && el.closest ? el.closest('.sp-sec') : null;
+    var cat = sec ? spSecCat(sec) : it.cat;
+    return SP_CAT_LABEL[cat] || SP_CAT_LABEL[it.cat] || '';
+  }
+
+  function spSubText(it) {
+    if (it.opts && it.opts.length) return it.opts.join(' · ') + (it.help ? ' — ' + it.help : '');
+    return it.help || '';
+  }
+
+  function spSetLive(msg) {
+    if (spLiveEl) spLiveEl.textContent = msg;
+  }
+
+  function spSetActive(i) {
+    for (var k = 0; k < spNavItems.length; k++) {
+      var on = k === i;
+      spNavItems[k].classList.toggle('act', on);
+      if (spNavItems[k].getAttribute('role') === 'option') {
+        spNavItems[k].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+      if (on) {
+        spIn.setAttribute('aria-activedescendant', spNavItems[k].id || '');
+        try { spNavItems[k].scrollIntoView({ block: 'nearest' }); } catch (err) { /* 무시 */ }
+      }
+    }
+    spActive = i;
+    if (i < 0) spIn.removeAttribute('aria-activedescendant');
+  }
+
+  function spOpenPop(on) {
+    spPop.hidden = !on;
+    spIn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (!on) { spNavItems = []; spActive = -1; spIn.removeAttribute('aria-activedescendant'); }
+  }
+
+  /* 결과 행 1개 */
+  function spMakeRow(it, toks, i) {
+    var li = document.createElement('li');
+    li.className = 'sp-sr';
+    li.id = 'spSr-' + i;
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
+    li.setAttribute('data-settings-hit', '');
+    li.setAttribute('data-sk', it.id);
+    var name = document.createElement('span');
+    name.className = 'sp-sr-name';
+    spFillMarked(name, it.label, toks);
+    li.appendChild(name);
+    var cat = document.createElement('span');
+    cat.className = 'sp-sr-cat';
+    cat.textContent = spCatLabelOf(it);
+    li.appendChild(cat);
+    var sub = spSubText(it);
+    if (sub) {
+      var subEl = document.createElement('span');
+      subEl.className = 'sp-sr-sub';
+      spFillMarked(subEl, sub.length > 96 ? sub.slice(0, 96) + '…' : sub, toks);
+      li.appendChild(subEl);
+    }
+    li._spGo = function () { spGoto(it); };
+    return li;
+  }
+
+  function spMakeTagChip(tag, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sp-tag';
+    b.id = 'spTagChip-' + i;
+    b.setAttribute('data-settings-tag', '');
+    b.setAttribute('data-tag', tag);
+    b.textContent = '#' + tag;
+    b._spGo = function () { spPickTag(tag); };
+    return b;
+  }
+
+  function spMakeCatChip(cat, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sp-tag';
+    b.id = 'spCatChip-' + i;
+    b.setAttribute('data-settings-cat', '');
+    b.setAttribute('data-cat', cat);
+    b.textContent = SP_CAT_LABEL[cat] || cat;
+    b._spGo = function () {
+      spResetSearch();
+      spSetCat(cat, true);
+    };
+    return b;
+  }
+
+  /* ── 렌더 ── */
+  function spRender() {
+    if (!spIn) return;
+    var q = String(spIn.value || '');
+    spClearBtn.hidden = !q && !spPickedTag;
+    spClearNode(spListEl);
+    spClearNode(spChipsEl);
+    spClearNode(spNoneEl);
+    spClearNode(spPillEl);
+    spNavItems = [];
+    spListEl.hidden = false;
+    spChipsEl.hidden = true;
+    spNoneEl.hidden = true;
+    spPillEl.hidden = true;
+
+    /* ── TAGPICKED: 태그가 확정된 상태 ── */
+    if (spPickedTag) {
+      spPillEl.hidden = false;
+      var pillLab = document.createElement('span');
+      pillLab.textContent = '태그';
+      spPillEl.appendChild(pillLab);
+      var pill = document.createElement('span');
+      pill.className = 'sp-pill';
+      pill.setAttribute('data-settings-tag-pill', '');
+      pill.setAttribute('data-tag', spPickedTag);
+      var pillTxt = document.createElement('span');
+      pillTxt.textContent = '#' + spPickedTag;
+      pill.appendChild(pillTxt);
+      var px = document.createElement('button');
+      px.type = 'button';
+      px.className = 'sp-pill-x';
+      px.setAttribute('aria-label', '태그 해제');
+      px.title = '태그 해제 (Esc)';
+      px.textContent = '✕';
+      px.addEventListener('click', function () { spPickTag(null); });
+      pill.appendChild(px);
+      spPillEl.appendChild(pill);
+
+      var hits = spByTag(spPickedTag);
+      if (!hits.length) {
+        spListEl.hidden = true;
+        spNoneEl.hidden = false;
+        var p0 = document.createElement('p');
+        p0.textContent = '#' + spPickedTag + ' 에 해당하는 설정이 없어요.';
+        spNoneEl.appendChild(p0);
+        spSetLive('결과 없음');
+      } else {
+        for (var i = 0; i < hits.length; i++) {
+          var li = spMakeRow(hits[i].it, [], i);
+          spListEl.appendChild(li);
+          spNavItems.push(li);
+        }
+        spSetLive('결과 ' + hits.length + '개');
+      }
+      spOpenPop(true);
+      spSetActive(-1);
+      return;
+    }
+
+    /* ── IDLE ── */
+    if (!q) { spOpenPop(false); spSetLive(''); return; }
+
+    /* ── TAGLIST / TAGFILTER: '#' 로 시작 ── */
+    if (q.charAt(0) === '#') {
+      var frag = spNorm(q.slice(1));
+      var list = [];
+      var t;
+      for (t = 0; t < spTagList.length; t++) {
+        if (!frag || spNorm(spTagList[t]).indexOf(frag) === 0) list.push(spTagList[t]);
+      }
+      if (!list.length && frag) {                 /* 접두가 없으면 부분 포함까지 */
+        for (t = 0; t < spTagList.length; t++) {
+          if (spNorm(spTagList[t]).indexOf(frag) >= 0) list.push(spTagList[t]);
+        }
+      }
+      spListEl.hidden = true;
+      spChipsEl.hidden = false;
+      var lab = document.createElement('div');
+      lab.className = 'sp-search-lab';
+      lab.textContent = frag ? '#' + frag + ' 로 시작하는 태그' : '태그를 골라 보세요';
+      spChipsEl.appendChild(lab);
+      if (!list.length) {
+        spNoneEl.hidden = false;
+        var p1 = document.createElement('p');
+        p1.textContent = '#' + frag + ' 에 해당하는 태그가 없어요.';
+        spNoneEl.appendChild(p1);
+        spSetLive('결과 없음');
+      } else {
+        for (var c = 0; c < list.length; c++) {
+          var chip = spMakeTagChip(list[c], c);
+          spChipsEl.appendChild(chip);
+          spNavItems.push(chip);
+        }
+        spSetLive('태그 ' + list.length + '개');
+      }
+      spOpenPop(true);
+      spSetActive(-1);
+      return;
+    }
+
+    /* ── QUERY: 자연어 ── */
+    var toks = spTokens(q);
+    var res = spQuery(q);
+    if (!res.length) {
+      spListEl.hidden = true;
+      spNoneEl.hidden = false;
+      var p = document.createElement('p');
+      p.textContent = '‘' + q.trim() + '’' + '에 맞는 설정을 못 찾았어요.';
+      spNoneEl.appendChild(p);
+      var act = document.createElement('div');
+      act.className = 'sp-none-act';
+      var tagBtn = document.createElement('button');
+      tagBtn.type = 'button';
+      tagBtn.className = 'sp-tag';
+      tagBtn.id = 'spNoneTagBtn';
+      tagBtn.setAttribute('data-settings-tagmode', '');
+      tagBtn.textContent = '# 태그로 찾아보기';
+      tagBtn._spGo = function () {
+        spIn.value = '#';
+        spRender();
+        try { spIn.focus({ preventScroll: true }); } catch (err) { /* 무시 */ }
+      };
+      act.appendChild(tagBtn);
+      spNoneEl.appendChild(act);
+      spNavItems.push(tagBtn);
+      var p2 = document.createElement('p');
+      p2.textContent = '또는 분류에서 찾기:';
+      spNoneEl.appendChild(p2);
+      var act2 = document.createElement('div');
+      act2.className = 'sp-none-act';
+      var cats = ['display', 'layout', 'fx', 'safety', 'data', 'about'];
+      for (var cc = 0; cc < cats.length; cc++) {
+        var cChip = spMakeCatChip(cats[cc], cc);
+        act2.appendChild(cChip);
+        spNavItems.push(cChip);
+      }
+      spNoneEl.appendChild(act2);
+      spSetLive('결과 없음');
+      spOpenPop(true);
+      spSetActive(-1);
+      return;
+    }
+    for (var r = 0; r < res.length; r++) {
+      var row = spMakeRow(res[r].it, toks, r);
+      spListEl.appendChild(row);
+      spNavItems.push(row);
+    }
+    spSetLive('결과 ' + res.length + '개');
+    spOpenPop(true);
+    spSetActive(-1);
+  }
+
+  function spPickTag(tag) {
+    spPickedTag = tag;
+    spIn.value = tag ? '' : '#';
+    spRender();
+    try { spIn.focus({ preventScroll: true }); } catch (err) { /* 무시 */ }
+  }
+
+  function spResetSearch() {
+    if (!spIn) return;
+    spPickedTag = null;
+    spIn.value = '';
+    spClearBtn.hidden = true;
+    spClearNode(spListEl);
+    spClearNode(spChipsEl);
+    spClearNode(spNoneEl);
+    spClearNode(spPillEl);
+    spListEl.hidden = false;
+    spChipsEl.hidden = true;
+    spNoneEl.hidden = true;
+    spPillEl.hidden = true;
+    spOpenPop(false);
+    spSetLive('');
+  }
+
+  /* ── 이동 + 강조 ── */
+  function spHighlight(el) {
+    if (!el) return;
+    var t = el;
+    try {
+      for (var g = 0; g < 5 && t; g++) {
+        var r = t.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) break;
+        t = t.parentElement;
+      }
+    } catch (err) { /* 무시 */ }
+    if (!t) return;
+    if (spHlEl) spHlEl.classList.remove('sp-hl');
+    clearTimeout(spHlTimer);
+    spHlEl = t;
+    t.classList.add('sp-hl');
+    try { t.scrollIntoView({ block: 'center' }); } catch (err) { /* 무시 */ }
+    spHlTimer = setTimeout(function () {
+      if (spHlEl) { spHlEl.classList.remove('sp-hl'); spHlEl = null; }
+    }, 2400);
+  }
+
+  function spGoto(it) {
+    var el = it.el;
+    if (!el && it.sel) { try { el = document.querySelector(it.sel); } catch (err) { el = null; } }
+    it.el = el;
+    spResetSearch();
+    if (it.panel === 'decor') {
+      openDecorPanel();                 /* 안에서 closeSettings() 를 부른다 */
+      spHighlight(el);
+      return;
+    }
+    if (it.panel === 'toolbar') {
+      closeSettings();
+      spHighlight(el);
+      return;
+    }
+    var sec = el && el.closest ? el.closest('.sp-sec') : null;
+    spSetCat(sec ? spSecCat(sec) : it.cat, false);
+    /* 접혀 있는 자리(손상 백업·라이선스 고지)는 펴 준다 */
+    var d = el && el.closest ? el.closest('details') : null;
+    while (d) {
+      d.open = true;
+      d = d.parentElement && d.parentElement.closest ? d.parentElement.closest('details') : null;
+    }
+    spHighlight(el || sec);
+    spUpdateOvf();
+  }
+
+  /* ── 이벤트 ── */
+  if (spIn) {
+    spIn.addEventListener('input', function () {
+      if (spPickedTag && spIn.value) spPickedTag = null;   /* 다시 타이핑하면 태그 해제 */
+      spRender();
+    });
+    spIn.addEventListener('focus', function () {
+      if (spIn.value || spPickedTag) spRender();
+    });
+    spIn.addEventListener('keydown', function (e) {
+      var k = e.key;
+      if (k === 'Escape') {
+        /* 3단: ① 태그 해제 ② 검색어 지우기 ③ (그대로 흘려보내 설정 창 닫기) */
+        if (spPickedTag) { e.preventDefault(); e.stopPropagation(); spPickTag(null); return; }
+        if (spIn.value) { e.preventDefault(); e.stopPropagation(); spResetSearch(); return; }
+        return;
+      }
+      if (k === 'ArrowDown' || k === 'ArrowUp') {
+        if (spPop.hidden && (spIn.value || spPickedTag)) spRender();
+        if (!spNavItems.length) return;
+        e.preventDefault();
+        var n = spNavItems.length;
+        var next;
+        if (k === 'ArrowDown') next = (spActive + 1 >= n) ? 0 : spActive + 1;
+        else next = (spActive === -1) ? n - 1 : (spActive === 0 ? -1 : spActive - 1);
+        spSetActive(next);
+        return;
+      }
+      if (k === 'Home' || k === 'End') {
+        if (spPop.hidden || !spNavItems.length) return;
+        e.preventDefault();
+        spSetActive(k === 'Home' ? 0 : spNavItems.length - 1);
+        return;
+      }
+      if (k === 'Enter') {
+        if (spPop.hidden || !spNavItems.length) return;
+        e.preventDefault();
+        var target = spActive >= 0 ? spNavItems[spActive] : spNavItems[0];
+        if (target && target._spGo) target._spGo();
+      }
+    });
+    spClearBtn.addEventListener('click', function () {
+      spResetSearch();
+      try { spIn.focus({ preventScroll: true }); } catch (err) { /* 무시 */ }
+    });
+    /* mousedown 에서 blur 를 막고 click 에서 실행한다 */
+    spPop.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    spPop.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('.sp-pill-x')) return;                 /* 자체 핸들러가 처리 */
+      var host = t.closest('.sp-sr') || t.closest('.sp-tag');
+      if (!host || !host._spGo) return;
+      host._spGo();
+      playTick();
+    });
+  }
+  spBuildIndex();
 
   /* ── 기동: 보드 목록 발견 → 활성 보드 복원 → 렌더 ── */
 

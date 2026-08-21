@@ -12,6 +12,9 @@ electron/node_modules/
 electron/dist/
 dist/
 
+# 지인 배포판 ZIP (make_dist.ps1 산출물 — 100MB대, 언제든 재생성 가능)
+dist_out/
+
 # OS 잔재
 Thumbs.db
 desktop.ini

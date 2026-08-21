@@ -10,6 +10,8 @@
 //     호출측은 .webContents 만 쓴다.
 //   - IPC 방어: assertTrustedSender — 우리 앱 창(file://)의 요청만 허용
 //   - 자식 프로세스 환경 정돈: cleanChildEnv — 부모 환경 오염 방어
+//   - 회전 로그: logsDir / logEvent / recentLogLines — userData\logs\ 에 최대 5파일×1MB
+//     (개인정보 미포함 — 사건 요약만. 발주 #28④ 진단·크래시 기록)
 //
 // ※ preload.js 는 이 모듈을 require 하지 않는다 — sandbox preload 에서 쓸 수 있는
 //   모듈은 electron 뿐이고, A49③ 정적 검사가 preload 의 require 를
@@ -20,7 +22,7 @@
 
 'use strict';
 
-const { BrowserWindow, webContents } = require('electron');
+const { app, BrowserWindow, webContents } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -138,6 +140,95 @@ function cleanChildEnv() {
   return env;
 }
 
+// ============================================================================
+// 회전 로그 (userData\logs\) — 진단·크래시 기록 (발주 #28④)
+//
+// 왜 필요한가: 지금까지 셸에는 uncaughtException·렌더러 크래시 훅도, 로그 파일도 0건이라
+// "흰 화면으로 굳었어요" 티켓에 물어볼 근거가 없었다. 이 로거가 그 근거를 만든다.
+//
+// 규칙:
+//   - 위치는 userData\logs (PETIT_USERDATA 격리 훅을 그대로 따라간다 — 채점 프로필은
+//     tmpdir 안에서 자기 로그만 쓴다). 저장소·설치 폴더에는 절대 쓰지 않는다 (A46 산출물
+//     블랙리스트 *.log 무영향).
+//   - 최대 5파일 × 1MB 회전: petit-shell.log → .1 → … → .4 (가장 오래된 것부터 버린다).
+//   - **개인정보 미포함**: 메모 본문·일정 제목은 어떤 경로로도 여기 들어오지 않는다.
+//     호출측은 "무슨 일이 일어났는가"만 넘긴다 (한 줄 ≤400자로 잘린다).
+//   - 기록 실패는 치명적이지 않다 — 앱 동작에 영향을 주지 않는다 (전부 try/catch).
+// ============================================================================
+
+const LOG_FILE_NAME = 'petit-shell.log';
+const LOG_MAX_BYTES = 1024 * 1024;   // 1파일 1MB
+const LOG_MAX_FILES = 5;             // petit-shell.log + .1 ~ .4
+const LOG_LINE_MAX = 400;            // 한 줄 상한 (스택은 앞부분만)
+const RECENT_MAX = 20;               // 진단 정보 복사에 쓰는 메모리 링 버퍼
+
+const recentLines = [];
+
+/** 로그 폴더 경로 — app 미준비·경로 조회 실패 시 null (호출측은 조용히 생략) */
+function logsDir() {
+  try {
+    return path.join(app.getPath('userData'), 'logs');
+  } catch (_err) {
+    return null;
+  }
+}
+
+/** 한 줄 정돈 — 개행·연속 공백을 접고 길이를 자른다 (파일 한 줄 = 사건 하나) */
+function oneLine(value) {
+  const s = String(value === undefined || value === null ? '' : value).replace(/\s+/g, ' ').trim();
+  return s.length > LOG_LINE_MAX ? s.slice(0, LOG_LINE_MAX) + '…' : s;
+}
+
+/** 1MB 초과 시 세대 교체 — .4 삭제 → .3→.4 … → 현재 로그→.1 */
+function rotateLogs(file) {
+  try {
+    const st = fs.statSync(file);
+    if (st.size < LOG_MAX_BYTES) return;
+  } catch (_err) {
+    return; // 파일 없음 = 회전 불요
+  }
+  for (let i = LOG_MAX_FILES - 1; i >= 1; i--) {
+    const from = i === 1 ? file : file + '.' + (i - 1);
+    const to = file + '.' + i;
+    try {
+      if (i === LOG_MAX_FILES - 1) { try { fs.unlinkSync(file + '.' + i); } catch (_e) { /* 없으면 무해 */ } }
+      if (fs.existsSync(from)) fs.renameSync(from, to);
+    } catch (_err) { /* 회전 실패 — 다음 기록은 그냥 이어 쓴다 */ }
+  }
+}
+
+/**
+ * 사건 한 줄 기록 — 파일(회전) + 메모리 링 버퍼.
+ * @param {string} tag 사건 종류 (예: 'uncaughtException', 'renderer-gone')
+ * @param {*} message 사람이 읽을 요약 (개인정보 금지 — 호출측 책임)
+ * @returns {string} 실제 기록된 줄
+ */
+function logEvent(tag, message) {
+  const line = '[' + new Date().toISOString() + '] [' + oneLine(tag) + '] ' + oneLine(message);
+  recentLines.push(line);
+  if (recentLines.length > RECENT_MAX) recentLines.shift();
+  const dir = logsDir();
+  if (dir) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, LOG_FILE_NAME);
+      rotateLogs(file);
+      fs.appendFileSync(file, line + '\r\n', 'utf8');
+    } catch (_err) { /* 기록 실패는 앱 무영향 */ }
+  }
+  return line;
+}
+
+/**
+ * 최근 기록 줄 — 진단 정보 복사에 붙인다 (개인정보 미포함, 최신 것부터 n개).
+ * @param {number} [n]
+ * @returns {string[]}
+ */
+function recentLogLines(n) {
+  const count = Number.isFinite(n) && n > 0 ? Math.min(n, RECENT_MAX) : RECENT_MAX;
+  return recentLines.slice(-count);
+}
+
 module.exports = {
   REPO_ROOT,
   POWERSHELL_EXE,
@@ -147,4 +238,7 @@ module.exports = {
   appWindows,
   assertTrustedSender,
   cleanChildEnv,
+  logsDir,
+  logEvent,
+  recentLogLines,
 };

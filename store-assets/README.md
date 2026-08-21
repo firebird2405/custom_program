@@ -4,6 +4,11 @@ Microsoft Store(파트너센터) 리스팅과 확산 킷(LAUNCH-KIT)에 쓰는 �
 **모든 이미지는 스크립트로 재생성된다** — 손으로 찍은 것은 하나도 없다. 촬영기는 `tools/` 안에 있고
 앱(`calendar.html`·`postit.html`)·Electron 셸·채점기 파일은 **읽기 전용으로 구동만** 한다.
 
+> **2026-08-21 갱신 (발주 #26·#27).** ① 스토어 **제출용/보조용**을 §2 표로 갈랐다 — 합성 컷과
+> 발주 #13 이전 구버전 UI 컷은 **제출 목록에서 뺀다**(파일은 남긴다). ② **영문 리스팅은 보류**다 —
+> `en/` 판·`store-description.en.md` 는 삭제하지 않고 **UI 영문화 발주 이후 사용**한다(§5).
+> 근거: `protocol/EXPERT-REVIEW.md` B5·B6 · 부록 C 4-4~4-6.
+
 ---
 
 ## 1. 자산 목록
@@ -12,26 +17,32 @@ Microsoft Store(파트너센터) 리스팅과 확산 킷(LAUNCH-KIT)에 쓰는 �
 
 | 파일 | 용량 | 장면 | 촬영 |
 |---|---|---|---|
-| `screenshot-01-postit-wall.png` | 2.1 MB | 포스트잇 월 기본 보드 (구버전 컷) | 수동 (레거시) |
-| `screenshot-02-calendar-month.png` | 80 KB | 캘린더 월간 그리드 (구버전 컷) | 수동 (레거시) |
-| `screenshot-03-decor-panel.png` | 2.1 MB | 🎨 꾸미기 패널 — 배경·스티커·테이프 | 수동 (레거시) |
-| `screenshot-04-theme-lavender.png` | 617 KB | 프리미엄 테마 · 라벤더 안개 | 수동 (레거시) |
-| `screenshot-05-theme-deepsea.png` | 593 KB | 프리미엄 테마 · 심해 블루 | 수동 (레거시) |
+| `screenshot-01-postit-wall.png` | 2.1 MB | 포스트잇 월 기본 보드 | 수동 · **구버전 UI(#13 이전)** — 보조용 |
+| `screenshot-02-calendar-month.png` | 80 KB | 캘린더 월간 그리드 | 수동 · **구버전 UI(#13 이전)** — 보조용 |
+| `screenshot-03-decor-panel.png` | 2.1 MB | 🎨 꾸미기 패널 — 배경·스티커·테이프 | 수동 · **구버전 UI(#13 이전)** — 보조용 |
+| `screenshot-04-theme-lavender.png` | 617 KB | 프리미엄 테마 · 라벤더 안개 | 수동 · **구버전 UI(#13 이전)** — 보조용 |
+| `screenshot-05-theme-deepsea.png` | 593 KB | 프리미엄 테마 · 심해 블루 | 수동 · **구버전 UI(#13 이전)** — 보조용 |
 | **`screenshot-06-drag-in-progress.png`** | 2.3 MB | **노트를 잡아 끄는 중** — 들린 그림자·진행 방향 기울임·grabbing 커서 | `tools/capture.js shots` |
 | **`screenshot-07-note-date-menu.png`** | 2.4 MB | **노트 우클릭 메뉴 + `날짜 지정 2026-08-25`** (연동의 입력 쪽) | `tools/capture.js shots` |
 | **`screenshot-08-calendar-linked.png`** | 88 KB | **캘린더에 📌 연동 일정 4건 + 수동 일정** · 8/25 선택 상태 | `tools/capture.js shots` |
 | **`screenshot-09-board-seeded.png`** | 2.3 MB | 노트 12장 + 이모지 스티커 7개로 꽉 찬 보드 (01의 대체 컷) | `tools/capture.js shots` |
 | **`screenshot-10-settings-search.png`** | 924 KB | **설정 중앙 모달 + 설정 검색**(“백업” 하이라이트·분류 배지) | `tools/capture.js shots` |
-| **`screenshot-11-link-flow.png`** | 953 KB | **연동 합성 컷(국문)** — 두 화면 나란히 + 강조 링 + 확대 조각 | `tools/compose.js` |
-| **`screenshot-11-link-flow.en.png`** | 951 KB | 위와 같은 합성 컷의 **영문 카피 버전** | `tools/compose.js` |
+| `screenshot-11-link-flow.png` | 953 KB | **연동 합성 컷(국문)** — 두 화면 나란히 + 강조 링 + 확대 조각. **앱에 없는 화면**(합성) — 보조용 | `tools/compose.js` |
+| `screenshot-11-link-flow.en.png` | 951 KB | 위 합성 컷의 **영문 카피 버전** — 합성 + 영문 리스팅 보류로 이중 보조용 | `tools/compose.js` |
 | **`screenshot-12-onboarding-spotlight.png`** | 1.7 MB | **온보딩 스포트라이트** — 딤 + 분홍 링 + 삼각 포인터 + “1 / 4” 카드 | `tools/capture-shell.js` (Electron 셸) |
 
-굵은 항목이 이번에 새로 만든 컷이다 (7장 신규 + 1장 영문 변형).
+굵은 항목이 **발주 #13 이후 실제 화면을 촬영한 컷**이다 (06·07·08·09·10·12 — 스토어 제출용 6장).
+01~05 는 발주 #13(툴바 4그룹 재구성 · 볼륨 슬라이더를 🔊 서랍으로 이동) **이전**에 찍혀 지금 빌드에 없는
+인라인 볼륨 슬라이더가 그대로 박혀 있다 — 파일 타임스탬프(8/19)와 `protocol/STATUS.md` 발주 #13(8/20)로 확인.
+11 은 두 장을 나란히 붙인 **마케팅 합성**이라 앱에서 재현되지 않는다.
 
-### 1-2. 영문 리스팅용 캡션 컷 — `en/` · 1920×**1200** PNG
+### 1-2. 영문 리스팅용 캡션 컷 — `en/` · 1920×**1200** PNG — ⛔ **보류(제출 안 함)**
 
 원본 1920×1080 위에 **가리는 것 없이** 아래 120px 캡션 띠를 덧붙인 판. 9장.
 `en/screenshot-03/04/05/06/07/08/09/10/12-*.png` — 파일명은 원본과 같다.
+
+**영문 리스팅을 이번 판에서 내지 않기로 했으므로 이 9장도 제출하지 않는다**(발주 #27 — §5 참조).
+파일은 **삭제하지 않고 보관**하며, UI 영문화 발주 이후 그대로 쓴다.
 
 ### 1-3. 데모 애니메이션
 
@@ -54,26 +65,44 @@ Microsoft Store(파트너센터) 리스팅과 확산 킷(LAUNCH-KIT)에 쓰는 �
 
 ---
 
-## 2. 리스팅 권장 순서
+## 2. 제출용 / 보조용 구분 + 리스팅 권장 순서
 
-파트너센터는 최대 10장. 아래 순서를 권장한다 (앞 3장이 갤러리 썸네일에 걸린다).
+파트너센터 스크린샷 슬롯은 최대 10장이다. **제출용은 "지금 빌드를 켜면 그대로 나오는 화면"만** 올린다 —
+합성 컷과 구버전 UI 컷은 "설명과 다르다" 리뷰·환불 분쟁의 씨앗이라 목록에서 뺀다
+(`protocol/EXPERT-REVIEW.md` B5 · 부록 C 4-4~4-6). 뺀 파일은 **지우지 않는다** — 문서·블로그·프레스킷용이다.
 
-**국문 리스팅**
+### 2-1. 구분표
+
+| 파일 | 구분 | 사유 |
+|---|---|---|
+| `screenshot-09-board-seeded.png` | ✅ **제출용** | 발주 #13 이후 실화면. 코르크 + 노트 12장 + 스티커 7개 |
+| `screenshot-06-drag-in-progress.png` | ✅ **제출용** | 실화면 + 실제 포인터 좌표에 커서 그림만 덧그림(§4-4 고지) |
+| `screenshot-08-calendar-linked.png` | ✅ **제출용** | 실화면. 캘린더 + 📌 연동 일정 |
+| `screenshot-10-settings-search.png` | ✅ **제출용** | 실화면. 설정 모달 + 설정 검색 |
+| `screenshot-07-note-date-menu.png` | ✅ **제출용** | 실화면. 우클릭 메뉴 + `날짜 지정` |
+| `screenshot-12-onboarding-spotlight.png` | ✅ **제출용** | 실화면(Electron 셸). 온보딩 1/4 스포트라이트 |
+| `screenshot-11-link-flow.png` | ⛔ 보조용 | **합성**(두 스크린샷 + 강조 링 + 확대 조각 + 카피). 단일 창 탭 모드에서는 두 화면이 동시에 보이지 않는다 — 앱에서 재현 불가 |
+| `screenshot-01-postit-wall.png` · `02` · `03` | ⛔ 보조용 | 발주 #13 **이전** UI(인라인 볼륨 슬라이더·구 툴바). 09·08·(재촬영 대기)로 갈음 |
+| `screenshot-04-theme-lavender.png` · `05` | ⛔ 보조용 | 구버전 UI + **Pro 테마**. 첫 출시는 **무료 단독**이라 유료 전용 화면을 리스팅에 올리지 않는다. 코르크가 없어 제품 매력도 안 보인다 |
+| `screenshot-11-link-flow.en.png` · `en/**` | ⛔ 보조용(보류) | 영문 리스팅 보류(발주 #27) |
+| `extras/onboarding-step2.png` | ⛔ 보조용 | 보드가 비어 있어 리스팅 비권장 — 문서용 |
+| `demo-drag.gif` | ⛔ 보조용 | 스토어 스크린샷 슬롯은 PNG/JPG만 — 랜딩·GitHub README·LAUNCH-KIT 용 |
+
+### 2-2. 제출 순서 (한국어 리스팅 · 6장)
+
+앞 3장이 갤러리 썸네일에 걸린다.
 
 1. `screenshot-09-board-seeded.png` — 첫인상: 알록달록한 코르크 보드
 2. `screenshot-06-drag-in-progress.png` — 핵심 손맛: 끌어서 붙이기
-3. `screenshot-08-calendar-linked.png` — 캘린더 본체 + 📌
-4. `screenshot-11-link-flow.png` — 연동을 한 장으로 설명
-5. `screenshot-10-settings-search.png` — 설정 검색(신규 UI)
-6. `screenshot-03-decor-panel.png` — 꾸미기
-7. `screenshot-12-onboarding-spotlight.png` — 처음 켜도 헤매지 않음
-8. `screenshot-04-theme-lavender.png` · 9. `screenshot-05-theme-deepsea.png` — 프리미엄 가치
-10. `screenshot-07-note-date-menu.png` — 우클릭 메뉴 전체
+3. `screenshot-08-calendar-linked.png` — 캘린더 본체 + 📌 연동
+4. `screenshot-10-settings-search.png` — 설정 검색
+5. `screenshot-07-note-date-menu.png` — 우클릭 메뉴 · 날짜 지정(연동의 입력 쪽)
+6. `screenshot-12-onboarding-spotlight.png` — 처음 켜도 헤매지 않음
 
-**영문 리스팅** — 같은 순서로 `en/` 판을 쓰고, 4번만 `screenshot-11-link-flow.en.png`(1920×1080)을 쓴다.
+`MARKET.md` D-7 체크리스트는 6~8장을 요구한다 — **현재 제출 가능한 실화면 컷이 정확히 6장**이라 하한을 만족한다.
+7~8번 슬롯을 채우려면 §7 TODO(꾸미기 패널 재촬영 · 탭바가 보이는 컷)를 먼저 해결해야 한다.
 
-`demo-drag.gif` 는 스토어 스크린샷 슬롯에는 넣을 수 없다(PNG/JPG만). **랜딩 페이지·GitHub README·
-커뮤니티 홍보 글(LAUNCH-KIT)** 용이다.
+**영문 리스팅 순서는 이번 판에서 쓰지 않는다**(발주 #27 보류). UI 영문화 이후 `en/` 판으로 같은 순서를 쓴다.
 
 ---
 
@@ -134,16 +163,26 @@ node tools\captionize.js         # en\ 영문 캡션 판 9장
 
 ---
 
-## 5. 영어권 리스팅 안내 (중요)
+## 5. 영어권 리스팅 — ⛔ **이번 판 보류** (발주 #27, 2026-08-21)
 
-**앱 UI 는 전부 한국어다.** 영문 리스팅에 원본 스크린샷을 그대로 올리면 영어권 사용자는
-화면만 보고 기능을 알 수 없다. 그래서 영문 리스팅에는 **반드시 캡션이 얹힌 `en/` 판을 쓴다.**
+**결정: 영문 리스팅을 내지 않는다.** 앱 UI 가 한국어 단일이고(`<html lang="ko">`, i18n 코드 0)
+영어 UI 는 존재하지 않는다. 캡션만 영어인 스크린샷으로 영어권에 노출하면 설치 → 실행 →
+"화면을 읽을 수 없다" → 1점이 되고, **G1 리뷰 하한을 채우려던 장치가 평점을 깎는다**
+(`protocol/EXPERT-REVIEW.md` B6 · 부록 C 4-5). 그래서:
+
+- `protocol/MARKET.md` G1 = **KR 마켓 단독**(리뷰 하한 10 → 5)로 환원.
+- `protocol/STORE-GUIDE.md` 2단계의 영문 이름 예약 = **필수 → 선택(방어적 권장)** 으로 환원.
+- `en/` 9장 · `store-description.en.md` · `screenshot-11-link-flow.en.png` 는 **삭제하지 않는다** —
+  상태는 "**UI 영문화 발주 이후 사용**". 아래 캡션 자산은 그때 그대로 재사용한다.
+
+### 아래는 보류 해제(=UI 영문화 완료) 시점에 쓸 자료다
 
 - `en/` 판은 원본(1920×1080)을 **가리지 않고** 아래에 120px 캡션 띠를 덧붙인 **1920×1200** 이다.
 - 띠 오른쪽에 `PetitCalendar · Korean UI` 를 항상 표기해 **UI 언어가 한국어임을 사전 고지**한다.
-  (스토어 심사·환불 분쟁 예방 — 리스팅 설명문 첫 문단에도 같은 문장을 넣을 것을 권한다.)
-- 영문 설명문(`store-description.en.md`)에 다음 한 줄을 추가할 것을 권한다:
+  (스토어 심사·환불 분쟁 예방 — 다만 **고지로 해결되는 문제가 아니라서** 이번 판은 보류를 택했다.)
+- `store-description.en.md` 에는 이미 다음 한 줄이 들어가 있다:
   > **Note:** the app's interface is in Korean. Screenshots are captioned in English.
+- 보류 해제 시 `en/` 판도 **발주 #13 이후 컷(06·07·08·09·10·12)만** 쓴다 — `en/03·04·05` 는 구버전 UI 라 §2-1 기준으로 보조용이다.
 
 ### 영문 캡션 초안 (현재 `en/` 에 적용된 문구)
 
@@ -199,8 +238,12 @@ node tools\captionize.js         # en\ 영문 캡션 판 9장
   채우는 합성이 필요하다 — `tools/compose.js` 를 본떠 만들면 된다. (미구현)
 - **동영상(mp4/webm) 없음.** 인코더 없이 순수 Node 로 만들 수 있는 건 GIF 까지다.
   파트너센터 트레일러가 필요해지면 ffmpeg 도입 승인이 선행되어야 한다.
-- **레거시 컷 01·02** 는 새 시드 데이터·새 UI 이전에 찍힌 것이라 톤이 다르다.
-  09(보드)·08(캘린더)로 갈음하고 목록에서 빼도 된다.
-- `screenshot-04/05` (프리미엄 테마)는 아직 수동 촬영본이다. 시드 데이터 기반으로
-  다시 찍으면 다른 컷과 내용이 일치한다. (`capture.js` 에 테마 장면 추가 필요)
+- **구버전 컷 01~05 는 §2-1 에서 보조용으로 내렸다.** 01·02 는 09(보드)·08(캘린더)로 갈음된다.
+  `03`(꾸미기 패널)은 **대체 컷이 없어 제출 목록에 구멍**이 남았다 — `capture.js` 에 꾸미기 패널 장면을
+  추가해 시드 데이터 기준으로 재촬영하면 7번 슬롯이 채워진다. (미구현)
+- `screenshot-04/05` (프리미엄 테마)는 구버전 UI + **Pro 전용**이다. 첫 출시가 무료 단독인 동안에는
+  재촬영해도 제출용이 아니다 — Pro 출시(2단계) 시점에 다시 찍는다.
+- **탭바가 보이는 컷이 없다.** 설명문이 "한 창 두 탭"을 말하는데, 촬영기는 앱 뷰 영역만 잡아
+  12번 컷에도 셸 탭바가 안 나온다. 단일 창 탭 모드를 한 장으로 보여주는 컷이 있으면 §2-2 의
+  7~8번 슬롯이 채워진다 — `capture-shell.js` 의 클립 영역을 창 전체로 넓히면 된다. (미구현)
 - 파트너센터 **identity 3값 대기**는 별개 게이트 (`protocol/STORE-GUIDE.md`).

@@ -1,4 +1,4 @@
-# 채점표 — 캘린더 + 포스트잇 월 (v1 rev.8 — 창 분리 폐지, 단일 창 탭 모드 확정)
+# 채점표 — 캘린더 + 포스트잇 월 (v1 rev.9 — 무료 단독 출시판: A45 Free 경계 재정의)
 
 전체 실행 한 줄: `npm test` (protocol/grader/ 안에서, Playwright 헤드리스. A13·A16 포함 — Edge/바탕화면 접근 불가 환경에서는 명시적 SKIP 출력)
 개별 항목: `npm test -- -g "A4:"` 형식
@@ -57,7 +57,7 @@
 | A42 | (rev.8 — 창 분리 폐지) Playwright `_electron.launch`(개발 트리, 패키지 exe는 EnableNodeCliInspectArguments fuse 유지)로 기동하면: **항상 BrowserWindow 정확히 1개(단일 창 탭 모드)** — 제목에 앱 이름 포함, 기본 크기 ≥1024×700, 리사이즈·이동 가능, 셸 탭바([data-shell-tabbar], 탭 [data-tab="postit"]·[data-tab="calendar"]) + **기본 활성 탭 = 포스트잇**(보드 visible). 탭 전환: [data-tab="calendar"] → 날짜 셀 ≥28 visible, 포스트잇 탭 복귀 시 **작성 상태가 리로드 없이 보존**(webContents 유지). **분리 모드 부재 단언**: [data-split]·[data-merge] 훅이 어디에도 존재하지 않고, 어떤 조작으로도 BrowserWindow가 2개가 되지 않는다. 설정 영속: 셸 설정([data-shell-settings])에서 기본 탭(calendar) 변경 후 재기동 시 캘린더 탭 활성. **출시-소스 동일성**: 패키지 리소스의 calendar.html·postit.html이 저장소 원본과 SHA256 동일(빌드 변형·인젝션 금지). **임계 서브셋 실검증**: A5·A6·A8·A9·A25·A26 시나리오를 Electron 컨텍스트(고정 userData, 환경변수 오버라이드 훅 격리)에서 재실행 — 완전 종료 후 재기동 보존 포함 | `npm test -- -g "A42:"` |
 | A43 | 마이그레이션: 도구가 소스 프로필 경로 인자를 받고(채점기는 tmpdir 픽스처 프로필을 msedge로 시딩 — 실사용 .edge 불가침), **전 범위 이전**이 항목별 관찰된다 — 모든 `cal-*`/`postit-*` localStorage 키(다중 보드 postit-notes-b*, 보드 이름, cal-repeats, 설정, 창 상태) + IndexedDB `postit-decor`·`cal-decor` 전수(배경 이미지·사진 스티커). 원본 불가침(읽기 전용) + 사본 독립성(원본 수정 후 사본 불변). **병합·멱등**: Electron 저장소에 선-데이터가 있어도 무손실 병합, 2회 실행 중복 0. **발견성**: 기존 .edge 프로필 감지 시 첫 실행에 이전 제안 UI([data-migrate]) visible, 거절 후에도 설정에서 재진입 가능 | `npm test -- -g "A43:"` |
 | A44 | 외부 요청 0 — 감시 범위 = **렌더러 전 세션 + main 프로세스 + 모든 자식 프로세스**: ① electronApp.evaluate로 defaultSession+전 파티션 webRequest 카운터 설치 → 대표 시나리오 조작 → http(s) 0건, ② main·preload 정적 검사 — http/https/net/dns/dgram/tls require·net.request·autoUpdater 0건, ③ 실행 중 앱 PID 트리 아웃바운드 소켓 OS 레벨(netstat) 0건. (각주: MS Store 결제·업데이트는 WinRT 브로커/스토어 프로세스 소관 — 앱 내 통신 0과 양립) | `npm test -- -g "A44:"` |
-| A45 | Free/Pro 경계 — **Free 하한 = 2026-08-18 동결 빌드의 실제 기능 집합 전체**(사진 첨부·사진 스티커·배경 업로드·스티커 3세트·스킨 3종·꾸미기 전부·보드 3개까지 포함). 회귀 안티-테스트: 이 중 하나라도 잠기면 FAIL. **Pro = 순수 신규 가치만**: 신규 스티커 ≥2팩(팩당 ≥8종, 기존과 중복 0, 매니페스트로 검증)·신규 프리미엄 스킨/테마 ≥2종(기존과 색거리 ≥40)·보드 4개째부터·Electron 예약 자동 백업. 라이선스 = **서명 파일 방식**(앱엔 공개키만, WebCrypto 오프라인 검증): 잠금 UI([data-pro-lock]) 관찰 → 커밋된 테스트 라이선스([data-license-import]) 적용 → 즉시 해제+재기동 유지 → 바이트 변조 라이선스는 거부 | `npm test -- -g "A45:"` |
+| A45 | **Free 경계 — 무료 단독 출시판** (rev.9 개정: 전문가 감사 B4·B3 승인 #24·#25 — 구매 채널 0건 상태의 "살 수 없는 잠금" 폐지). ① **무료 하한**: 2026-08-18 동결 빌드의 실기능 전체(사진 첨부·사진 스티커·배경 업로드·스티커 3세트·스킨 3종·꾸미기 전부) + **보드 개수 무제한**([data-add-board] 로 [data-board-tab] 이 4·5개째까지 실제 생성) + **예약 자동 백업 무료**([data-backup-auto] 가 disabled 아님·[data-pro-lock] 아래 아님 → 켜면 6초 내 userData\backup-config.json 의 auto:true → 재기동 후에도 켜진 상태 유지) — 하나라도 잠기면 FAIL(회귀 안티-테스트). ② **잠금 비노출 단언**(rev.8 A42 "분리 부재" 단언과 동형): 정상 조작 전수(기동·보드 5개 생성·꾸미기 패널 전 섹션 스크롤·설정 전 카테고리 개방·백업 섹션 조작)의 **각 단계**와 **3초 지연 주입 감시**에서 visible [data-pro-lock] 0개·visible [data-license-import] 0개·가격/구매 유도 문구(9,900·구매·결제·유료·업그레이드·프리미엄·잠금 해제·ms-windows-store) 0건 + 설정 검색([data-settings-search])에 "프리미엄"·"구매" 입력 시 그 문구를 담은 visible [data-settings-hit] 0행. ③ **라이선스 검증 코드 보존**(미래 Pro 재출시용): postit.html 에 공개키 JWK(EC P-256) + WebCrypto importKey·verify(ECDSA/SHA-256) 정적 존재, 개인키·서명 생성 코드 0건(PEM PRIVATE KEY·subtle.sign·createSign·generateKey·JWK d), 커밋 픽스처 electron/test-license/petit-test.license 보존(1바이트~64KB) — **적용 UI 노출은 금지**(UI 에서 접근 불가여도 FAIL 아님). ④ **보류**: Pro 상품 신규성 매니페스트(신규 스티커 ≥2팩·프리미엄 테마 ≥2종·색거리 ≥40) 검사는 Pro 재출시 발주에서 **A45-P 로 복원** | `npm test -- -g "A45:"` |
 | A46 | 산출물 검사(채점기 fs 직접 측정 — 자기신고 스크립트 금지): 인스톨러 파일 ≤120MB + `dist/win-unpacked/` 총합 ≤300MB (dist 부재 시 명시적 SKIP). **개인 데이터 블랙리스트**: 산출물(인스톨러·포터블 ZIP)을 풀어 backups/·.edge/·protocol/·*.log·실사용 저장 데이터 부재를 정적 검사 — 지인 배포판도 동일 검사 통과가 1주차 완료 조건 | `npm test -- -g "A46:"` |
 | A47 | 온보딩(Electron 셸 레이어, 훅 [data-onboarding]/[data-onboarding-target]/[data-onboarding-skip] — fail-closed): fresh 첫 실행에 표시되고, **스텝 = 채점기 발행 사용자 입력 액션 1회**(click/press/drag 각 1, fill 1필드 1 — 자동 전진 슬라이드 제외) 기준 ≤8스텝으로 첫 포스트잇 **실제 타이핑** + 첫 스티커 **실제 드래그 부착**이 완료되며, 콘텐츠는 사용자 입력분이 저장·유지된다(온보딩의 자동 생성 콘텐츠로 완료 계수 금지). 각 스텝 대상은 현재 단계의 [data-onboarding-target]과 일치. 건너뛰어도 앱 정상 + 설정에서 재실행 가능 | `npm test -- -g "A47:"` |
 | A48 | 스토어 심사·자산 정적 검사: ① 아이콘 — `build/appx/{StoreLogo(50),Square44x44,Square150x150,Wide310x150}.png` 실존+PNG 치수 일치, scale-200·targetsize-{16,24,32,48,256} 변형 포함, 플레이스홀더 차단(고유색 수 하한), main·electron-builder 아이콘 경로 실파일; ② 매니페스트(.appx=zip 해제 → AppxManifest.xml) Identity 이름·게시자가 확정 브랜드(쁘띠캘린더/PetitCalendar)와 일치 — 플레이스홀더 리터럴 금지; ③ 개인정보처리방침(수집 0 명시) 존재 — 텔레메트리 0 판정은 A44 런타임 증명과 결합; ④ 스토어 자산 — 스크린샷 ≥4장(규격 해상도)·한국어 설명문 ≥200자; ⑤ **상업 라이선스**: ASSETS.md 전수(신규 스티커·스킨·아이콘 포함)가 상업 배포 허용 식별자(CC0·PD·OFL·MIT·CC BY)만 — NC/ND/불명 FAIL, 앱 정보 화면 [data-licenses] 고지 전수 일치 | `npm test -- -g "A48:"` |
@@ -77,6 +77,10 @@
 - A38·A39·A40: Node child_process + System32 절대 경로 PowerShell(-NoProfile -NonInteractive), Edge/대상 폴더/대화형 데스크톱 미탐지 시 명시적 SKIP(A13·A16과 동일 형식). A39·A40은 실프로필(.edge\*)을 다루므로 마커·디코이·채점기 생성 파일만 정리하고 사용자 데이터는 불가침.
 - 신규 훅은 폴백 셀렉터 없음: data-속성 부재 = 즉시 FAIL(한국어 메시지에 요구 훅 명시) — fail-closed 원칙.
 - 기존 A1~A18은 기본 프리셋·월간 뷰·보드 1 기준으로 계속 전 항목 green이어야 한다(회귀 게이트).
+
+#### rev.9 추가 (A45 — 무료 단독 출시판)
+- A45 는 Electron 셸 컨텍스트에서 실행한다. 예약 자동 백업 검사는 backup.js 의 공식 테스트 훅 `PETIT_BACKUP_INTERVAL_MS`(30일)로 기동해, 채점 중 실제 예약 백업이 사용자 문서 폴더에 파일을 남기지 않게 격리한다.
+- **A45-P (보류 항목)**: Pro 상품 신규성 매니페스트 검사(assets/pro/pro-manifest.json — 신규 스티커 ≥2팩×≥8종·동결 45종과 중복 0·프리미엄 스킨 ≥2종·색거리 ≥40)는 rev.9 에서 A45 에서 분리해 보류한다. **Pro 재출시 시 A45-P 로 복원** (rev.6~rev.8 계약 원문은 git 이력과 이 문서의 개정 전 판에 보존).
 
 ## B. 금지 조항
 
@@ -99,10 +103,15 @@
 - 텔레메트리·추적·원격 로깅 금지 — 판정은 A44 런타임(소켓 0) + A48 방침 문서 일치로 결합
 - Electron 원격 코드 로드·webview·무차단 항해 금지 (A49)
 - nodeIntegration 활성·contextIsolation 해제·sandbox 해제 금지 (A49)
-- **무료 후퇴 금지(강화)**: Free 기준선은 "A1~A41"이 아니라 **2026-08-18 동결 빌드의 실기능 집합** — 기존 무료 기능·에셋의 Pro 재포장은 신규 계수 금지 (A45 안티-테스트가 감시)
+- **무료 후퇴 금지(rev.9 확대)**: Free 기준선은 "A1~A41"이 아니라 **2026-08-18 동결 빌드의 실기능 집합 + 보드 개수 무제한 + 예약 자동 백업** — 이 하한의 어떤 항목도 잠그지 않는다. 기존 무료 기능·에셋의 Pro 재포장은 신규 계수 금지 (A45 ① 안티-테스트가 감시)
 - 마이그레이션 원본(.edge) 삭제·변형 금지 — 읽기 전용 (A43)
 - HTML 빌드 변형 금지 — Electron은 저장소 원본과 바이트 동일 파일만 로드, 주입은 preload로만 (A42)
 - 에셋 라이선스 문언 개정: "개인 사용 허용" → **"상업 배포 허용 명시"** 자료만 (A48⑤)
+
+**rev.9 개정 (무료 단독 출시판 — 감사 B4·B3, 사용자 승인 #24·#25):**
+- **Pro 잠금·구매 유도 노출 금지**: 구매 채널이 0건인 이번 판에서는 [data-pro-lock]·[data-license-import]·가격/구매 문구를 어떤 정상 조작에서도 화면에 노출하지 않는다 (A45 ②). 설정 검색 사전에 남은 Pro 항목도 노출 경로로 본다.
+- **라이선스 검증 코드 보존 의무**: 잠금 UI 를 끄더라도 공개키·WebCrypto 검증 경로와 테스트 픽스처(electron/test-license/petit-test.license)는 삭제 금지 (A45 ③). 개인키·서명 생성 코드의 앱·배포물 포함 금지는 그대로 유지.
+- **Pro 재출시 조건**: Pro 를 되살릴 때는 상품 신규성(A45-P)과 실제 구매 동선을 함께 갖춘 뒤에만 잠금을 다시 켠다 — 살 수 없는 잠금 재도입 금지.
 
 ## C. 사람 시사 항목 (자동 판정 불가 — 사용자의 눈)
 
@@ -144,7 +153,7 @@
 
 | 배반 경로 | 차단 조항 |
 |---|---|
-| 기존 무료 기능을 Pro로 재포장 (신규 가치 0) | A45 동결 빌드 하한 안티-테스트 + Pro 신규성 매니페스트 검증 |
+| 기존 무료 기능을 Pro로 재포장 (신규 가치 0) | A45 ① 무료 하한 안티-테스트(동결 실기능 + 보드 무제한 + 예약 자동 백업) + ② 잠금 비노출 단언 · (Pro 신규성 매니페스트 검증은 A45-P 로 보류) |
 | main 프로세스 소켓/자식 프로세스로 텔레메트리 발신 | A44 ③ OS 레벨 PID 트리 소켓 0건 + ② 정적 import 금지 |
 | 빌드가 변형본 HTML을 실어 "테스트한 것 ≠ 출시한 것" | A42 SHA 동일성 + B 빌드 변형 금지 |
 | 마이그레이션이 좁은 키만 이전 (꾸미기·다중 보드 증발) | A43 전 범위 항목별 검사 (IDB 포함) |
@@ -178,8 +187,8 @@
 - 3-a. 온보딩 60초는 사람 시사 기준으로 판정하고, 자동 게이트는 "안내 지목 대상에 대한 사용자 입력 액션 ≤8스텝"으로 번역한다 (→ A47 근거)
 
 ---
-채점기 SHA256 기대값: 4999fc3dc4aa94127bee58fd40095aa140c1abbedce2cf20cfb1126916d9f2b0
-(기록: 2026-08-20, rev.8 창 분리 폐지(A42 단일 창 계약 + 분리 부재 5중 단언) 동결 — 이 줄 위의 기대값 줄은 64자리 hex만 허용됨. Node lib/hash.js와 INDEPENDENT_HASH.txt PowerShell 한 줄 이중 계산 일치 확인. 직전 rev.7 값: 9479bbe3…)
+채점기 SHA256 기대값: 7a5d22f14d68f294e54c6b9d370c256e75b25296723c004ad0f35a71adf55253
+(기록: 2026-08-21, rev.9 무료 단독 출시판(A45 Free 경계 재정의 — 보드 무제한·예약 자동 백업 무료·잠금 비노출 단언·검증 코드 보존) 동결 — 이 줄 위의 기대값 줄은 64자리 hex만 허용됨. 채점기 자기 출력과 아래 PowerShell 한 줄 이중 계산 일치 확인. 직전 rev.8 값: 4999fc3d…)
 
 독립 검증 명령 (환경변수가 깨끗한 **새 PowerShell 창**에서 실행 — 채점기 자기 출력은 참고용일 뿐, 아래 한 줄의 출력이 위 기대값과 일치하는지 사용자가 직접 확인):
 

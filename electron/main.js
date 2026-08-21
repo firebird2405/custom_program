@@ -20,16 +20,36 @@
 //
 // A43 배선: preload.js(브리지·셸 UI) + migrate.js(마이그레이션 엔진·IPC 종단) —
 // 소스 프로필 인자는 --source-cal=/--source-postit= 또는 PETIT_SOURCE_CAL/POSTIT env.
-// 공용 유틸(경로·안전 JSON IO·앱 페이지 식별·IPC 방어)은 lib-shared.js 가 단일 정의처다.
+// 공용 유틸(경로·안전 JSON IO·앱 페이지 식별·IPC 방어·회전 로그)은 lib-shared.js 가 단일 정의처다.
+//
+// 운영 장비 (발주 #28·#30·#31 — 전부 로컬 처리, 외부 전송 0):
+//   - 버전 정본 = app.getVersion() (electron\package.json). 셸 표기는 이 값만 쓴다.
+//   - 진단: 'petit:shell:info' / ':copy-diagnostics' — 버전·런타임·OS·화면·경로·저장
+//     사용량·최근 로그 5줄. **메모·일정 본문은 어떤 필드에도 담지 않는다.**
+//   - 로그: userData\logs\petit-shell.log (5파일×1MB 회전) + uncaughtException·
+//     unhandledRejection·render-process-gone·unresponsive 훅, [로그 폴더 열기].
+//   - 항상 위: shell-settings.json 의 additive 필드 alwaysOnTop (기본 꺼짐, 재기동 유지).
+//   - 보드 자랑하기: 활성 앱 뷰만 capturePage → 클립보드 복사 / PNG 저장 (탭바 미포함).
 // ============================================================================
 
 'use strict';
 
-const { app, BrowserWindow, WebContentsView, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, WebContentsView, screen, ipcMain, shell, dialog, clipboard } = require('electron');
 const path = require('path');
-const { REPO_ROOT, readJsonFile, writeJsonFile, windowAppKind, assertTrustedSender } = require('./lib-shared');
+const os = require('os');
+const fs = require('fs');
+const {
+  REPO_ROOT,
+  readJsonFile,
+  writeJsonFile,
+  windowAppKind,
+  assertTrustedSender,
+  logsDir,
+  logEvent,
+  recentLogLines,
+} = require('./lib-shared');
 const { registerMigrateIpc } = require('./migrate');
-const { registerBackupIpc, startBackupScheduler } = require('./backup');
+const { registerBackupIpc, startBackupScheduler, effectiveBackupFolder } = require('./backup');
 
 // ── userData 오버라이드 훅 (app ready 이전에 확정해야 한다) ─────────────────
 if (process.env.PETIT_USERDATA) {
@@ -100,7 +120,8 @@ function sanitizeBounds(saved) {
 // 예전 버전이 남긴 windowMode 필드는 읽지 않는다 (창 분리 폐지 — rev.8).
 // ============================================================================
 
-const SHELL_SETTINGS_DEFAULTS = { defaultTab: 'postit' };
+// alwaysOnTop: additive 필드 (발주 #30) — 부재 = false = 현행 동작(끄기). 재기동 시 복원.
+const SHELL_SETTINGS_DEFAULTS = { defaultTab: 'postit', alwaysOnTop: false };
 
 function shellSettingsPath() {
   return path.join(app.getPath('userData'), 'shell-settings.json');
@@ -111,6 +132,7 @@ function loadShellSettings() {
   const s = { ...SHELL_SETTINGS_DEFAULTS };
   if (raw && typeof raw === 'object') {
     if (raw.defaultTab === 'postit' || raw.defaultTab === 'calendar') s.defaultTab = raw.defaultTab;
+    s.alwaysOnTop = raw.alwaysOnTop === true; // 부재·비불리언 = 기본값(꺼짐)
   }
   return s;
 }
@@ -181,7 +203,7 @@ const TABBAR_HEIGHT = 40;
 // 설정 드로어 높이(px) — tabbar.html 의 [data-shell-settings] 높이와 동기 유지.
 // 드로어가 열리면 앱 뷰를 이만큼 아래로 밀어, 창의 기본 페이지(탭바)에 그린
 // 드로어가 뷰에 가려지지 않게 한다 (뷰는 항상 기본 페이지 위에 그려진다).
-const SETTINGS_DRAWER_HEIGHT = 138;
+const SETTINGS_DRAWER_HEIGHT = 186;
 
 // A49 ② 정적 검사 대상 — 아래 보안 기본선은 절대 완화 금지.
 // preload: A49③ 화이트리스트 브리지(window.petit) + 셸 전용 UI 레이어(A43 카드·A47 온보딩).
@@ -203,6 +225,255 @@ function hardenWebContents(wc) {
   wc.on('will-navigate', (event, url) => {
     if (url !== wc.getURL()) event.preventDefault();
   });
+}
+
+// ============================================================================
+// 크래시·먹통 기록 (발주 #28④) — userData\logs\ 회전 로그 (lib-shared)
+//
+// 지금까지는 렌더러가 흰 화면으로 굳어도 남는 근거가 0이었다(uncaughtException·
+// render-process-gone·로그 파일 전부 0건). 사용자에게 "무슨 일이 있었나요"를 물어볼
+// 수단이 없으니 티켓이 진단으로 이어지지 않는다. 아래 훅이 그 근거를 만든다.
+// 기록 내용은 사건 요약뿐 — 메모·일정 본문은 어떤 경로로도 들어가지 않는다.
+// ============================================================================
+
+/** 렌더러 크래시·응답 없음 로그 (+ 앱 페이지는 1회 자동 재로드로 복구 시도) */
+function wireCrashLogging(wc, label, autoReload) {
+  let reloaded = 0;
+  wc.on('render-process-gone', (_event, details) => {
+    const reason = (details && details.reason) || 'unknown';
+    const code = details && Number.isFinite(details.exitCode) ? details.exitCode : '?';
+    logEvent('renderer-gone', label + ' 렌더러 종료 — reason=' + reason + ', exitCode=' + code);
+    // 복구 1회 한정: 크래시 → 재로드 → 또 크래시 무한루프를 만들지 않는다.
+    if (autoReload && reason !== 'clean-exit' && reloaded < 1) {
+      reloaded += 1;
+      logEvent('renderer-reload', label + ' 화면을 다시 불러옵니다 (자동 복구 1회)');
+      // 이벤트 핸들러 안에서 곧바로 reload 하지 않는다 — 크래시 처리 중인 webContents 를
+      // 같은 틱에 다시 띄우면 Chromium 이 브라우저 프로세스째 죽는다(실측: exit 0x80000003).
+      setTimeout(() => {
+        if (wc.isDestroyed()) return;
+        try { wc.reload(); } catch (err) { logEvent('renderer-reload-fail', String((err && err.message) || err)); }
+      }, 300);
+    }
+  });
+  wc.on('unresponsive', () => logEvent('unresponsive', label + ' 응답 없음 (사용자 대기 중)'));
+  wc.on('responsive', () => logEvent('responsive', label + ' 응답 회복'));
+}
+
+/** main 프로세스 수준 예외 — 은폐하지 않고 기록한다 (콘솔 출력도 유지) */
+function wireProcessLogging() {
+  process.on('uncaughtException', (err) => {
+    const msg = String((err && err.stack) || (err && err.message) || err);
+    logEvent('uncaughtException', msg);
+    console.error('[쁘띠캘린더] 처리되지 않은 예외:', msg);
+  });
+  process.on('unhandledRejection', (reason) => {
+    const msg = String((reason && reason.stack) || (reason && reason.message) || reason);
+    logEvent('unhandledRejection', msg);
+    console.error('[쁘띠캘린더] 처리되지 않은 거부:', msg);
+  });
+  app.on('child-process-gone', (_event, details) => {
+    logEvent('child-process-gone',
+      '자식 프로세스 종료 — type=' + ((details && details.type) || '?') + ', reason=' + ((details && details.reason) || '?'));
+  });
+}
+
+// ============================================================================
+// 항상 위 (발주 #30) — 이 장르에서 가장 많이 요구되는 단일 행동.
+// 상태는 shell-settings.json 의 additive 필드 alwaysOnTop (기본 꺼짐)에 영속된다.
+// ============================================================================
+
+/** 창에 항상 위를 적용 — 실패해도 크래시 없이 현재 실측값을 돌려준다 */
+function applyAlwaysOnTop(win, on) {
+  if (!win || win.isDestroyed()) return false;
+  try {
+    // 'floating' 레벨: 다른 앱 위에는 뜨되 전체화면 게임·시스템 UI 를 가리지 않는 무난한 층
+    win.setAlwaysOnTop(on === true, 'floating');
+  } catch (err) {
+    logEvent('always-on-top', '적용 실패: ' + String((err && err.message) || err));
+  }
+  try {
+    return win.isAlwaysOnTop() === true;
+  } catch (_err) {
+    return on === true;
+  }
+}
+
+// ============================================================================
+// 진단 정보 (발주 #28①②) — 버전 정본은 electron\package.json 하나뿐이다.
+// app.getVersion() 이 그 값을 그대로 돌려주고, 셸 UI 는 이 값만 표기한다
+// (preload 의 수동 관리 상수·앱 HTML 의 rev 표기 같은 두 번째 정본을 만들지 않는다).
+// ============================================================================
+
+// 문의처: 실제 주소는 출시 직전에 사용자가 채운다. 지금 코드에 개인 메일을 박아 두면
+// 스토어 리스팅·README·앱이 서로 다른 주소를 갖게 되므로 자리표시자 하나로 고정한다.
+// (README.md·PRIVACY.md 에는 실주소가 이미 있고, 스토어 설명에는 아직 없다 — 발주 #28③)
+const CONTACT_PLACEHOLDER = '{CONTACT}';
+
+/** 배포 형태 추정 — 티켓에서 "어느 판을 쓰세요?"를 다시 묻지 않기 위한 한 줄 */
+function distributionKind() {
+  try {
+    if (!app.isPackaged) return '개발 트리 (electron .)';
+    if (process.windowsStore === true) return 'MSIX (Microsoft Store)';
+    const exe = String(process.execPath || '');
+    if (/[\\/]WindowsApps[\\/]/i.test(exe)) return 'MSIX (Microsoft Store)';
+    if (/[\\/]Programs[\\/]/i.test(exe)) return 'NSIS 설치본';
+    return '포터블/기타';
+  } catch (_err) {
+    return '알 수 없음';
+  }
+}
+
+/**
+ * 저장 사용량 — 앱 페이지에서 localStorage 총 바이트·키 개수만 센다.
+ * **키 이름도 값도 가져오지 않는다** (메모 본문 유출 차단 — 발주 #28② 필수 조건).
+ * @returns {Promise<{bytes:number, keys:number}|null>}
+ */
+async function storageUsage() {
+  const order = [runtime.activeTab, 'postit', 'calendar'];
+  for (const key of order) {
+    const view = runtime.views ? runtime.views[key] : null;
+    if (!view || !view.webContents || view.webContents.isDestroyed()) continue;
+    try {
+      const r = await view.webContents.executeJavaScript(
+        '(function(){try{var n=0,c=0;for(var i=0;i<localStorage.length;i++){' +
+        'var k=localStorage.key(i);var v=localStorage.getItem(k);' +
+        'n+=(k?k.length:0)+(v?v.length:0);c++;}' +
+        'return {bytes:n*2,keys:c};}catch(e){return null;}})()',
+        true
+      );
+      if (r && Number.isFinite(r.bytes)) return { bytes: r.bytes, keys: r.keys || 0 };
+    } catch (_err) { /* 평가 실패 — 다음 뷰로 */ }
+  }
+  return null;
+}
+
+function formatBytes(n) {
+  if (!Number.isFinite(n) || n < 0) return '알 수 없음';
+  if (n < 1024) return n + 'B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'KB';
+  return (n / (1024 * 1024)).toFixed(2) + 'MB';
+}
+
+/** 진단 정보 원본(구조체) — UI 표기와 클립보드 텍스트가 같은 값을 쓴다 */
+async function diagnosticsInfo() {
+  const displays = screen.getAllDisplays().map((d) => {
+    const b = d.bounds || {};
+    return b.width + '×' + b.height + '@' + (d.scaleFactor || 1) + 'x';
+  });
+  const usage = await storageUsage();
+  let backupFolder = '(알 수 없음)';
+  try { backupFolder = effectiveBackupFolder(); } catch (_err) { /* 조회 실패 — 표기만 생략 */ }
+  return {
+    ok: true,
+    name: app.getName(),
+    version: app.getVersion(),                       // 정본 = electron\package.json
+    distribution: distributionKind(),
+    electron: process.versions.electron || '?',
+    chrome: process.versions.chrome || '?',
+    node: process.versions.node || '?',
+    os: os.platform() + ' ' + os.release() + ' (' + os.arch() + ')',
+    displays,
+    userData: app.getPath('userData'),
+    logs: logsDir() || '(사용 불가)',
+    backupFolder,
+    storage: usage ? { bytes: usage.bytes, keys: usage.keys, text: formatBytes(usage.bytes) } : null,
+    recent: recentLogLines(5),
+    contact: CONTACT_PLACEHOLDER
+  };
+}
+
+/** 진단 정보 텍스트 — 클립보드로 나가는 최종 문자열 (개인 메모 내용 0) */
+function diagnosticsText(info) {
+  const lines = [
+    '쁘띠캘린더 진단 정보',
+    '- 앱 버전: ' + info.version + ' (' + info.distribution + ')',
+    '- 런타임: Electron ' + info.electron + ' · Chromium ' + info.chrome + ' · Node ' + info.node,
+    '- 운영체제: ' + info.os,
+    '- 화면: ' + (info.displays.length ? info.displays.join(', ') + ' (' + info.displays.length + '대)' : '알 수 없음'),
+    '- 데이터 폴더: ' + info.userData,
+    '- 백업 폴더: ' + info.backupFolder,
+    '- 로그 폴더: ' + info.logs,
+    '- 저장 사용량: ' + (info.storage ? info.storage.text + ' (키 ' + info.storage.keys + '개)' : '알 수 없음')
+  ];
+  lines.push('- 최근 기록: ' + (info.recent.length ? '' : '없음'));
+  for (const line of info.recent) lines.push('    ' + line);
+  lines.push('- 문의: ' + info.contact);
+  lines.push('※ 메모·일정 내용은 이 진단 정보에 포함되지 않아요.');
+  return lines.join('\r\n');
+}
+
+// ============================================================================
+// 보드 자랑하기 (발주 #31) — 지금 보고 있는 앱 뷰만 그림으로 담는다.
+// capturePage 대상이 앱 WebContentsView 하나뿐이라 탭바·설정 드로어는 애초에 프레임에
+// 들어오지 않는다 (창 전체 캡처가 아니다). 처리는 전부 로컬 — 외부 전송 0 (A44 무영향).
+// ============================================================================
+
+function pad2(v) { return v < 10 ? '0' + v : '' + v; }
+
+/** 파일명 타임스탬프 — YYYYMMDD-HHMMSS */
+function captureStamp(d) {
+  return '' + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) +
+    '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+}
+
+/** 저장 대화상자의 첫 위치 — 사진 폴더 → 문서 폴더 순 */
+function pictureDir() {
+  for (const key of ['pictures', 'documents']) {
+    try { return app.getPath(key); } catch (_err) { /* 다음 후보 */ }
+  }
+  return app.getPath('userData');
+}
+
+/**
+ * 활성 탭의 화면을 PNG 로 담아 클립보드에 넣거나 파일로 저장한다.
+ * @param {'clipboard'|'file'} mode
+ */
+async function captureBoard(mode) {
+  const view = runtime.views ? runtime.views[runtime.activeTab] : null;
+  if (!view || !view.webContents || view.webContents.isDestroyed()) {
+    return { ok: false, reason: '지금은 보드를 담을 수 없어요.' };
+  }
+  let image = null;
+  try {
+    image = await view.webContents.capturePage();
+  } catch (err) {
+    logEvent('capture-fail', String((err && err.message) || err));
+    return { ok: false, reason: '보드를 그림으로 담지 못했어요.' };
+  }
+  if (!image || image.isEmpty()) {
+    return { ok: false, reason: '보드를 그림으로 담지 못했어요 (빈 화면).' };
+  }
+  const size = image.getSize();
+  if (mode === 'file') {
+    const name = '쁘띠캘린더-보드-' + captureStamp(new Date()) + '.png';
+    let res;
+    try {
+      res = await dialog.showSaveDialog(runtime.win, {
+        title: '보드를 그림으로 저장',
+        defaultPath: path.join(pictureDir(), name),
+        buttonLabel: '저장',
+        filters: [{ name: 'PNG 이미지', extensions: ['png'] }]
+      });
+    } catch (err) {
+      logEvent('capture-fail', '저장 대화상자 실패: ' + String((err && err.message) || err));
+      return { ok: false, reason: '저장 창을 열지 못했어요.' };
+    }
+    if (!res || res.canceled || !res.filePath) return { ok: true, canceled: true };
+    try {
+      fs.writeFileSync(res.filePath, image.toPNG());
+    } catch (err) {
+      logEvent('capture-fail', '파일 저장 실패: ' + String((err && err.code) || err));
+      return { ok: false, reason: '그림을 저장하지 못했어요: ' + String((err && err.message) || err).slice(0, 160) };
+    }
+    return { ok: true, file: res.filePath, width: size.width, height: size.height };
+  }
+  try {
+    clipboard.writeImage(image);
+  } catch (err) {
+    logEvent('capture-fail', '클립보드 복사 실패: ' + String((err && err.message) || err));
+    return { ok: false, reason: '클립보드에 복사하지 못했어요.' };
+  }
+  return { ok: true, copied: true, width: size.width, height: size.height };
 }
 
 /**
@@ -307,8 +578,11 @@ function focusActiveView() {
  * @param {{defaultTab:string}} settings 셸 설정
  */
 function createShellWindow(state, settings) {
+  // 기본 크기 (발주 #29): 1024×740 → 1280×860. 비겹침 수용량이 노트 18장 → 30장대로
+  // 늘어 "빈 캔버스 + 좁은 벽" 첫인상을 줄인다. A42 계약(≥1024×700)은 그대로 충족하고,
+  // 작업영역보다 크면 freshBounds 가 화면에 맞춰 클램프한다 (작은 노트북 안전).
   const saved = sanitizeBounds(state.merged);
-  const fresh = saved ? null : freshBounds({ width: 1024, height: 740 });
+  const fresh = saved ? null : freshBounds({ width: 1280, height: 860 });
 
   const win = new BrowserWindow({
     width: saved ? saved.width : fresh.width,
@@ -332,6 +606,10 @@ function createShellWindow(state, settings) {
   win.setBounds(fresh || saved);
   if (state.merged && state.merged.maximized) win.maximize();
 
+  // 항상 위 (발주 #30) — 저장된 설정을 그대로 복원한다 (기본 꺼짐).
+  // 다꾸를 해 놓고도 다른 창에 덮여 안 보이는 자기모순을 없애는 한 줄.
+  applyAlwaysOnTop(win, settings.alwaysOnTop === true);
+
   // ── 제목 고정: 탭바 페이지가 document.title 을 바꿔도 셸 제목 유지 ──
   // (주의: preventDefault 로 네이티브 제목 변경을 막는 계약은 BrowserWindow 이벤트 쪽이다.
   //  webContents 의 동명 이벤트는 통지용이라 preventDefault 가 무효.)
@@ -340,6 +618,7 @@ function createShellWindow(state, settings) {
   });
 
   hardenWebContents(win.webContents);
+  wireCrashLogging(win.webContents, '탭바', false); // 탭바는 자동 재로드하지 않는다 (뷰가 붙어 있다)
   wireWindowStatePersistence(win, state, 'merged');
 
   // ── 두 앱 뷰 생성·로드 (모두 유지 — 탭 전환 시 리로드 금지 계약) ──
@@ -348,6 +627,7 @@ function createShellWindow(state, settings) {
       webPreferences: { ...SECURE_WEB_PREFERENCES } // 기존 preload.js 그대로 (A43 카드·A47 온보딩·백업 UI)
     });
     hardenWebContents(view.webContents);
+    wireCrashLogging(view.webContents, path.basename(htmlFile), true); // 앱 화면은 1회 자동 복구
     // A42: 저장소 원본을 그대로 로드 — 경로 외 어떤 변형도 없다.
     view.webContents.loadFile(htmlFile);
     return view;
@@ -442,6 +722,12 @@ function shellStatePayload() {
     defaultTab: runtime.settings ? runtime.settings.defaultTab : SHELL_SETTINGS_DEFAULTS.defaultTab,
     // 윈도우 시작 시 자동 실행 — 저장하지 않고 매번 OS 에서 읽는다 (단일 진실 = OS)
     openAtLogin: getOpenAtLogin(),
+    // 항상 위 — 실측값(창 상태)을 그대로 싣는다 (설정 파일과 어긋나면 창이 정답)
+    alwaysOnTop: runtime.win && !runtime.win.isDestroyed()
+      ? (function () { try { return runtime.win.isAlwaysOnTop() === true; } catch (_err) { return false; } })()
+      : !!(runtime.settings && runtime.settings.alwaysOnTop),
+    // 셸 버전 정본 — electron\package.json 하나 (탭바·앱 정보 표기가 같은 값을 쓴다)
+    version: app.getVersion(),
     // 백그라운드 캘린더 탭의 일정 알림 누적 (탭바 배지·미니 스트립용 — additive 필드)
     alarms: { count: runtime.pendingAlarms, text: runtime.lastAlarmText }
   };
@@ -508,6 +794,70 @@ function registerShellIpc() {
     return { ok: true, relayed: true };
   });
 
+  // 항상 위 토글 (발주 #30) — 적용 뒤 창 실측값을 다시 읽어 성패를 판정하고, 성공 시에만
+  // 설정에 영속한다. 모든 표면(탭바 드로어·앱 설정 모달)에 실측 상태를 push 한다.
+  ipcMain.handle('petit:shell:set-always-on-top', (event, on) => {
+    assertTrustedSender(event);
+    const want = on === true;
+    const actual = applyAlwaysOnTop(runtime.win, want);
+    if (actual === want) {
+      runtime.settings.alwaysOnTop = want;
+      saveShellSettings(runtime.settings);
+    }
+    pushShellUi();
+    if (actual !== want) {
+      return { ok: false, alwaysOnTop: actual, reason: '항상 위 설정을 바꾸지 못했어요.' };
+    }
+    return shellStatePayload();
+  });
+
+  // 앱 정보·진단 (발주 #28①②) — 조회 전용. 개인 메모 내용은 어떤 필드에도 담기지 않는다.
+  ipcMain.handle('petit:shell:info', async (event) => {
+    assertTrustedSender(event);
+    return diagnosticsInfo();
+  });
+
+  // 진단 정보 복사 — main 이 문자열을 만들어 클립보드에 넣는다(렌더러 클립보드 권한 불요).
+  // 외부 전송 0: 나가는 곳은 사용자의 클립보드뿐이다.
+  ipcMain.handle('petit:shell:copy-diagnostics', async (event) => {
+    assertTrustedSender(event);
+    const info = await diagnosticsInfo();
+    const text = diagnosticsText(info);
+    try {
+      clipboard.writeText(text);
+    } catch (err) {
+      logEvent('diagnostics', '클립보드 복사 실패: ' + String((err && err.message) || err));
+      return { ok: false, reason: '클립보드에 복사하지 못했어요.', text };
+    }
+    return { ok: true, text };
+  });
+
+  // 로그 폴더 열기 (발주 #28④) — 경로 인자를 받지 않는다: 여는 대상은 userData\logs 하나다.
+  ipcMain.handle('petit:shell:open-logs', async (event) => {
+    assertTrustedSender(event);
+    const dir = logsDir();
+    if (!dir) return { ok: false, reason: '로그 폴더를 찾지 못했어요.' };
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (_err) {
+      return { ok: false, folder: dir, reason: '로그 폴더를 만들 수 없어요.' };
+    }
+    let failure = '';
+    try {
+      failure = await shell.openPath(dir);
+    } catch (err) {
+      failure = String((err && err.message) || err);
+    }
+    if (failure) return { ok: false, folder: dir, reason: '폴더를 열지 못했어요: ' + failure.slice(0, 200) };
+    return { ok: true, folder: dir };
+  });
+
+  // 보드 자랑하기 (발주 #31) — 'clipboard' | 'file'. 그 외 값은 클립보드로 정규화한다.
+  ipcMain.handle('petit:shell:capture-board', async (event, mode) => {
+    assertTrustedSender(event);
+    return captureBoard(mode === 'file' ? 'file' : 'clipboard');
+  });
+
   // 온보딩 완료 통지(A47) — 완료 플래그의 정본은 렌더러 localStorage(postit-onboarded),
   // main 은 상태를 갖지 않는다 (수신 확인만 반환).
   ipcMain.handle('petit:onboarding:set-done', () => ({ ok: true }));
@@ -522,9 +872,10 @@ function registerShellIpc() {
 //  petit:onboarding:set-done 은 registerShellIpc 로 이동 — grep 실증 후 정리.)
 
 function main() {
+  wireProcessLogging(); // uncaughtException·unhandledRejection·child-process-gone → userData\logs
   registerMigrateIpc(); // 'petit:migrate:detect' / ':run' / ':status'
-  registerBackupIpc();  // 'petit:backup:status' / ':choose-folder' / ':run-now' / ':set-auto' / ':set-include-images'
-  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':set-startup' / ':alarm-relay' + 'petit:onboarding:set-done'
+  registerBackupIpc();  // 'petit:backup:status' / ':choose-folder' / ':open-folder' / ':ack-notice' / ':run-now' / ':set-auto' / ':set-include-images'
+  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':set-startup' / ':set-always-on-top' / ':info' / ':copy-diagnostics' / ':open-logs' / ':capture-board' / ':alarm-relay' + 'petit:onboarding:set-done'
 
   app.whenReady().then(() => {
     // A44: 세션 수준 스펠체커 완전 차단 — webPreferences.spellcheck:false 만으로는
@@ -538,6 +889,11 @@ function main() {
       killSpell(session.defaultSession);
       app.on('session-created', killSpell);
     } catch (e) { /* 세션 API 부재 시에도 창 생성은 계속 */ }
+
+    // 세션 시작 한 줄 — 로그 파일이 항상 존재하게 만들고(진단 첫 질문 = "로그 주세요"),
+    // 어느 빌드가 언제 떴는지 기록한다. 개인정보 없음.
+    logEvent('start', '앱 시작 — v' + app.getVersion() + ' · ' + distributionKind() +
+      ' · Electron ' + (process.versions.electron || '?'));
 
     runtime.state = loadWindowState();
     runtime.settings = loadShellSettings();

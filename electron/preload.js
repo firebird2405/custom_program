@@ -48,8 +48,9 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-// 셸 버전 — electron/package.json 의 version 과 동기 유지 (수동 관리)
-const SHELL_VERSION = '0.9.0';
+// (버전 상수 폐지 — 발주 #28①: '0.9.0' 을 여기 한 번 더 적어 두면 릴리스마다 어긋난다.
+//  버전 정본은 electron/package.json 하나이고, main 이 app.getVersion() 으로 내려 준다:
+//  petit.shell.info().version · petit.startup.status().version)
 
 // ── A49③: window.petit — 이름 붙은 채널 화이트리스트 래퍼만 노출 ────────────
 // A43 계약(정본: grader a43 spec 상단 주석):
@@ -59,7 +60,6 @@ const migrateRun = function () { return ipcRenderer.invoke('petit:migrate:run');
 const migrateStatus = function () { return ipcRenderer.invoke('petit:migrate:status'); };
 
 const petitApi = {
-  version: SHELL_VERSION,
   migrate: {
     detect: migrateDetect,
     run: migrateRun,
@@ -78,7 +78,24 @@ const petitApi = {
     chooseFolder: function () { return ipcRenderer.invoke('petit:backup:choose-folder'); },
     runNow: function () { return ipcRenderer.invoke('petit:backup:run-now'); },
     setAuto: function (on) { return ipcRenderer.invoke('petit:backup:set-auto', on === true); },
-    setIncludeImages: function (on) { return ipcRenderer.invoke('petit:backup:set-include-images', on === true); }
+    setIncludeImages: function (on) { return ipcRenderer.invoke('petit:backup:set-include-images', on === true); },
+    // 폴더 열기 — 경로 인자가 없다: main 이 "현재 백업 폴더" 하나만 연다 (임의 경로 열기 불가)
+    openFolder: function () { return ipcRenderer.invoke('petit:backup:open-folder'); },
+    // 기본 폴더 1회 안내 확인 (발주 #24)
+    ackNotice: function () { return ipcRenderer.invoke('petit:backup:ack-notice'); }
+  },
+  // 셸 정보·진단·창 조작 (발주 #28·#30·#31) — 전부 로컬 처리, 외부 전송 0.
+  shell: {
+    /** 앱 정보·진단 원본 — { version, distribution, electron, chrome, os, displays, … } */
+    info: function () { return ipcRenderer.invoke('petit:shell:info'); },
+    /** 진단 정보를 클립보드로 (메모·일정 본문 미포함) — { ok, text } */
+    copyDiagnostics: function () { return ipcRenderer.invoke('petit:shell:copy-diagnostics'); },
+    /** 로그 폴더 열기 (userData\logs — 경로 인자 없음) */
+    openLogs: function () { return ipcRenderer.invoke('petit:shell:open-logs'); },
+    /** 항상 위 토글 — 적용 후 실측 상태를 되돌려준다 */
+    setAlwaysOnTop: function (on) { return ipcRenderer.invoke('petit:shell:set-always-on-top', on === true); },
+    /** 보드를 그림으로 — 'clipboard'(기본) 또는 'file' */
+    captureBoard: function (mode) { return ipcRenderer.invoke('petit:shell:capture-board', mode === 'file' ? 'file' : 'clipboard'); }
   },
   startup: {
     // 윈도우 시작 시 자동 실행 — main 이 app.getLoginItemSettings/setLoginItemSettings 로
@@ -978,6 +995,32 @@ function armCtxHint() {
   }, 1200);
 }
 
+// ── 온보딩 반복 차단 (발주 #29) ─────────────────────────────────────────────
+// 결함: 완료 플래그는 finish() 에서만 기록된다. 2단계까지 하고 창을 닫는 "가장 흔한
+// 첫날 패턴"에서는 플래그가 안 써져, **메모가 이미 붙어 있는데도** 재실행마다
+// "1 / 4 — 첫 장을 붙여 보세요"가 처음부터 다시 뜬다 (실측 재현).
+//
+// 선택한 해법: "노트가 1장 이상이면 자동 종료". 근거 —
+//   ① 온보딩이 가르치는 것은 "첫 장을 붙이는 법"인데, 이미 붙인 사람에게는 가르칠 것이
+//      남아 있지 않다. 화면에 보이는 사실(노트 존재)이 어떤 진행 플래그보다 정확하다.
+//   ② 진행 상태를 따로 적으려면 저장 키·필드를 새로 만들어야 하는데, 완료 플래그
+//      (postit-onboarded) 하나로 끝나는 편이 스키마를 넓히지 않는다 (additive 값만 사용).
+//   ③ A47 계약 무영향: fresh 프로필은 노트 0장이라 첫 표시는 그대로다. 재기동 시
+//      재표시 금지 조항도 같은 방향이다.
+// 노트가 0장인 채로 이탈했다면 아무것도 배우지 못한 것이므로 처음부터 다시 안내한다
+// (그 프로필의 보드는 여전히 비어 있다 — 반복이 아니라 정상적인 첫 안내다).
+
+/** 이 보드에 이미 메모가 있는가 — 앱이 localStorage 에서 동기 렌더한 결과를 그대로 읽는다 */
+function boardHasNotes() {
+  try {
+    return !!document.querySelector('[data-note]');
+  } catch (_err) {
+    return false;
+  }
+}
+
+const OB_AUTO_TEXT = '메모가 이미 있어서 처음 안내는 접어 뒀어요. ⚙️ 설정 → "처음 안내 다시 보기"에서 언제든 볼 수 있어요.';
+
 function initOnboarding() {
   if (PAGE !== 'postit') return;
   injectOnboardingReplay();                    // 재실행 진입점은 항상 준비 (완료·건너뛰기 후 포함)
@@ -987,19 +1030,28 @@ function initOnboarding() {
   }
   // 앱 초기화(load)가 끝난 뒤 시작 — fresh 첫 기동의 무거운 초기화와 첫 클릭이
   // 경합하지 않게 한다 (오버레이는 load 직후 표시 — 15초 표시 계약에 충분).
-  if (document.readyState === 'complete') startOnboarding();
-  else window.addEventListener('load', function () { startOnboarding(); }, { once: true });
+  const begin = function () {
+    if (boardHasNotes()) {
+      // 중도 이탈 프로필 — 완료로 표시하고 물러난다 (재실행 진입점은 설정에 남아 있다)
+      lsSet(ONBOARDED_KEY, 'auto');
+      try { shellHint(OB_AUTO_TEXT, 4200, 'bottomLeft'); } catch (_err) { /* 힌트 실패는 앱 무영향 */ }
+      armCtxHint();
+      return;
+    }
+    startOnboarding();
+  };
+  if (document.readyState === 'complete') begin();
+  else window.addEventListener('load', begin, { once: true });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // 백업 UI (양 창 설정 패널 — 발주: 클라우드 폴더 백업 + Pro 예약 자동 백업)
 // 훅: [data-backup-section] 섹션 / [data-backup-folder] 폴더 표시 /
 //     [data-backup-choose] 폴더 변경(네이티브 폴더 대화상자 — main dialog) /
-//     [data-backup-now] 지금 백업(Free 포함) / [data-backup-images] 이미지 포함 옵션 /
-//     [data-backup-auto] 예약 토글(Pro 게이트) / [data-backup-status] 상태 줄.
-// Pro 잠금 표시: 예약 토글 옆 [data-pro-lock] — 포스트잇 창에서는 앱의 A45 규약과
-// 그대로 맞물린다 (html.pro-ok CSS 가 숨기고, 클릭 시 앱 전역 핸들러가 라이선스
-// 팝업을 연다). 캘린더 창에는 앱측 Pro CSS 가 없으므로 status().pro 로 직접 숨긴다.
+//     [data-backup-now] 지금 백업 / [data-backup-images] 이미지 포함 옵션 /
+//     [data-backup-auto] 예약 토글 / [data-backup-status] 상태 줄.
+// rev.9(무료 단독 출시판): 예약 자동 백업의 Pro 게이트·잠금 마크는 폐지됐다 —
+// 이 섹션의 모든 항목이 라이선스 없이 동작한다 (감사 권고 #24·#25, A45 ①②).
 // 원본 HTML 은 무수정(A42) — 전부 preload 주입. 저장 키는 건드리지 않는다 (main 이
 // userData\backup-config.json 에 보관).
 // ────────────────────────────────────────────────────────────────────────────
@@ -1037,8 +1089,14 @@ function injectBackupSection() {
   const btnNow = mkBtn('💾 지금 백업');
   btnNow.title = '캘린더·포스트잇 데이터를 지금 바로 백업 파일로 저장';
   btnNow.setAttribute('data-backup-now', '');
+  // 폴더 열기 (발주 #24) — 경로만 보여 주고 "그래서 어디로 가야 하나"를 안 알려 주던 결함.
+  // 백업 파일을 실제로 눈으로 확인·복사할 수 있어야 백업이 안전망으로 체감된다.
+  const btnOpen = mkBtn('📂 폴더 열기');
+  btnOpen.title = '백업 파일이 쌓이는 폴더를 탐색기로 열어요';
+  btnOpen.setAttribute('data-backup-open', '');
   btnRow.appendChild(btnChoose);
   btnRow.appendChild(btnNow);
+  btnRow.appendChild(btnOpen);
   sec.appendChild(btnRow);
 
   // 이미지 포함 옵션 (기본 꺼짐 — 용량 안내)
@@ -1050,7 +1108,9 @@ function injectBackupSection() {
   imgLabel.appendChild(el('span', { lineHeight: '1.4' }, '백업에 이미지 포함 (배경·사진 스티커 — 파일이 커져서 기본은 꺼져 있어요)'));
   sec.appendChild(imgLabel);
 
-  // 예약 자동 백업 (Pro 게이트)
+  // 예약 자동 백업 — rev.9 무료 단독 출시판에서는 무료 기능이다 (감사 권고 #24·#25).
+  // 잠금 마크·disabled 게이트를 전부 걷어냈다: 무료 사용자에게 자동 백업이 없는 것이
+  // 지금 이 앱의 최대 데이터 유실 리스크였다.
   const autoRow = el('div', { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', flexWrap: 'wrap' });
   const autoLabel = el('label', { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' });
   const autoChk = document.createElement('input');
@@ -1059,19 +1119,6 @@ function injectBackupSection() {
   autoLabel.appendChild(autoChk);
   autoLabel.appendChild(el('span', undefined, '매일 자동 백업 (앱이 켜져 있는 동안 하루 1번)'));
   autoRow.appendChild(autoLabel);
-  const lockMark = btnEl({
-    font: 'inherit',
-    fontSize: '12px',
-    padding: '2px 8px',
-    borderRadius: '9px',
-    border: '1px solid #d8cbb0',
-    background: '#fff3ec',
-    color: '#a4653c',
-    cursor: 'pointer'
-  }, '🔒 프리미엄');
-  lockMark.title = '예약 자동 백업은 프리미엄(Pro) 기능이에요';
-  lockMark.setAttribute('data-pro-lock', ''); // 포스트잇: 앱 A45 규약과 결합 (pro-ok 시 CSS 숨김 + 클릭 시 라이선스 팝업)
-  autoRow.appendChild(lockMark);
   sec.appendChild(autoRow);
 
   // 안내문 (클라우드 백업 안내 + 상태 줄)
@@ -1087,26 +1134,25 @@ function injectBackupSection() {
   host.appendChild(sec);
 
   // ── 상태 동기화 ──
-  let bkPro = false;
   function setStatus(msg) { statusLine.textContent = msg || ''; }
-  function applyProState() {
-    autoChk.disabled = !bkPro;
-    lockMark.style.display = bkPro ? 'none' : '';
-    if (!bkPro) autoLabel.style.opacity = '0.62';
-    else autoLabel.style.opacity = '';
-  }
   let refreshing = false;
+  let noticeShown = false;      // 기본 폴더 1회 안내 — 이 세션에서 이미 띄웠는가
   async function refreshBackupUi() {
     if (refreshing) return;
     refreshing = true;
     try {
       const st = await petitApi.backup.status();
       if (st && st.ok) {
-        bkPro = st.pro === true;
         folderVal.textContent = st.folder + (st.folderIsDefault ? ' (기본)' : '');
         imgChk.checked = st.includeImages === true;
         autoChk.checked = st.auto === true;
-        applyProState();
+        // 기본 폴더가 문서 폴더로 정해졌다는 1회 안내 (발주 #24). 설정을 실제로 연
+        // 순간에만 말하고, 그 즉시 확인 처리해 다음 실행부터는 조용하다.
+        if (!noticeShown && st.notice && panel.classList.contains('open')) {
+          noticeShown = true;
+          setStatus(String(st.notice));
+          try { await petitApi.backup.ackNotice(); } catch (_e) { /* 다음 기회에 다시 안내 */ }
+        }
       }
     } catch (_err) { /* 브리지 실패 — UI 만 유지 */ }
     refreshing = false;
@@ -1137,6 +1183,16 @@ function injectBackupSection() {
     btnNow.disabled = false;
   });
 
+  btnOpen.addEventListener('click', async function () {
+    btnOpen.disabled = true;
+    try {
+      const res = await petitApi.backup.openFolder();
+      if (res && res.ok) setStatus('백업 폴더를 열었어요: ' + String(res.folder || ''));
+      else setStatus(String((res && res.reason) || '폴더를 열지 못했어요.'));
+    } catch (_err) { setStatus('폴더를 열지 못했어요.'); }
+    btnOpen.disabled = false;
+  });
+
   imgChk.addEventListener('change', async function () {
     try { await petitApi.backup.setIncludeImages(imgChk.checked); } catch (_err) { /* 다음 status 로 재동기화 */ }
   });
@@ -1162,15 +1218,6 @@ function injectBackupSection() {
     if (panel.classList.contains('open')) refreshBackupUi();
   });
   panelObserver.observe(panel, { attributes: true, attributeFilter: ['class'] });
-
-  // 포스트잇: 라이선스 해제(html.pro-ok)를 즉시 반영 — A45 해제 흐름과 동기
-  if (PAGE === 'postit') {
-    const htmlObserver = new MutationObserver(function () {
-      const nowPro = document.documentElement.classList.contains('pro-ok');
-      if (nowPro !== bkPro) refreshBackupUi();
-    });
-    htmlObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-  }
 
   refreshBackupUi();
 }
@@ -1277,6 +1324,216 @@ function initStartupUi() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 항상 위 UI (양 창 설정 패널 — 발주 #30)
+// 훅: [data-alwaystop-section] 섹션 / [data-alwaystop-toggle] 토글 / [data-alwaystop-status] 상태.
+// 탭바 드로어의 같은 항목과 채널 하나(petit:shell:set-always-on-top)를 공유하고, main 의
+// 상태 push 로 양방향 동기화된다. 상태의 정본은 창 실측값(win.isAlwaysOnTop)이고
+// shell-settings.json 의 additive 필드에 영속된다 (기본 꺼짐 — 현행 동작 불변).
+// 원본 HTML 은 무수정(A42) — 전부 preload 주입.
+// ────────────────────────────────────────────────────────────────────────────
+
+function injectAlwaysTopSection() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel || panel.querySelector('[data-alwaystop-section]')) return;
+  const isCal = PAGE === 'calendar';
+  const host = isCal ? (panel.querySelector('.spBody') || panel) : panel;
+  const smallCls = isCal ? 'spSmall' : 'sp-small';
+
+  const sec = el(isCal ? 'section' : 'div');
+  sec.className = isCal ? 'spSec' : 'sp-sec';
+  sec.setAttribute('data-alwaystop-section', '');
+  sec.appendChild(el('h3', undefined, '창'));
+
+  const row = el('label', { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', fontSize: '13px', cursor: 'pointer' });
+  const chk = document.createElement('input');
+  chk.type = 'checkbox';
+  chk.setAttribute('data-alwaystop-toggle', '');
+  row.appendChild(chk);
+  row.appendChild(el('span', undefined, '항상 위에 두기'));
+  sec.appendChild(row);
+
+  const hint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '5px 0 0' },
+    '다른 창을 열어도 쁘띠캘린더가 위에 남아요. 꾸며 둔 보드를 계속 보고 싶을 때 켜요.');
+  hint.className = smallCls;
+  sec.appendChild(hint);
+
+  const statusLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '5px 0 0' }, '');
+  statusLine.className = smallCls;
+  statusLine.setAttribute('data-alwaystop-status', '');
+  sec.appendChild(statusLine);
+
+  // 자리: [시작 프로그램] 바로 위 — 창 관련 항목이 먼저 오는 게 자연스럽다
+  const startupSec = host.querySelector('[data-startup-section]');
+  if (startupSec && startupSec.parentElement === host) host.insertBefore(sec, startupSec);
+  else host.appendChild(sec);
+
+  function setStatus(msg) { statusLine.textContent = msg || ''; }
+  function applyState(st) {
+    if (!st || typeof st.alwaysOnTop !== 'boolean') return;
+    chk.checked = st.alwaysOnTop;
+  }
+  async function refreshUi() {
+    // startup.status() = 셸 상태 채널(petit:shell:state) — 자동 실행·항상 위·버전이 한
+    // 페이로드로 온다 (표면마다 채널을 늘리지 않는다 — A49③ 화이트리스트 최소화).
+    try { applyState(await petitApi.startup.status()); } catch (_err) { /* 표시만 유지 */ }
+  }
+
+  chk.addEventListener('change', async function () {
+    const want = chk.checked;
+    chk.disabled = true;
+    try {
+      const res = await petitApi.shell.setAlwaysOnTop(want);
+      applyState(res);
+      if (res && res.ok === true) {
+        setStatus(want ? '이제 다른 창 위에 떠 있어요.' : '항상 위를 껐어요.');
+      } else {
+        const why = String((res && res.reason) || '항상 위 설정을 바꾸지 못했어요.');
+        setStatus(why);
+        shellHint(why, 3200, 'bottom');       // 비모달 안내 (alert/confirm 금지)
+        await refreshUi();
+      }
+    } catch (_err) {
+      setStatus('항상 위 설정을 바꾸지 못했어요.');
+      await refreshUi();
+    }
+    chk.disabled = false;
+  });
+
+  // 다른 표면(탭바 드로어)에서 바뀐 값 즉시 반영 — main 이 모든 표면에 push 한다
+  try { petitApi.startup.onChange(applyState); } catch (_err) { /* 패널 개방 시 재조회로 강등 */ }
+
+  const panelObserver = new MutationObserver(function () {
+    if (panel.classList.contains('open')) refreshUi();
+  });
+  panelObserver.observe(panel, { attributes: true, attributeFilter: ['class'] });
+
+  refreshUi();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 앱 정보 · 진단 UI (양 창 설정 패널 — 발주 #28①②③④)
+// 훅: [data-shell-about] 섹션 / [data-shell-version] 버전 줄 /
+//     [data-shell-diagnostics] 진단 정보 복사 / [data-shell-logs] 로그 폴더 열기 /
+//     [data-shell-about-status] 상태 줄.
+//
+// 왜 셸이 주입하는가: 앱 HTML 의 정보 패널에는 'rev.5'·'(2026-08)' 같은 채점표 리비전이
+// 박혀 있어 어느 빌드인지 특정할 수 없는데, 원본 HTML 은 바이트 동일 계약(A42)이라
+// 고칠 수 없다. 그래서 "사용자가 읽을 수 있는 진짜 버전"을 셸이 옆에 붙인다.
+// 버전 정본은 electron/package.json 하나 — main 의 app.getVersion() 값만 표기한다.
+// data-spcat="about" 로 앱의 [정보] 카테고리에 들어간다 (앱 관용 속성 재사용).
+// ────────────────────────────────────────────────────────────────────────────
+
+// 문의처 자리표시자 — **채우는 곳은 main.js 의 CONTACT_PLACEHOLDER 하나**다.
+// 여기 값은 info() 응답이 오기 전(수십 ms)의 표시용이고, 응답이 오면 main 값으로 대체된다.
+const CONTACT_PLACEHOLDER = '{CONTACT}';
+
+function injectAboutSection() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel || panel.querySelector('[data-shell-about]')) return;
+  const isCal = PAGE === 'calendar';
+  const host = isCal ? (panel.querySelector('.spBody') || panel) : panel;
+  const smallCls = isCal ? 'spSmall' : 'sp-small';
+
+  const sec = el(isCal ? 'section' : 'div');
+  sec.className = isCal ? 'spSec' : 'sp-sec';
+  sec.setAttribute('data-shell-about', '');
+  sec.setAttribute('data-spcat', 'about');   // 앱 [정보] 카테고리로 (앱 spSecCat 규약)
+  sec.appendChild(el('h3', undefined, '앱 정보 · 문의'));
+
+  const verLine = el('p', { fontSize: '13px', lineHeight: '1.45', margin: '4px 0 0' }, '버전을 확인하는 중…');
+  verLine.setAttribute('data-shell-version', '');
+  sec.appendChild(verLine);
+
+  const envLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '3px 0 0' }, '');
+  envLine.className = smallCls;
+  sec.appendChild(envLine);
+
+  const btnRow = el('div', { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '7px 0 0' });
+  const mkBtn = function (label) {
+    const b = btnEl(undefined, label);
+    if (!isCal) b.className = 'tool-btn';
+    return b;
+  };
+  const btnDiag = mkBtn('📋 진단 정보 복사');
+  btnDiag.title = '버전·환경 정보를 클립보드로 복사해요 (메모 내용은 포함되지 않아요)';
+  btnDiag.setAttribute('data-shell-diagnostics', '');
+  const btnLogs = mkBtn('🗂 로그 폴더 열기');
+  btnLogs.title = '오류 기록이 쌓이는 폴더를 탐색기로 열어요';
+  btnLogs.setAttribute('data-shell-logs', '');
+  btnRow.appendChild(btnDiag);
+  btnRow.appendChild(btnLogs);
+  sec.appendChild(btnRow);
+
+  const contactLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '6px 0 0' },
+    '문의: ' + CONTACT_PLACEHOLDER);
+  contactLine.className = smallCls;
+  sec.appendChild(contactLine);
+
+  const contactHint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '3px 0 0' },
+    '문제가 생기면 [진단 정보 복사]를 눌러 나온 내용을 함께 보내 주세요. 인터넷으로 전송되는 정보는 하나도 없어요.');
+  contactHint.className = smallCls;
+  sec.appendChild(contactHint);
+
+  const statusLine = el('p', { fontSize: '12.5px', lineHeight: '1.45', margin: '5px 0 0' }, '');
+  statusLine.className = smallCls;
+  statusLine.setAttribute('data-shell-about-status', '');
+  sec.appendChild(statusLine);
+
+  host.appendChild(sec);   // 정보 카테고리 — 앱 정보 섹션과 나란히 (맨 뒤가 자연스러운 자리)
+
+  function setStatus(msg) { statusLine.textContent = msg || ''; }
+
+  let infoLoaded = false;
+  async function refreshInfo() {
+    if (infoLoaded) return;
+    try {
+      const info = await petitApi.shell.info();
+      if (!info || !info.ok) return;
+      infoLoaded = true;
+      verLine.textContent = '🌷 쁘띠캘린더 ' + info.version + ' · ' + info.distribution;
+      envLine.textContent = 'Electron ' + info.electron + ' · Chromium ' + info.chrome + ' · ' + info.os +
+        (info.storage ? ' · 저장 사용량 ' + info.storage.text : '');
+      if (info.contact && info.contact !== CONTACT_PLACEHOLDER) {
+        contactLine.textContent = '문의: ' + info.contact;
+      }
+    } catch (_err) { /* 브리지 실패 — 표시만 유지 */ }
+  }
+
+  btnDiag.addEventListener('click', async function () {
+    btnDiag.disabled = true;
+    try {
+      const res = await petitApi.shell.copyDiagnostics();
+      if (res && res.ok) setStatus('진단 정보를 복사했어요. 문의 메일에 붙여넣기 해 주세요. (메모 내용은 들어 있지 않아요)');
+      else setStatus(String((res && res.reason) || '진단 정보를 복사하지 못했어요.'));
+    } catch (_err) { setStatus('진단 정보를 복사하지 못했어요.'); }
+    btnDiag.disabled = false;
+  });
+
+  btnLogs.addEventListener('click', async function () {
+    btnLogs.disabled = true;
+    try {
+      const res = await petitApi.shell.openLogs();
+      if (res && res.ok) setStatus('로그 폴더를 열었어요: ' + String(res.folder || ''));
+      else setStatus(String((res && res.reason) || '로그 폴더를 열지 못했어요.'));
+    } catch (_err) { setStatus('로그 폴더를 열지 못했어요.'); }
+    btnLogs.disabled = false;
+  });
+
+  // 정보는 자주 바뀌지 않는다 — 패널을 처음 열 때 한 번만 채운다 (저장 사용량 계산 포함)
+  const panelObserver = new MutationObserver(function () {
+    if (panel.classList.contains('open')) refreshInfo();
+  });
+  panelObserver.observe(panel, { attributes: true, attributeFilter: ['class'] });
+
+  refreshInfo();
+}
+
+function initShellInfoUi() {
+  try { injectAlwaysTopSection(); } catch (_err) { /* 셸 UI 실패는 앱 무영향 */ }
+  try { injectAboutSection(); } catch (_err) { /* 셸 UI 실패는 앱 무영향 */ }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 알림 릴레이 (캘린더 페이지 전용)
 // 문제: 단일 창 탭 모드에서 캘린더가 백그라운드 탭이면 일정 알림 토스트(A32)가
 // 다른 뷰에 가려져 유실된다. 캘린더 preload 가 [data-toast] 표출을 감지해 main 으로
@@ -1335,6 +1592,7 @@ function initShellUi() {
   if (PAGE === 'postit') initOnboarding();
   initBackupUi();   // 양 앱 설정 패널에 [백업] 섹션 주입
   initStartupUi();  // 양 앱 설정 패널에 [시작 프로그램] 섹션 주입 (탭바 드로어와 동기)
+  initShellInfoUi();// [창](항상 위) + [앱 정보·문의](버전·진단·로그) 섹션 주입
   initAlarmRelay(); // 캘린더 페이지 — 백그라운드 탭 알림 릴레이 (탭바 배지)
 }
 

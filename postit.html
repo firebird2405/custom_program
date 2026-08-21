@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="pro-hidden">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -995,16 +995,16 @@ html[data-theme-preset="dark"] .confirm-no:hover { background: rgba(172,162,215,
   left: 50%;
   top: 50%;
   width: 332px;
-  margin-left: -166px;
-  margin-top: -168px;
-  padding: 36px 26px 26px;
+  max-width: calc(100vw - 32px);
+  /* 높이에 맞춰 스스로 가운데 — 고정 음수 마진이면 문구가 바뀔 때마다 아래가 잘렸다 (발주 #29) */
+  padding: 34px 24px 24px;
   background: #ffe28a;
   background-image:
     linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0) 30%),
     linear-gradient(0deg, rgba(94,62,24,0.10), rgba(94,62,24,0) 18%);
   border-radius: 3px;
   box-shadow: 4px 12px 24px rgba(43,24,8,0.4), 0 2px 5px rgba(0,0,0,0.2);
-  transform: rotate(-2deg);
+  transform: translate(-50%, -50%) rotate(-2deg);
   text-align: center;
   color: #4a3421;
   pointer-events: none;
@@ -1029,6 +1029,15 @@ html[data-theme-preset="dark"] .confirm-no:hover { background: rgba(172,162,215,
 }
 .w-line { margin: 5px 0; font-size: 19px; line-height: 1.3; word-break: keep-all; }
 .w-small { margin: 14px 0 0; font-size: 16px; opacity: 0.75; }
+/* 맨 윗줄 = 이 앱을 고르는 이유. 옅게 흘리지 않고 또렷하게 둔다 (발주 #29) */
+.w-own {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 700;
+  color: #6b4a22;
+  word-break: keep-all;
+}
 
 /* ── 비모달 알림 ── */
 .notice {
@@ -1080,6 +1089,26 @@ html[data-theme-preset="dark"] .confirm-no:hover { background: rgba(172,162,215,
 }
 .notice-undo:hover { filter: brightness(1.05); }
 .notice-undo[hidden] { display: none; }
+/* 안내 전용 행동 단추 (발주 #23) — 실행 취소와 헷갈리지 않게 색을 달리한다 */
+.notice-act {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 14px;
+  background: #ffb4a2;
+  color: #4a2f21;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(122,60,34,0.35);
+}
+.notice-act:hover { filter: brightness(1.05); }
+.notice-act[hidden] { display: none; }
+/* 경고성 안내(저장 실패·용량)는 배경을 달리해 일반 안내와 구분하고, 오래 머문다 */
+.notice.warn { background: #ffeede; box-shadow: 0 8px 22px rgba(120,40,10,0.42); }
+/* 여러 줄 문구(줄바꿈 포함)를 그대로 보여 준다 — 문구가 길어도 잘리지 않게 */
+.notice > span { white-space: pre-line; }
 
 /* ── 삭제 전 확인 팝오버 (설정 [안전] 켬일 때만 존재 — 기본 끔 = 현행 그대로) ── */
 .confirm-pop {
@@ -1689,6 +1718,13 @@ body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !i
 .pro-content { display: none; }
 html.pro-ok .pro-content { display: block; }
 html.pro-ok [data-pro-lock] { display: none !important; }
+/* ── 무료 단독 출시판 (rev.9 · 감사 권고 #25) — Pro 잠금 UI 전면 비노출 ──
+   구매 채널이 0건인 이번 판에서 "살 수 없는 잠금"은 사용자에게 원망만 남긴다.
+   서명 검증 코드·공개키·테스트 픽스처는 그대로 보존하고(A45 ③) 화면 노출만 끈다(A45 ②).
+   Pro 재출시 때 <html> 의 pro-hidden 클래스만 걷으면 이전 동작으로 되돌아온다. */
+html.pro-hidden [data-pro-lock],
+html.pro-hidden #dpProSec,
+html.pro-hidden #licensePop { display: none !important; }
 .pro-banner {
   display: none;
   position: fixed;
@@ -1830,20 +1866,23 @@ html[data-pro-theme="lavender"] #board {
     <input type="file" id="decorPhotoInput" data-decor-photo-input accept="image/*" hidden>
   </div>
 
+  <!-- 첫 화면 안내 카드 (발주 #29) — 3줄로 압축.
+       ① 이 제품의 유일한 차별화 문장을 맨 위로 올린다(예전엔 마지막 줄이라 온보딩 카드에 가렸다).
+       ② "＋ 새 포스트잇을 눌러 보세요"는 셸 온보딩 1단계와 같은 말이라 뺀다(중복 제거).
+       ③ 카드가 짧아진 만큼 세로 중앙 정렬만으로도 화면 아래 온보딩 카드와 겹치지 않는다. -->
   <div class="welcome-card" id="welcome">
     <span class="wpin"></span>
-    <p class="w-hello">반가워요! 🌼</p>
-    <p class="w-line">위의 ＋ 새 포스트잇 단추로<br>첫 메모를 붙여 보세요.</p>
-    <p class="w-line">🖱 잡아서 끌면 자유롭게 옮겨지고</p>
-    <p class="w-line">✏️ 살짝 클릭하면 바로 고칠 수 있어요</p>
-    <p class="w-line">🎨 메모를 한 번 고른 뒤 색 단추를 누르면 옷을 갈아입고</p>
-    <p class="w-line">✕ 고른 메모 오른쪽 위의 단추로 떼어낼 수 있어요</p>
-    <p class="w-small">모든 메모는 이 컴퓨터에만 저장돼요</p>
+    <p class="w-own">🔒 모든 메모는 이 컴퓨터에만 저장돼요</p>
+    <p class="w-hello">여기가 당신의 보드예요 🌼</p>
+    <p class="w-line">＋ 로 붙이고 · 끌어서 옮기고 · 눌러서 고쳐요</p>
   </div>
 </div>
 
 <div class="notice" id="notice" data-toast role="status" aria-live="polite">
   <span id="noticeText"></span>
+  <!-- 안내 전용 행동 단추 (발주 #23) — 저장 실패·용량 경고에서 [정리 방법 보기]로 쓴다.
+       [data-undo] 가 아니므로 A20 실행 취소 계약과 무간섭이며, 기본은 hidden(렌더 불변). -->
+  <button type="button" class="notice-act" id="noticeAction" hidden></button>
   <button type="button" class="notice-undo" id="noticeUndo" data-undo hidden>실행 취소</button>
   <button type="button" class="notice-close" id="noticeClose">닫기</button>
 </div>
@@ -1858,10 +1897,10 @@ html[data-pro-theme="lavender"] #board {
 
 <div class="ctxmenu" id="ctxMenu" data-ctx-menu role="menu"></div>
 
-<!-- 프리미엄 잠금 안내 배너 (A45): 보드 4개째 시도 등 잠긴 기능에 닿으면 표시.
-     클릭 = 라이선스 안내·가져오기 팝업. 해제 상태(html.pro-ok)에서는 CSS로 전부 숨는다. -->
-<button type="button" class="pro-banner" id="proBanner" data-pro-lock title="프리미엄 잠금 해제 안내 열기">
-  🔒 보드는 무료로 3개까지예요 — 4번째 보드부터는 프리미엄! 여기를 누르면 라이선스로 잠금 해제하는 방법을 알려드려요.
+<!-- 프리미엄 잠금 안내 배너 — rev.9 무료 단독 출시판에서는 어떤 조작으로도 뜨지 않는다
+     (html.pro-hidden CSS 로 상시 비노출, 호출 지점도 없음). 마크업은 Pro 재출시 대비로만 남긴다. -->
+<button type="button" class="pro-banner" id="proBanner" data-pro-lock title="프리미엄 안내 열기">
+  🔒 프리미엄 안내
 </button>
 
 <!-- 라이선스 가져오기 팝업 (A45 계약 4): [data-license-import] = input[type=file] 자신.
@@ -1870,7 +1909,7 @@ html[data-pro-theme="lavender"] #board {
   <div class="sp-head">🔑 프리미엄 라이선스
     <button type="button" class="notice-close sp-close" id="licClose" title="닫기">✕</button>
   </div>
-  <p class="sp-small">프리미엄에는 <strong>새 스티커 2팩(여행·간식 / 동물 친구)</strong>, <strong>프리미엄 테마 2종(심해 블루 / 라벤더 안개)</strong>, <strong>보드 4개째부터 무제한</strong>이 담겨 있어요.</p>
+  <p class="sp-small">프리미엄에는 <strong>새 스티커 2팩(여행·간식 / 동물 친구)</strong>, <strong>프리미엄 테마 2종(심해 블루 / 라벤더 안개)</strong>이 담겨 있어요. 보드 개수는 무료로도 제한이 없어요.</p>
   <p class="sp-small">가지고 있는 라이선스 파일(.license)을 아래에서 선택하면 이 컴퓨터에서 서명을 확인한 뒤 바로 잠금이 풀려요. 인터넷 연결은 필요 없고, 파일이 밖으로 전송되지도 않아요.</p>
   <input type="file" id="licenseFile" class="lic-input" data-license-import accept=".license,application/json" aria-label="라이선스 파일 선택">
   <p class="sp-small lic-msg" id="licMsg"></p>
@@ -2176,13 +2215,13 @@ html[data-pro-theme="lavender"] #board {
     <p class="sp-small">테이프·프레임은 모든 보드에 함께 적용돼요. 기본을 고르면 지금 모습 그대로예요.</p>
   </div>
 
-  <!-- 프리미엄 (A45): 잠금 상태 = [data-pro-lock] 버튼만 노출(클릭 → 해제 안내+가져오기),
-       해제 상태 = 신규 스티커 2팩 + 프리미엄 테마 2종 (assets/pro/pro-manifest.json 과 동일 정의).
+  <!-- 프리미엄 — rev.9 무료 단독 출시판에서는 섹션 자체가 상시 비노출이다
+       (html.pro-hidden). 마크업·검증 경로는 Pro 재출시(A45-P) 대비로만 보존한다.
        무료 기능(위 섹션 전부)은 이 섹션과 조상-후손 관계가 없다 — 동결 하한 불가침. -->
   <div class="sp-sec" id="dpProSec">
     <h3>프리미엄 ✨</h3>
     <button type="button" class="pro-lock-btn" id="dpProLock" data-pro-lock title="프리미엄 잠금 해제 안내 열기">
-      🔒 새 스티커 2팩(여행·간식 / 동물 친구) · 프리미엄 테마 2종 · 보드 무제한 — 라이선스로 잠금 해제
+      🔒 새 스티커 2팩(여행·간식 / 동물 친구) · 프리미엄 테마 2종
     </button>
     <div class="pro-content" id="dpProContent">
       <div class="sp-row"><span class="sp-lab">여행·간식</span></div>
@@ -2239,6 +2278,12 @@ html[data-pro-theme="lavender"] #board {
   var SAVE_DEBOUNCE_MS = 250;        // 노트 저장 디바운스 — "변경 ≤300ms 내 저장"(A5) 계약 안. 값 변경 금지
   var NOTICE_MS = 15000;             // 일반 안내 토스트 유지 시간
   var UNDO_NOTICE_MS = 8000;         // 실행 취소 토스트 유지 시간 (A20 — 최소 5초 이상)
+  /* 정리(✨)만 되돌리기 창을 길게 잡는다 — 배치가 통째로 바뀌는 조작이라 "무슨 일이 났는지"
+     알아채는 데 8초는 짧다. UNDO_NOTICE_MS(전역·삭제 undo)는 A20 계약 그대로 두고 분리한다. */
+  var ARRANGE_UNDO_MS = 20000;       // 정리 실행 취소 토스트 유지 시간 (발주 #22)
+  var SAVE_FAIL_COOLDOWN_MS = 30000; // 저장 실패 안내 디듀프 — 세션 1회 억제는 금지 (발주 #23)
+  var QUOTA_CHECK_GAP_MS = 15000;    // 용량 선제 경고 점검 최소 간격 (전 키 순회라 잦은 반복 회피)
+  var QUOTA_CHECK_DELAY_MS = 1500;   // 저장 직후가 아니라 한 박자 뒤에 본다 (A5 저장 경로 비침범)
   var IMAGE_SWEEP_DELAY_MS = 9000;   // 삭제한 사진 원본(IndexedDB) 정리 지연 — undo 토스트 8초 + 여유
   var ORPHAN_SWEEP_DELAY_MS = 1500;  // 기동 고아 청소 시작 지연 — 첫 렌더가 끝난 뒤에 돈다
 
@@ -2273,6 +2318,7 @@ html[data-pro-theme="lavender"] #board {
   var noticeEl = document.getElementById('notice');
   var noticeTextEl = document.getElementById('noticeText');
   var noticeUndoEl = document.getElementById('noticeUndo');
+  var noticeActEl = document.getElementById('noticeAction');
   var hiddenChipEl = document.getElementById('notesHiddenChip');
   var addBtn = document.getElementById('addBtn');
   var searchBox = document.getElementById('searchBox');
@@ -2383,8 +2429,8 @@ html[data-pro-theme="lavender"] #board {
 
   function saveSettings() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); } catch (err) {
-      /* 침묵 금지 — 캘린더와 동일 문구로 알린다 */
-      showNotice('설정 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
+      /* 침묵 금지 — 캘린더와 동일 문구로 알린다 (발주 #23: 30초 쿨다운 디듀프 + 행동 단추) */
+      notifySaveFailure('설정 저장에 실패했습니다.\n저장 공간이 부족하거나 브라우저가 저장을 차단하고 있습니다.');
     }
   }
 
@@ -2427,12 +2473,30 @@ html[data-pro-theme="lavender"] #board {
     noticeTextEl.textContent = msg;
     if (withUndo) noticeUndoEl.removeAttribute('hidden');
     else noticeUndoEl.setAttribute('hidden', '');
+    /* 행동 단추는 매번 초기화 — showActionNotice 만 다시 켠다 */
+    actionHandler = null;
+    noticeActEl.setAttribute('hidden', '');
+    noticeActEl.textContent = '';
+    noticeEl.classList.remove('warn');
     noticeEl.classList.add('show');
-    if (noticeTimer) clearTimeout(noticeTimer);
-    noticeTimer = setTimeout(hideNotice, dur);
+    if (noticeTimer) { clearTimeout(noticeTimer); noticeTimer = null; }
+    /* dur ≤ 0 = 지속형 — 사용자가 [닫기]를 누르거나 다음 안내가 올 때까지 남는다 (발주 #23) */
+    if (dur > 0) noticeTimer = setTimeout(hideNotice, dur);
   }
   function showNotice(msg) {
     showNoticeCore(msg, false, NOTICE_MS);
+  }
+  /* 행동 단추가 달린 안내 (발주 #23) — 저장 실패·용량 경고에서 [정리 방법 보기] 로 쓴다.
+     dur ≤ 0 이면 지속형(자동으로 사라지지 않는다). warn 이면 경고 배색. */
+  var actionHandler = null;
+  function showActionNotice(msg, label, handler, dur, warn) {
+    showNoticeCore(msg, false, dur);
+    if (typeof handler === 'function' && label) {
+      actionHandler = handler;
+      noticeActEl.textContent = label;
+      noticeActEl.removeAttribute('hidden');
+    }
+    if (warn) noticeEl.classList.add('warn');
   }
   /* 삭제·정리 직후 안내 — "실행 취소" 단추 포함, 최소 5초 이상 유지 (A20).
      handler 를 주면 그 동작을, 없으면 기본(노트 삭제 되돌리기)을 실행한다. */
@@ -2440,15 +2504,18 @@ html[data-pro-theme="lavender"] #board {
   /* 이 토스트의 실행 취소가 보드를 가리지 않고(=bid-aware) 안전한가.
      기본값 false — 되돌리기가 활성 보드 몫이면 보드를 옮길 때 토스트를 걷는다 (switchBoard). */
   var undoBoardSafe = false;
-  function showUndoNotice(msg, handler, boardSafe) {
+  function showUndoNotice(msg, handler, boardSafe, dur) {
     undoHandler = typeof handler === 'function' ? handler : null;
-    showNoticeCore(msg, true, UNDO_NOTICE_MS);
+    showNoticeCore(msg, true, dur > 0 ? dur : UNDO_NOTICE_MS);
     undoBoardSafe = !!boardSafe;
   }
   function hideNotice() {
     undoBoardSafe = false;
+    actionHandler = null;
     noticeEl.classList.remove('show');
+    noticeEl.classList.remove('warn');
     noticeUndoEl.setAttribute('hidden', '');
+    noticeActEl.setAttribute('hidden', '');
   }
   document.getElementById('noticeClose').addEventListener('click', hideNotice);
 
@@ -2472,6 +2539,72 @@ html[data-pro-theme="lavender"] #board {
     if (h) h();
     else undoLastDelete();
   });
+  noticeActEl.addEventListener('click', function () {
+    var h = actionHandler;
+    actionHandler = null;
+    hideNotice();
+    if (h) h();
+  });
+
+  /* ══ 저장 실패·용량 선제 경고 (발주 #23) ══
+     원칙: 저장 실패는 세션 1회로 억누르지 않는다 — 같은 문구는 30초 쿨다운으로만 묶고,
+     안내는 지속형(자동으로 사라지지 않음) + [정리 방법 보기] 로 설정 [데이터] 패널 직행. */
+
+  var saveFailAt = {};        /* 문구별 마지막 안내 시각 (메모리 전용 — 신규 저장 키 없음) */
+
+  /* 설정을 열고 [데이터] 카테고리로 바로 이동 — 용량 게이지·사진 개수·손상 백업이 있는 자리 */
+  function openDataPanel() {
+    try {
+      openSettings();
+      spSetCat('data', true);
+      refreshDataPanel();
+    } catch (err) { /* 패널 실패가 저장 안내를 막지는 않는다 */ }
+  }
+
+  function notifySaveFailure(msg) {
+    var now = Date.now();
+    if (!saveFailAt) saveFailAt = {};   /* 초기화 이전(기동 중) 실패도 삼키지 않는다 */
+    if (saveFailAt[msg] && now - saveFailAt[msg] < SAVE_FAIL_COOLDOWN_MS) return;
+    saveFailAt[msg] = now;
+    showActionNotice(msg + '\n저장 공간을 비우면 다시 저장돼요.', '정리 방법 보기', openDataPanel, 0, true);
+  }
+
+  /* 용량 선제 경고 — 80% / 90%. 90%에서는 사진 메모가 사실상 막힌다는 것을 명시한다.
+     전 키 순회(collectStorageStats)라 저장 경로에서 직접 돌리지 않고 한 박자 뒤 한 번만 본다. */
+  var quotaTimer = null;
+  var quotaCheckedAt = 0;
+  var quotaWarned = 0;        /* 이미 알린 단계 (0=없음 / 80 / 90) — 메모리 전용 */
+
+  function checkQuotaNow() {
+    var now = Date.now();
+    var wait = QUOTA_CHECK_GAP_MS - (now - quotaCheckedAt);
+    if (wait > 0) {
+      /* 아직 점검 간격 안 — 버리지 말고 남은 시간 뒤로 미룬다 (80%→90% 승격이 밀리지 않게) */
+      if (!quotaTimer) quotaTimer = setTimeout(function () { quotaTimer = null; checkQuotaNow(); }, wait);
+      return;
+    }
+    quotaCheckedAt = now;
+    var pct = 0;
+    try { pct = (collectStorageStats().bytes / LS_QUOTA_BYTES) * 100; } catch (err) { return; }
+    if (pct < 75) { quotaWarned = 0; return; }   /* 비우면 다음에 다시 알릴 수 있다 (히스테리시스) */
+    if (pct >= 90 && quotaWarned < 90) {
+      quotaWarned = 90;
+      showActionNotice('저장 공간을 ' + Math.round(pct) + '% 썼어요. 사진 메모는 더 못 붙여요.',
+        '정리 방법 보기', openDataPanel, 0, true);
+    } else if (pct >= 80 && quotaWarned < 80) {
+      quotaWarned = 80;
+      showActionNotice('저장 공간을 ' + Math.round(pct) + '% 썼어요. 사진 메모를 정리해 두면 안심이에요.',
+        '정리 방법 보기', openDataPanel, NOTICE_MS, true);
+    }
+  }
+
+  function scheduleQuotaCheck() {
+    if (quotaTimer) return;
+    quotaTimer = setTimeout(function () {
+      quotaTimer = null;
+      checkQuotaNow();
+    }, QUOTA_CHECK_DELAY_MS);
+  }
 
   /* ── 삭제 전 확인 (설정 [안전] — 기본 끔): 끔이면 즉시 실행(현행 경로 그대로),
      켬이면 누른 자리 옆에 앱 내 확인 팝오버를 띄운다. Esc·바깥 클릭 = 취소 (A20 실행 취소와 별개·병존) ── */
@@ -2812,7 +2945,7 @@ html[data-pro-theme="lavender"] #board {
     if (decorAmbient === 'none') delete all.ambient;
     else all.ambient = decorAmbient;
     try { localStorage.setItem(DECOR_KEY, JSON.stringify(all)); }
-    catch (err) { showNotice('저장 공간이 가득 차서 설정을 저장하지 못했어요.'); }
+    catch (err) { notifySaveFailure('저장 공간이 가득 차서 설정을 저장하지 못했어요.'); }
     syncAmbient();
   }
 
@@ -3150,8 +3283,9 @@ html[data-pro-theme="lavender"] #board {
     var arr = order.map(function (i) { return merged[i]; });
     try {
       localStorage.setItem(sk, JSON.stringify(arr));
+      scheduleQuotaCheck();   /* 성공했어도 천장이 가까우면 미리 알린다 (발주 #23) */
     } catch (err) {
-      showNotice('저장 공간이 가득 차서 메모를 저장하지 못했어요.');
+      notifySaveFailure('저장 공간이 가득 차서 메모를 저장하지 못했어요.');
     }
   }
 
@@ -3164,6 +3298,15 @@ html[data-pro-theme="lavender"] #board {
 
   var idbHandle = null;
   var idbFailed = false;
+  var idbNotified = false;   /* 무언 강등 금지 (발주 #23) — 이 창에서 한 번은 반드시 알린다 */
+
+  /* 사진·배경 저장소를 못 열었다는 사실을 "사용자가 그 결과를 만나는 순간"에 한 번 알린다.
+     (기동 고아 청소 같은 배경 작업에서는 말하지 않는다 — 사용자가 아무것도 안 했는데 뜨면 소음) */
+  function notifyIdbFailure() {
+    if (idbNotified) return;
+    idbNotified = true;
+    showNotice('사진·배경을 담아 두는 저장소(IndexedDB)를 열지 못했어요.\n이번 창에서는 사진 배경·사진 스티커가 보이지 않거나 저장되지 않아요. 메모 글과 색은 그대로예요.');
+  }
 
   function openDecorDB(cb) {
     if (idbHandle) { cb(idbHandle); return; }
@@ -3246,6 +3389,9 @@ html[data-pro-theme="lavender"] #board {
     idbGet(key, function (val) {
       var uri = (typeof val === 'string' && val.length <= 8 * 1024 * 1024 && IMG_URI_RE.test(val)) ? val : null;
       imgCache[key] = uri;
+      /* 저장소 자체를 못 열어 꾸민 것이 사라져 보이는 경우 — 침묵하지 않는다 (발주 #23).
+         레코드만 없는 경우(정상 GC·미저장)는 해당 없음: idbFailed 일 때만 말한다. */
+      if (!uri && idbFailed) notifyIdbFailure();
       cb(uri);
     });
   }
@@ -3327,7 +3473,7 @@ html[data-pro-theme="lavender"] #board {
       localStorage.setItem(DECOR_KEY, JSON.stringify(all));
       return true;
     } catch (err) {
-      showNotice('저장 공간이 가득 차서 꾸미기를 저장하지 못했어요.');
+      notifySaveFailure('저장 공간이 가득 차서 꾸미기를 저장하지 못했어요.');
       return false;
     }
   }
@@ -3439,7 +3585,7 @@ html[data-pro-theme="lavender"] #board {
     var all = readDecorAll();          /* merge-on-write — 다른 창이 쓴 보드 몫을 덮지 않는다 */
     all.defLayer = decorDefLayer;
     try { localStorage.setItem(DECOR_KEY, JSON.stringify(all)); }
-    catch (err) { showNotice('저장 공간이 가득 차서 설정을 저장하지 못했어요.'); }
+    catch (err) { notifySaveFailure('저장 공간이 가득 차서 설정을 저장하지 못했어요.'); }
   }
 
   /* ── 스티커 ── */
@@ -4037,7 +4183,7 @@ html[data-pro-theme="lavender"] #board {
     }
     if (!changed) return;
     try { localStorage.setItem(CAL_KEY, JSON.stringify(store)); } catch (err) {
-      showNotice('저장 공간이 가득 차서 달력에 붙이지 못했어요.');
+      notifySaveFailure('저장 공간이 가득 차서 달력에 붙이지 못했어요.');
     }
   }
 
@@ -4856,55 +5002,268 @@ html[data-pro-theme="lavender"] #board {
 
   /* ── 한 번에 정리: 겹침 없는 자유 배치 재배열 — 스냅·격자 상시화 없음 (A28) ── */
 
-  /* 흐름 배치 코어 — 기본(현행 알고리즘)과 시간순 모드가 순서만 달리하여 공유한다 */
-  function arrangeFlow(order) {
-    var bw = board.clientWidth || 1280;
-    var bh = board.clientHeight || 800;
-    var margin = 16;
-    var gap = 14;
-    var startY = shelfBottom();   /* 도구 선반 아래 */
+  /* 발주 #22 — 매몰 금지 규칙
+     옛 흐름 배치는 세로 공간이 모자라면 y 를 마지막 행으로 클램프만 했다. x 는 계속 진행하다
+     줄바꿈하면 다시 같은 y 로 클램프돼, 수용량을 넘은 노트가 앞 노트 "위에 정확히" 포개졌다
+     (50장 중 28장 완전 은폐). 그런데 토스트는 "50개를 정리했어요" 라고 말했다 = 데이터가
+     사라진 것으로 읽힌다.
+     지금 규칙:
+       ① 진입 시 (가용 행 × 열)로 수용량을 먼저 계산한다 (planFlow 모의 배치).
+       ② 넘치면 gap 을 실제로 좁혀 재시도한다 — 주석이 약속하던 "촘촘하게".
+       ③ 그래도 넘치는 몫은 정확히 포개지 않고 24px 계단으로 어긋 쌓아, 맨 앞(z)으로 올려
+          "쌓여 있음" 이 눈에 보이게 한다.
+       ④ 토스트는 사실대로 말한다 (arrangeBoard).
+       ⑤ 정리 경로에서는 원위치 기억(hx/hy)을 지우지 않는다 — 매몰 복구의 마지막 수단이다.
+     기본 간격(14px)에서 전부 들어가면 좌표 결과는 옛 알고리즘과 완전히 같다 (A28 계약 보호). */
+  var ARRANGE_MARGIN = 16;
+  var ARRANGE_GAP_STEPS = [14, 10, 7, 4];   /* 수용량이 모자라면 이 순서로 간격을 좁혀 재시도 */
+  var ARRANGE_STACK_STEP_PX = 24;           /* 계단 가로 간격 — 한 장마다 이만큼 어긋나 옆구리가 드러난다 */
+  var ARRANGE_STACK_ROW_PX = 60;            /* 계단 줄바꿈 간격 — 윗머리(핀+첫 줄)가 드러나는 높이 */
+  var ARRANGE_STACK_MIN_X = 16;             /* 띠가 모자라면 계단을 좁힌다 — 여기가 하한 */
+  var ARRANGE_STACK_MIN_SHOW = 0.07;        /* 쌓인 장이 최소한 이만큼(면적비)은 드러나야 한다 */
+
+  /* 계단 간격은 노트가 커지면 같은 비율로 커진다 — 300px 노트에 24px 옆구리는 안 보인다.
+     기본 크기(150px)에서는 정확히 24 / 60 px 이라 발주 #22 가 정한 계단 그대로다. */
+  function stackStepX(maxW) { return Math.max(ARRANGE_STACK_STEP_PX, Math.ceil(maxW * 0.16)); }
+  /* 여러 줄로 쌓을 때의 줄 간격 — 가로 계단이 좁아지면 그만큼 윗머리를 높여
+     "드러나는 넓이(가로계단 × 줄간격)"가 노트 면적의 7% 아래로 내려가지 않게 한다. */
+  function stackStepY(maxW, maxH, stepX) {
+    var need = Math.ceil((ARRANGE_STACK_MIN_SHOW * maxW * maxH) / Math.max(1, stepX));
+    return Math.max(ARRANGE_STACK_ROW_PX, Math.ceil(maxH * 0.4), need);
+  }
+  /* 계단 가로 간격 후보 — 넓은 것부터 시도하고, 자리가 모자랄 때만 좁힌다 (흐름 배치 gap 과 같은 태도) */
+  function stackStepCandidates(maxW) {
+    var base = stackStepX(maxW);
+    var out = [];
+    for (var v = base; v >= ARRANGE_STACK_MIN_X; v -= 2) out.push(v);
+    if (!out.length) out.push(base);
+    return out;
+  }
+
+  /* 경계상자가 (bx,by)에 오도록 좌상단을 회전 팽창분만큼 보정해 옮긴다.
+     정리 경로 전용 — clearNoteHome 을 부르지 않는다 (발주 #22 ⑤). */
+  function setNoteBBoxPos(n, ref, bx, by, W, H) {
+    var w = ref.root.offsetWidth;
+    var h = ref.root.offsetHeight;
+    n.x = Math.round(bx + (W - w) / 2);
+    n.y = Math.round(by + (H - h) / 2);
+    n.updatedAt = Date.now();
+    ref.root.style.left = n.x + 'px';
+    ref.root.style.top = n.y + 'px';
+  }
+
+  /* 측정 1회 — 정리 계열이 공유하는 항목 목록 {n, ref, W, H} (경계상자 = 회전 팽창 포함) */
+  function arrangeItems(order) {
+    var items = [];
+    order.forEach(function (n) {
+      var ref = els[n.id];
+      if (!ref || !ref.root) return;
+      var r = ref.root.getBoundingClientRect();
+      items.push({ n: n, ref: ref, W: Math.ceil(r.width), H: Math.ceil(r.height) });
+    });
+    return items;
+  }
+
+  /* 흐름 배치 모의 — 실제 이동 없이 "이 간격이면 몇 장이 들어가는가"와 그 좌표를 돌려준다.
+     세로가 모자라 더 못 놓는 지점에서 멈춘다 (클램프해서 포개는 옛 동작을 하지 않는다). */
+  function planFlow(items, bw, bh, startY, gap) {
+    var margin = ARRANGE_MARGIN;
     var x = margin;
     var y = startY;
     var rowH = 0;
-    order.forEach(function (n) {
-      var ref = els[n.id];
-      if (!ref) return;
-      var r = ref.root.getBoundingClientRect();
-      var W = Math.ceil(r.width);
-      var H = Math.ceil(r.height);
-      var w = ref.root.offsetWidth;
-      var h = ref.root.offsetHeight;
+    var spots = [];
+    for (var i = 0; i < items.length; i++) {
+      var W = items[i].W;
+      var H = items[i].H;
       if (x + W > bw - margin && x > margin) {
         x = margin;
         y += rowH + gap;
         rowH = 0;
       }
       if (y + H > bh - margin) {
-        /* 세로 공간이 모자라면 남은 노트는 촘촘한 간격으로 이어 붙인다 */
-        y = Math.max(startY, bh - margin - H);
+        /* 보드보다 큰 노트라 한 장도 못 놓는 경우에만, 예전처럼 한 장은 클램프해 놓는다 */
+        if (!spots.length && y <= startY) spots.push({ x: x, y: Math.max(0, Math.min(y, bh - margin - H)) });
+        break;
       }
-      /* 경계상자가 (x,y)에 오도록 좌상단을 회전 팽창분만큼 보정 */
-      n.x = Math.round(x + (W - w) / 2);
-      n.y = Math.round(y + (H - h) / 2);
-      n.updatedAt = Date.now();
-      clearNoteHome(n);   /* 사용자가 부른 정리 = 새 배치 확정 (발주 #19) */
-      ref.root.style.left = n.x + 'px';
-      ref.root.style.top = n.y + 'px';
+      spots.push({ x: x, y: y });
       if (H > rowH) rowH = H;
       x += W + gap;
+    }
+    return spots;
+  }
+
+  /* 넘친 몫을 놓을 "계단 띠"를 잡는다 — 핵심은 **띠가 흐름 배치 노트를 덮지 않는다**는 것.
+     ① 먼저 마지막 행의 꼬리 슬롯을 하나씩 띠에 내주며 한 줄로 되는지 본다 (조금 넘칠 땐 손해가 작다).
+     ② 한 줄로 안 되면 마지막 행을 통째로 넘기고 띠를 위로 늘리되, 흐름 배치를 그 위에서 다시 계획한다.
+     반환: { spots(흐름 좌표), flowCount, bandX, bandTop, perRow, rows } */
+  function bandPerRow(bw, bandX, maxW, stepX) {
+    if (bandX + maxW > bw - ARRANGE_MARGIN) return 0;
+    return Math.floor(((bw - ARRANGE_MARGIN - maxW) - bandX) / stepX) + 1;
+  }
+
+  function planBand(items, spots, bw, bh, startY, gap, maxW, maxH) {
+    var margin = ARRANGE_MARGIN;
+    var steps = stackStepCandidates(maxW);
+    var leftovers = items.length - spots.length;
+    var si, rows, stepX, stepY, bandTop, cap, p;
+    /* ① 한 줄 띠 — 마지막 행 꼬리에서부터 자리를 빌린다 (조금 넘칠 때 손해가 가장 작다).
+          계단을 넓게 잡는 쪽을 먼저 보고, 모자랄 때만 좁힌다. */
+    if (spots.length) {
+      var lastY = spots[spots.length - 1].y;
+      var rowStart = spots.length - 1;
+      while (rowStart > 0 && spots[rowStart - 1].y === lastY) rowStart -= 1;
+      for (si = 0; si < steps.length; si++) {
+        stepX = steps[si];
+        for (var m = 0; m <= spots.length - rowStart; m++) {
+          var keep = spots.length - m;
+          var bandX = m === 0
+            ? spots[keep - 1].x + items[keep - 1].W + gap
+            : spots[keep].x;
+          if (bandX < margin) bandX = margin;
+          cap = bandPerRow(bw, bandX, maxW, stepX);
+          if (cap > 0 && leftovers + m <= cap) {
+            return { spots: spots, flowCount: keep, bandX: bandX, bandTop: lastY,
+                     perRow: cap, rows: 1, stepX: stepX, stepY: stackStepY(maxW, maxH, stepX) };
+          }
+        }
+      }
+    }
+    /* ② 여러 줄 띠 — 아래에서부터 줄을 늘리고, 그만큼 흐름 배치 영역을 줄여 다시 계획한다.
+          줄이 적은 쪽 → 계단이 넓은 쪽 순서로 본다. */
+    var last = null;
+    for (rows = 2; rows <= 40; rows++) {
+      var any = false;
+      for (si = 0; si < steps.length; si++) {
+        stepX = steps[si];
+        stepY = stackStepY(maxW, maxH, stepX);
+        bandTop = (bh - margin - maxH) - (rows - 1) * stepY;
+        if (bandTop <= startY + 4) continue;
+        any = true;
+        p = planFlow(items, bw, bandTop + margin, startY, gap);
+        cap = bandPerRow(bw, margin, maxW, stepX) * rows;
+        last = { spots: p, flowCount: p.length, bandX: margin, bandTop: bandTop,
+                 perRow: bandPerRow(bw, margin, maxW, stepX), rows: rows, stepX: stepX, stepY: stepY };
+        if (items.length - p.length <= cap) return last;
+      }
+      if (!any) break;
+    }
+    /* ③ 보드가 통째로 부족한 극단 — 흐름 배치를 포기하고 띠로 전부 받는다 (감아 쌓기는 stackBand 가 맡는다) */
+    if (last) { last.spots = []; last.flowCount = 0; return last; }
+    stepX = steps[steps.length - 1];
+    stepY = stackStepY(maxW, maxH, stepX);
+    return {
+      spots: [], flowCount: 0, bandX: margin, bandTop: startY, stepX: stepX, stepY: stepY,
+      perRow: Math.max(1, bandPerRow(bw, margin, maxW, stepX)),
+      rows: Math.max(1, Math.floor(((bh - margin - maxH) - startY) / stepY) + 1)
+    };
+  }
+
+  /* 계단 띠에 실제로 쌓는다 — 나중 장이 위(z)로 올라가며 앞 장의 옆구리·윗머리를 남긴다.
+     띠 용량마저 넘는 극단에서는 감아 쌓되 회차마다 어긋내 "정확히 포갬"만은 피한다. */
+  function stackBand(list, band, bw, bh, maxW, maxH) {
+    if (!list.length) return 0;
+    var margin = ARRANGE_MARGIN;
+    var stepX = band.stepX || stackStepX(maxW);
+    var stepY = band.stepY || stackStepY(maxW, maxH, stepX);
+    var slots = Math.max(1, band.perRow * band.rows);
+    list.forEach(function (it, k) {
+      var slot = k % slots;
+      var wrap = Math.floor(k / slots);
+      var col = slot % band.perRow;
+      var row = Math.floor(slot / band.perRow);
+      var x = band.bandX + col * stepX + (wrap % 3) * 8;
+      var y = band.bandTop + row * stepY;
+      var hiX = Math.max(margin, bw - margin - it.W);
+      var loY = Math.min(band.bandTop, Math.max(0, bh - margin - it.H));
+      var hiY = Math.max(loY, bh - margin - it.H);
+      setNoteBBoxPos(it.n, it.ref, Math.max(margin, Math.min(x, hiX)), Math.max(loY, Math.min(y, hiY)), it.W, it.H);
+      zCounter += 1;                 /* 아래에 파묻히지 않게 앞으로 — 계단이 눈에 보여야 한다 */
+      it.n.z = zCounter;
+      it.ref.root.style.zIndex = String(zCounter);
     });
+    return list.length;
+  }
+
+  /* 격자·마소너리가 "빈자리를 못 찾은" 극단에서 쓰는 대각 계단 — 정확한 포갬(=매몰)만은 피한다 */
+  function stackCascade(list, bw, bh, startY) {
+    if (!list.length) return 0;
+    var margin = ARRANGE_MARGIN;
+    var maxW = 0;
+    var maxH = 0;
+    list.forEach(function (it) {
+      if (it.W > maxW) maxW = it.W;
+      if (it.H > maxH) maxH = it.H;
+    });
+    var stepX = stackStepX(maxW);
+    var stepY = stackStepY(maxW, maxH, stepX);
+    var baseX = margin + stepX;
+    var baseY = startY + stepY;
+    var cx = Math.max(1, Math.floor(Math.max(0, (bw - margin - maxW) - baseX) / stepX) + 1);
+    var cy = Math.max(1, Math.floor(Math.max(0, (bh - margin - maxH) - baseY) / stepY) + 1);
+    if (cx > 1 && cx === cy) cy -= 1;   /* 두 주기를 어긋내 스스로 포개지는 것을 늦춘다 */
+    list.forEach(function (it, k) {
+      var hiX = Math.max(margin, bw - margin - it.W);
+      var loY = Math.min(startY, Math.max(0, bh - margin - it.H));
+      var hiY = Math.max(loY, bh - margin - it.H);
+      var x = Math.max(margin, Math.min(baseX + (k % cx) * stepX, hiX));
+      var y = Math.max(loY, Math.min(baseY + (k % cy) * stepY, hiY));
+      setNoteBBoxPos(it.n, it.ref, x, y, it.W, it.H);
+      zCounter += 1;
+      it.n.z = zCounter;
+      it.ref.root.style.zIndex = String(zCounter);
+    });
+    return list.length;
+  }
+
+  /* 흐름 배치 코어 — 기본(현행 알고리즘)과 시간순 모드가 순서만 달리하여 공유한다.
+     반환: { total, placed, stacked } — 토스트가 사실을 말하기 위한 실측값 */
+  function arrangeFlow(order) {
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var startY = shelfBottom();   /* 도구 선반 아래 */
+    var items = arrangeItems(order);
+    if (!items.length) return { total: 0, placed: 0, stacked: 0 };
+    var maxW = 0;
+    var maxH = 0;
+    items.forEach(function (it) {
+      if (it.W > maxW) maxW = it.W;
+      if (it.H > maxH) maxH = it.H;
+    });
+    /* ①②: 기본 간격부터 좁혀 가며 전부 들어가는 간격을 찾는다 (찾으면 즉시 확정) */
+    var gap = ARRANGE_GAP_STEPS[0];
+    var spots = planFlow(items, bw, bh, startY, gap);
+    for (var g = 1; g < ARRANGE_GAP_STEPS.length && spots.length < items.length; g++) {
+      gap = ARRANGE_GAP_STEPS[g];
+      spots = planFlow(items, bw, bh, startY, gap);
+    }
+    var i;
+    if (spots.length >= items.length) {
+      /* 전부 폈다 — 좌표 결과는 옛 알고리즘과 동일 (A28 fresh 기본값 보호) */
+      for (i = 0; i < items.length; i++) {
+        setNoteBBoxPos(items[i].n, items[i].ref, spots[i].x, spots[i].y, items[i].W, items[i].H);
+      }
+      saveNow();
+      return { total: items.length, placed: items.length, stacked: 0 };
+    }
+    /* ③ 넘쳤다 — 덮지 않는 계단 띠를 마련하고, 그 위에만 편다 */
+    var band = planBand(items, spots, bw, bh, startY, gap, maxW, maxH);
+    for (i = 0; i < band.flowCount; i++) {
+      setNoteBBoxPos(items[i].n, items[i].ref, band.spots[i].x, band.spots[i].y, items[i].W, items[i].H);
+    }
+    var stacked = stackBand(items.slice(band.flowCount), band, bw, bh, maxW, maxH);
     saveNow();
+    return { total: items.length, placed: items.length - stacked, stacked: stacked };
   }
 
   /* 기본 정리 = 현행 알고리즘 그대로 (A28 fresh 기본값 보호): 현재 위치 순(위→아래, 왼→오른쪽) */
   function arrangeNotes() {
-    if (!data.length) return;
-    arrangeFlow(data.slice().sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); }));
+    if (!data.length) return { total: 0, placed: 0, stacked: 0 };
+    return arrangeFlow(data.slice().sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); }));
   }
 
   /* 시간순: 최근 수정이 좌상단부터 오도록 흐름 배치 */
   function arrangeByTime() {
-    arrangeFlow(data.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); }));
+    return arrangeFlow(data.slice().sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); }));
   }
 
   /* ── 격자·마소너리 공용 충돌 유틸: 경계상자(px) 기준, 겹침 0 보장 ── */
@@ -4934,34 +5293,21 @@ html[data-pro-theme="lavender"] #board {
     return best;
   }
 
-  /* 경계상자 좌상단 (bx,by)에 오도록 노트 좌상단을 회전 팽창분만큼 보정해 배치 */
-  function setNoteBBoxPos(n, ref, bx, by, W, H) {
-    var w = ref.root.offsetWidth;
-    var h = ref.root.offsetHeight;
-    n.x = Math.round(bx + (W - w) / 2);
-    n.y = Math.round(by + (H - h) / 2);
-    n.updatedAt = Date.now();
-    clearNoteHome(n);   /* 사용자가 부른 정리 = 새 배치 확정 (발주 #19) */
-    ref.root.style.left = n.x + 'px';
-    ref.root.style.top = n.y + 'px';
-  }
-
   /* N×N 격자: 보드를 구역으로 나눠 셀 중앙에 순서대로 — 넘치거나 셀보다 크면 가까운 빈자리로 (겹침 0) */
   function arrangeGrid(N) {
     var bw = board.clientWidth || 1280;
     var bh = board.clientHeight || 800;
-    var margin = 16;
+    var margin = ARRANGE_MARGIN;
     var startY = shelfBottom();
     var cellW = Math.max(40, (bw - margin * 2) / N);
     var cellH = Math.max(40, (bh - startY - margin) / N);
     var order = data.slice().sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); });
+    var items = arrangeItems(order);
     var placed = [];
-    order.forEach(function (n, idx) {
-      var ref = els[n.id];
-      if (!ref) return;
-      var r = ref.root.getBoundingClientRect();
-      var W = Math.ceil(r.width);
-      var H = Math.ceil(r.height);
+    var over = [];   /* 빈자리가 없어 넘친 몫 — 아래에서 계단으로 쌓는다 (발주 #22) */
+    items.forEach(function (it, idx) {
+      var W = it.W;
+      var H = it.H;
       var cell = idx % (N * N);   /* 넘치면 처음 구역부터 이어서 — 겹침은 아래에서 회피 */
       var col = cell % N;
       var row = Math.floor(cell / N);
@@ -4973,31 +5319,28 @@ html[data-pro-theme="lavender"] #board {
       var spot = isFreeRect(px, py, W, H, placed, 6)
         ? { x: px, y: py }
         : nearestFree(px, py, W, H, placed, bw, bh, startY, margin);
-      if (!spot) spot = { x: px, y: py };   /* 보드가 물리적으로 가득 찬 극단 — 최선 위치로 */
+      if (!spot) { over.push(it); return; }   /* 보드가 물리적으로 가득 찼다 — 포개지 않는다 */
       placed.push({ x: spot.x, y: spot.y, w: W, h: H });
-      setNoteBBoxPos(n, ref, spot.x, spot.y, W, H);
+      setNoteBBoxPos(it.n, it.ref, spot.x, spot.y, W, H);
     });
+    var stacked = stackCascade(over, bw, bh, startY);
     saveNow();
+    return { total: items.length, placed: items.length - stacked, stacked: stacked };
   }
 
   /* 동적 마소너리: 큰 노트 먼저, 각 노트를 가장 위·왼쪽의 빈자리에 채워 넣는 self-packing */
   function arrangeMasonry() {
     var bw = board.clientWidth || 1280;
     var bh = board.clientHeight || 800;
-    var margin = 16;
+    var margin = ARRANGE_MARGIN;
     var gap = 12;
     var startY = shelfBottom();
-    var items = [];
-    data.forEach(function (n) {
-      var ref = els[n.id];
-      if (!ref) return;
-      var r = ref.root.getBoundingClientRect();
-      items.push({ n: n, ref: ref, W: Math.ceil(r.width), H: Math.ceil(r.height) });
-    });
+    var items = arrangeItems(data);
     items.sort(function (a, b) {
       return (b.W * b.H - a.W * a.H) || ((b.n.updatedAt || 0) - (a.n.updatedAt || 0));
     });
     var placed = [];
+    var over = [];   /* 빈자리가 없어 넘친 몫 — 아래에서 계단으로 쌓는다 (발주 #22) */
     items.forEach(function (it) {
       var step = 10;
       var minY = Math.min(startY, Math.max(0, bh - margin - it.H));
@@ -5010,30 +5353,44 @@ html[data-pro-theme="lavender"] #board {
         }
       }
       if (!spot) spot = nearestFree(margin, minY, it.W, it.H, placed, bw, bh, startY, margin);
-      if (!spot) spot = { x: maxX, y: maxY };   /* 극단적 만석 — 최선 위치로 */
+      if (!spot) { over.push(it); return; }   /* 극단적 만석 — 포개지 않고 계단으로 */
       placed.push({ x: spot.x, y: spot.y, w: it.W, h: it.H });
       setNoteBBoxPos(it.n, it.ref, spot.x, spot.y, it.W, it.H);
     });
+    var stacked = stackCascade(over, bw, bh, startY);
     saveNow();
+    return { total: items.length, placed: items.length - stacked, stacked: stacked };
   }
 
   /* 정리 진입점: [data-arrange] 버튼·보드 메뉴 공용 — 설정 [배치] 방식 사용 (기본 = 현행 알고리즘).
      실행 전 위치 스냅샷을 담아 실행 취소 토스트를 띄운다 (비가역 해소 — A20 패턴). */
   function arrangeBoard() {
     if (!data.length) return;
-    var snap = data.map(function (n) { return { id: n.id, x: n.x, y: n.y }; });
-    if (SETTINGS.arrange === 'grid3') arrangeGrid(3);
-    else if (SETTINGS.arrange === 'grid2') arrangeGrid(2);
-    else if (SETTINGS.arrange === 'masonry') arrangeMasonry();
-    else if (SETTINGS.arrange === 'time') arrangeByTime();
-    else arrangeNotes();
-    showUndoNotice('포스트잇 ' + snap.length + '개를 정리했어요.', function () {
+    /* 쌓기 경로가 z 를 올리므로 스냅샷도 z 를 함께 담는다 — 되돌리면 앞뒤 순서까지 원래대로 */
+    var snap = data.map(function (n) { return { id: n.id, x: n.x, y: n.y, z: n.z }; });
+    var res;
+    if (SETTINGS.arrange === 'grid3') res = arrangeGrid(3);
+    else if (SETTINGS.arrange === 'grid2') res = arrangeGrid(2);
+    else if (SETTINGS.arrange === 'masonry') res = arrangeMasonry();
+    else if (SETTINGS.arrange === 'time') res = arrangeByTime();
+    else res = arrangeNotes();
+    if (!res) res = { total: snap.length, placed: snap.length, stacked: 0 };
+    /* 사실대로 말한다 (발주 #22 ④) — 다 폈을 때만 예전 문구 그대로 */
+    var msg;
+    if (res.stacked <= 0) msg = '포스트잇 ' + res.total + '개를 정리했어요.';
+    else if (res.placed <= 0) msg = '펼 자리가 없어 ' + res.total + '장을 겹쳐 쌓았어요. 창을 키우면 펴져요.';
+    else msg = res.total + '장 중 ' + res.placed + '장을 폈어요. ' + res.stacked + '장은 자리가 없어 겹쳐 뒀어요.';
+    showUndoNotice(msg, function () {
       snap.forEach(function (p) {
         var n = findNote(p.id);
         var ref = els[p.id];
         if (!n || !ref) return;
         n.x = p.x;
         n.y = p.y;
+        if (typeof p.z === 'number') {
+          n.z = p.z;
+          ref.root.style.zIndex = String(p.z);
+        }
         n.updatedAt = Date.now();
         ref.root.style.left = n.x + 'px';
         ref.root.style.top = n.y + 'px';
@@ -5041,7 +5398,7 @@ html[data-pro-theme="lavender"] #board {
       saveNow();
       playTick();   /* 직접 제스처(실행 취소 클릭) 내부 */
       showNotice('정리 전 위치로 되돌렸어요.');
-    });
+    }, false, ARRANGE_UNDO_MS);   /* 되돌릴 창 8초 → 20초 (발주 #22 ⑥) */
   }
   document.getElementById('arrangeBtn').addEventListener('click', function () {
     arrangeBoard();
@@ -5387,7 +5744,7 @@ html[data-pro-theme="lavender"] #board {
     try {
       localStorage.setItem(sk, JSON.stringify(order.map(function (i) { return merged[i]; })));
     } catch (err) {
-      showNotice('저장 공간이 가득 차서 일부 보드를 가져오지 못했어요.');
+      notifySaveFailure('저장 공간이 가득 차서 일부 보드를 가져오지 못했어요.');
     }
     return clean.length;
   }
@@ -5670,7 +6027,7 @@ html[data-pro-theme="lavender"] #board {
       localStorage.setItem(storeKey(bid), JSON.stringify(list));
       return true;
     } catch (err) {
-      showNotice('저장 공간이 가득 차서 메모를 옮기지 못했어요.');
+      notifySaveFailure('저장 공간이 가득 차서 메모를 옮기지 못했어요.');
       return false;
     }
   }
@@ -6394,7 +6751,7 @@ html[data-pro-theme="lavender"] #board {
     else delete m[id];
     boardNames = m;
     try { localStorage.setItem(NAMES_KEY, JSON.stringify(m)); } catch (err) {
-      showNotice('보드 이름을 저장하지 못했어요. 저장 공간이 부족할 수 있어요.');
+      notifySaveFailure('보드 이름을 저장하지 못했어요. 저장 공간이 부족할 수 있어요.');
     }
   }
 
@@ -6551,7 +6908,7 @@ html[data-pro-theme="lavender"] #board {
     try {
       localStorage.setItem(sk, JSON.stringify(snapNotes));
     } catch (err) {
-      showNotice('저장 공간이 부족해 보드를 복원하지 못했어요.');
+      notifySaveFailure('저장 공간이 부족해 보드를 복원하지 못했어요.');
       return;
     }
     if (snapDecor) writeDecorEntry(id, snapDecor);
@@ -6617,13 +6974,10 @@ html[data-pro-theme="lavender"] #board {
   }
 
   function addBoard() {
-    /* Free/Pro 경계 (A45 계약 2): 보드는 무료로 3개까지 — 4개째 "생성 시도"만 잠근다.
-       버튼은 disabled 로 만들지 않는다(동결 하한: [data-add-board] 비잠금 관찰) — 잠금은
-       생성 차단 + [data-pro-lock] 배너 노출로 표현하고, 해제(proOk) 시 이 분기는 사라진다. */
-    if (!proOk && boards.length >= FREE_BOARD_MAX) {
-      showProLockBanner();
-      return;
-    }
+    /* 보드 개수 제한 없음 (rev.9 무료 단독 출시판 · 감사 권고 #25).
+       구매 채널이 0건인 판에서 "4번째 보드부터 프리미엄"은 원망만 남기고, 네 번째
+       보드를 만드는 사람은 이미 팬이다 — FREE_BOARD_MAX 게이트를 걷어냈다.
+       (COMMERCIAL.md 원칙: 기능을 잠그면 원망, 장식을 잠그면 구매 유인) */
     var maxN = 1;
     boards.forEach(function (id) {
       var num = parseInt(id.slice(1), 10);
@@ -7769,14 +8123,14 @@ html[data-pro-theme="lavender"] #board {
   });
 
   /* ══ 프리미엄(Pro)·라이선스 — 발주 #9 A45 ══
-     Free 하한 = 2026-08-18 동결 빌드의 기능 전체 (이 모듈은 기존 기능을 무엇도 잠그지 않는다).
-     Pro = 순수 신규 가치만: 신규 스티커 2팩 · 프리미엄 테마 2종 · 보드 4개째부터.
+     rev.9(무료 단독 출시판) 이후 이 모듈은 화면에 아무것도 내보내지 않는다 — 잠금 UI 는
+     html.pro-hidden 으로 상시 비노출이고 보드 개수 제한도 없다 (감사 권고 #25).
+     남겨 두는 이유는 오직 하나: Pro 재출시 때 쓸 오프라인 서명 검증 경로의 보존이다.
      라이선스 = 서명 파일(ECDSA P-256 / SHA-256): 앱에는 공개키(JWK)만 내장하고 WebCrypto 로
      오프라인 검증한다 — 개인키·발급기는 저장소·배포물 어디에도 없다 (A45 계약 4).
      검증 성공한 원문만 postit-license(additive 키)에 저장하고, 재기동 시 저장본을 다시
      검증해 통과할 때만 해제한다 (저장본 변조 방어). 실패는 전부 조용한 거부 — dialog·크래시 0. */
 
-  var FREE_BOARD_MAX = 3;                  // 무료 보드 한도 — 4개째부터 Pro (A45 계약 2)
   var LICENSE_KEY = 'postit-license';      // additive 신규 키 (B rev.5 단서)
   var PRO_THEME_KEY = 'postit-pro-theme';  // additive 신규 키 — 값 없음 = 현행 렌더 그대로
   var proOk = false;
@@ -7895,7 +8249,6 @@ html[data-pro-theme="lavender"] #board {
   }
 
   function setLicMsg(msg) { licMsgEl.textContent = msg; }
-  function showProLockBanner() { if (!proOk) proBanner.classList.add('show'); }
   function openLicensePop() {
     proBanner.classList.remove('show');
     setLicMsg('');
@@ -7935,7 +8288,7 @@ html[data-pro-theme="lavender"] #board {
         }
         setProOk(true);
         closeLicensePop();
-        showNotice('🎉 프리미엄이 잠금 해제되었어요! 새 스티커 2팩·프리미엄 테마 2종·보드 무제한을 쓸 수 있어요.');
+        showNotice('🎉 프리미엄이 잠금 해제되었어요! 새 스티커 2팩·프리미엄 테마 2종을 쓸 수 있어요.');
       });
     };
     fr.readAsText(f, 'utf-8');
@@ -8180,10 +8533,10 @@ html[data-pro-theme="lavender"] #board {
       opts: [],
       help: '배경·사진 스티커까지 백업에 담아요 — 파일이 커져요.' },
     { id: 'pt.shell.backup.auto', label: '매일 자동 백업', cat: 'data', sel: '[data-backup-auto]', panel: null, shell: true,
-      tags: ['백업', '자동', '프리미엄'],
-      syn: ['자동백업', '매일백업', '예약백업', '정기백업', '스케줄', '하루한번', '알아서백업', 'autobackup', 'daily', '프로', 'pro', '유료'],
+      tags: ['백업', '자동'],
+      syn: ['자동백업', '매일백업', '예약백업', '정기백업', '스케줄', '하루한번', '알아서백업', 'autobackup', 'daily'],
       opts: [],
-      help: '하루 한 번 알아서 백업을 만들어요 (프리미엄).' },
+      help: '하루 한 번 알아서 백업을 만들어요. 무료로 쓸 수 있어요.' },
     { id: 'pt.about.version', label: '앱 정보·버전', cat: 'about', sel: '.sp-info', panel: null, shell: false,
       tags: ['정보'],
       syn: ['버전', 'about', 'version', '몇버전', '빌드', '앱정보', '제품정보'],
@@ -8238,17 +8591,9 @@ html[data-pro-theme="lavender"] #board {
       tags: ['꾸미기', '보드', '색'],
       syn: ['프레임', '액자', '테두리', '틀', '그린', '네이비', '로즈', 'frame', 'border'],
       opts: ['기본', '그린', '네이비', '로즈'],
-      help: '프레임은 모든 보드에 함께 적용돼요.' },
-    { id: 'pt.pro.license', label: '프리미엄 잠금 해제', cat: 'decor', sel: '#dpProLock', panel: 'decor', shell: false,
-      tags: ['프리미엄', '라이선스'],
-      syn: ['프리미엄', '프로', 'pro', 'premium', '유료', '결제', '잠금해제', '라이선스', '정품', '활성화', 'unlock', 'activate', 'license', '보드무제한'],
-      opts: [],
-      help: '라이선스 파일을 고르면 이 컴퓨터에서 서명을 확인한 뒤 잠금이 풀려요.' },
-    { id: 'pt.pro.theme', label: '프리미엄 테마', cat: 'decor', sel: '#dpProTheme', panel: 'decor', shell: false,
-      tags: ['프리미엄', '꾸미기', '표시'],
-      syn: ['심해블루', '라벤더안개', '프리미엄테마', 'deepsea', 'lavender', '유료테마'],
-      opts: ['심해 블루', '라벤더 안개', '끄기'],
-      help: '프리미엄 테마는 기본 테마 위에 얹혀요.' }
+      help: '프레임은 모든 보드에 함께 적용돼요.' }
+    /* rev.9 무료 단독 출시판(감사 권고 #25): Pro 항목(프리미엄 잠금 해제·프리미엄 테마)은
+       검색 사전에서 뺐다 — 검색은 숨긴 잠금 UI 로 가는 뒷문이다. Pro 재출시 때 복원한다. */
   ];
 
   /* 정규화: 소문자 + 공백·구분기호 제거. 사전·질의에 같은 함수를 쓴다. */

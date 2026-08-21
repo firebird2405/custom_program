@@ -1,21 +1,30 @@
 'use strict';
 /**
- * A45 — Free/Pro 경계 (SCORECARD rev.6)
- * "Free 하한 = 2026-08-18 동결 빌드의 실제 기능 집합 전체(사진 첨부·사진 스티커·배경 업로드·
- *  스티커 3세트·스킨 3종·꾸미기 전부·보드 3개까지 포함). 회귀 안티-테스트: 이 중 하나라도
- *  잠기면 FAIL. Pro = 순수 신규 가치만: 신규 스티커 ≥2팩(팩당 ≥8종, 기존과 중복 0, 매니페스트로
- *  검증)·신규 프리미엄 스킨/테마 ≥2종(기존과 색거리 ≥40)·보드 4개째부터·Electron 예약 자동 백업.
- *  라이선스 = 서명 파일 방식(앱엔 공개키만, WebCrypto 오프라인 검증): 잠금 UI([data-pro-lock])
- *  관찰 → 커밋된 테스트 라이선스([data-license-import]) 적용 → 즉시 해제+재기동 유지 →
- *  바이트 변조 라이선스는 거부"
+ * A45 — Free 경계 · 무료 단독 출시판 (SCORECARD rev.9)
  *
- * ══ rev.6 필수 계약 (REQUIRED CONTRACT — 본 주석이 A45 DOM·파일 계약의 정본) ══
+ * ══ rev.9 개정 사유 (근거: protocol/EXPERT-REVIEW.md B4·B3 — 사용자 승인 #24·#25) ══
+ *  - 제품에는 구매 채널이 0건이다: 가격 리터럴·구매 버튼·shell.openExternal 전부 없다.
+ *    README·MARKET·배포판 동봉 안내문은 이미 "첫 출시는 무료 단독"으로 정해 두었다.
+ *    그런데 rev.6~rev.8 의 A45 는 "잠금 UI 관찰 → 테스트 라이선스로 해제"를 계약으로
+ *    못 박아, **살 수 없는 잠금**을 채점표가 강제하고 있었다(사용자에게 남는 건 원망뿐).
+ *  - 그래서 A45 를 "무료 단독 출시판" 계약으로 뒤집는다:
+ *      · 무료 하한을 확대한다 — 동결 빌드 실기능 전체 + 보드 무제한 + 예약 자동 백업.
+ *      · 잠금 UI 는 **부재를 단언**한다 (A42 의 "분리 모드 부재" 단언과 동형).
+ *      · 서명 검증 코드는 **보존**한다 (미래 Pro 재출시용) — 단 UI 노출은 금지.
+ *  - Pro 상품 매니페스트(신규 스티커 ≥2팩·프리미엄 테마 ≥2종·색거리 ≥40) 검사는
+ *    **A45-P 로 보류**한다. 현행 Pro 상품(이모지 20자·CSS 그라디언트 2줄)은 상품성이
+ *    없어 그대로 팔면 안 된다 — Pro 재구성 발주에서 A45-P 로 복원한다.
+ *
+ * ══ rev.9 필수 계약 (REQUIRED CONTRACT — 본 주석이 A45 DOM·파일 계약의 정본) ══
  *
  * 0) 실행 컨텍스트: Electron 셸(_electron.launch, 개발 트리 electron/, PETIT_USERDATA=fresh
- *    tmpdir). 셸 미구축 시 "electron 셸 미구축 (2단계 진행 중)" 한국어 FAIL (fail-closed).
+ *    tmpdir). 셸 미구축 시 "electron 셸 미구축" 한국어 FAIL (fail-closed).
+ *    예약 자동 백업 검사는 PETIT_BACKUP_INTERVAL_MS 를 30일로 주고 기동한다 — 채점 중
+ *    실제 예약 백업이 사용자 문서 폴더에 파일을 쓰지 않게 하기 위한 격리다(채점기는
+ *    사용자 실데이터 영역에 어떤 파일도 남기지 않는다).
  *
- * 1) Free 동결 하한 (동결 기준 = 2026-08-18 postit.html — 아래 셀렉터는 동결 빌드의 실측 UI):
- *    라이선스가 없는 fresh 프로필에서 다음이 전부 동작해야 한다. 하나라도 잠기면 FAIL.
+ * 1) 무료 하한 (동결 기준 = 2026-08-18 postit.html 실측 UI + rev.9 확대분):
+ *    라이선스가 없는 fresh 프로필에서 다음이 **전부** 동작해야 한다. 하나라도 잠기면 FAIL.
  *      - 노트 사진 첨부: [data-ctx-menu] [data-ctx-item]("사진"|"이미지") +
  *        input[type=file][data-note-image-input] (A26 계약 재단언)
  *      - 꾸미기 패널: #decorBtn 클릭으로 열림 (배경/스티커/사진 스티커/테이프/프레임 섹션)
@@ -25,33 +34,37 @@
  *      - 스티커 3세트: #dpStSeason·#dpStMood·#dpStOffice 각 버튼 ≥12개, 클릭 → [data-sticker] 부착
  *      - 사진 스티커: #dpPhotoAdd + input[data-decor-photo-input] → [data-sticker].photo img(data:image)
  *      - 스킨 3종: 노트 활성/컨텍스트 메뉴의 [data-skin] + [data-skin-option] ≥3 (A27 계약 재단언)
- *      - 보드 3개: [data-add-board] 로 [data-board-tab] 3개까지 생성 가능 (A25 계약 확장 재단언)
  *      - 테이프/프레임: #dpTapeColor [data-tval]·#dpFrame [data-fval] 선택 동작(.sel 반영)
- *    비잠금 판정: 위 Free 컨트롤은 disabled 가 아니고 조상/자신에 [data-pro-lock] 이 없어야 한다.
+ *      - **(rev.9 확대) 보드 개수 무제한**: [data-add-board] 로 [data-board-tab] 이 2·3·4·5개까지
+ *        실제로 늘어난다 (4개째 이상이 막히면 FAIL — 무료 후퇴 금지)
+ *      - **(rev.9 확대) 예약 자동 백업 무료**: 설정(#settingsBtn)의 [data-backup-section]
+ *        (배치 카테고리는 자유 — 채점기가 [data-spcat] 전 카테고리를 순회해 찾는다)에서
+ *        [data-backup-auto] 가 disabled 아님·[data-pro-lock] 아래 아님 → 켜면 6초 내
+ *        userData\backup-config.json 의 auto 가 true → 같은 userData 재기동 후에도 켜진 상태 유지
+ *    비잠금 판정: 위 무료 컨트롤은 disabled 가 아니고 조상/자신에 [data-pro-lock] 이 없어야 한다.
  *
- * 2) 잠금 표현 계약: 잠긴 Pro 요소 = 엄격 가시(visible) [data-pro-lock] 요소. 해제 상태 =
- *    visible [data-pro-lock] 0개(제거 또는 숨김). 라이선스 없는 상태에서 잠금 UI 는
- *    꾸미기 패널 또는 보드 3개 상태의 [data-add-board] 클릭(4번째 시도)으로 도달·관찰 가능해야
- *    하고, 이때 4번째 보드는 실제로 생성되지 않아야 한다(기능 잠금 실증).
+ * 2) 잠금 비노출 단언 (rev.8 A42 "분리 부재" 단언과 동형 — 배반 차단용 부재 증명):
+ *    정상 조작 전수(기동 → 보드 5개까지 생성 → 꾸미기 패널 전 섹션 스크롤 → 설정 전 카테고리
+ *    개방 → 백업 섹션 조작)의 **각 단계**에서, 그리고 마지막 단계 뒤 **3초 지연 주입 감시**에서:
+ *      - visible [data-pro-lock] 0개
+ *      - visible [data-license-import] 0개 (라이선스 적용 UI 는 이번 판에서 노출 금지)
+ *      - 가격·구매 유도 문구 0건 — 화면에 실제로 렌더된 텍스트에 다음이 없어야 한다:
+ *        9,900 / 9900 / ₩ / 구매 / 결제 / 유료 / 업그레이드 / 프리미엄 / 잠금 해제 / ms-windows-store
+ *      - 설정 검색([data-settings-search])에 "프리미엄"·"구매"를 입력해도 그 문구를 담은
+ *        visible [data-settings-hit] 행이 0개 (검색 사전에 남은 Pro 항목 = 노출 경로)
  *
- * 3) Pro 신규성 매니페스트: assets/pro/pro-manifest.json (UTF-8 JSON, 커밋 대상):
- *      { "stickerPacks": [ { "id", "name", "stickers": [식별자 ≥8] } … ≥2팩 ],
- *        "skins":        [ { "id", "name", "baseColor": "#RRGGBB" } … ≥2종 ] }
- *    - stickers 식별자: 이모지 문자열 또는 assets/ 하위 상대 경로(경로형이면 파일 실존 검사).
- *    - 전 팩 통틀어 중복 0 + 동결 무료 3세트 45종(본 스펙에 동결 전재)과 교집합 0.
- *    - skins.baseColor: 기존 테마 3종(basic/dark/white — [data-theme-preset] 실측 문서 배경색)
- *      각각과 RGB 거리 ≥40, 신규 스킨끼리도 ≥40 (기존 재포장·자기 복제 차단, D 굿하트).
+ * 3) 라이선스 검증 코드 보존 (미래 Pro 재출시 — 정적 검사, UI 노출은 금지):
+ *      - postit.html 에 공개키 JWK(kty:"EC", crv:"P-256", x·y base64url ≥40자)와
+ *        WebCrypto 경로(crypto.subtle.importKey + crypto.subtle.verify + ECDSA + SHA-256) 존재
+ *      - 개인키·서명 생성 코드 0건: postit.html·calendar.html·electron/*.js 에
+ *        "PRIVATE KEY"·subtle.sign(·createSign(·generateKey( · JWK 개인키 필드 d 없음
+ *      - 커밋된 테스트 픽스처 electron/test-license/petit-test.license 보존(1바이트~64KB)
+ *      - **적용 경로가 UI 에서 접근 불가여도 FAIL 이 아니다** (오히려 계약 2 가 노출을 금지한다)
  *
- * 4) 라이선스 픽스처 계약: electron/test-license/petit-test.license (커밋된 정식 서명
- *    테스트 라이선스, 1바이트~64KB 단일 파일 — 내부 형식은 구현 자유이나 서명 검증 필수).
- *    앱에는 공개키만 내장(WebCrypto 오프라인 검증) — 개인키·서명 생성 코드는 앱·배포물에
- *    포함 금지. [data-license-import]: DOM 존재 필수, 자신이 input[type=file] 이거나
- *    하위에 input[type=file] 을 두거나 클릭 시 filechooser 를 연다(셋 중 하나 — 채점기가
- *    이 순서로 시도). 숨겨져 있으면 visible [data-pro-lock] 클릭으로 visible 이 되어야 한다.
- *    적용 → 5초 내 visible [data-pro-lock] 0 + 4번째 보드 생성 성공. 같은 userData 재기동 →
- *    해제 유지. 바이트 변조본(중앙 1바이트 반전) → 잠금 유지 + 4번째 보드 차단 + 크래시·dialog 0.
+ * 4) 보류: Pro 상품 매니페스트(assets/pro/pro-manifest.json) 신규성 검사 → **A45-P**
+ *    (Pro 재출시 발주에서 복원. 이번 판에서는 파일 존재 여부를 판정하지 않는다.)
  *
- * 셸·훅·픽스처 미구현 = 즉시 한국어 FAIL (fail-closed, skip-pass 금지).
+ * 훅·픽스처 미구현 = 즉시 한국어 FAIL (fail-closed, skip-pass 금지).
  * 공통 규정: dialog 0건·pageerror 0건.
  */
 const fs = require('fs');
@@ -60,9 +73,7 @@ const path = require('path');
 const { test, expect } = require('@playwright/test');
 const {
   APP_ROOT,
-  POSTIT_PATH,
   requirePostit,
-  withFreshApp,
   removeDirWithRetry,
   sleep,
   POSTIT_SEL,
@@ -72,8 +83,6 @@ const {
   pollVisibleNoteCount,
   pollPage,
   openContextMenuOn,
-  parseRgb,
-  rgbDist,
 } = require('../lib/helpers');
 const {
   ELECTRON_DIR,
@@ -88,16 +97,30 @@ const {
   dismissMigrateIfPresent,
 } = require('../lib/electron-helpers');
 
-const PRO_MANIFEST_PATH = path.join(APP_ROOT, 'assets', 'pro', 'pro-manifest.json');
 const LICENSE_FIXTURE_PATH = path.join(ELECTRON_DIR, 'test-license', 'petit-test.license');
-const MIN_COLOR_DIST = 40;
+const POSTIT_SRC = path.join(APP_ROOT, 'postit.html');
+const CALENDAR_SRC = path.join(APP_ROOT, 'calendar.html');
 
-/* ── 동결 무료 스티커 3세트 (2026-08-18 postit.html EMOJI_SETS 원문 전재 — 45종) ──
- * Pro 팩은 이 45종과 교집합 0 이어야 한다 (기존 무료 에셋의 Pro 재포장 금지, B rev.6). */
-const FROZEN_FREE_STICKERS = [
-  '🌸', '🌷', '🌻', '🍀', '🌿', '🍁', '🍂', '🍄', '⛄', '❄️', '🌊', '☀️', '🌙', '🌈', '🎄',
-  '😀', '😍', '🥳', '😎', '🤔', '😴', '😭', '😡', '🤩', '🥰', '😆', '🙌', '💖', '✨', '🔥',
-  '📌', '📎', '✏️', '📚', '💡', '📅', '⏰', '✅', '❗', '⭐', '📞', '💻', '☕', '📝', '📊',
+/* 무료 보드 하한 — rev.9 는 "무제한"이므로 4·5번째까지 실제 생성을 관찰한다 */
+const BOARD_TARGET = 5;
+
+/* 채점 중 실제 예약 백업이 사용자 문서 폴더에 파일을 쓰지 않도록 주기를 30일로 밀어 둔다
+ * (backup.js 의 공식 테스트 훅 PETIT_BACKUP_INTERVAL_MS — 값이 클수록 실행되지 않는다). */
+const NO_AUTORUN_ENV = { PETIT_BACKUP_INTERVAL_MS: String(30 * 24 * 60 * 60 * 1000) };
+
+/* 가격·구매 유도 문구 (무료 단독 출시판에서 화면에 렌더되면 FAIL) */
+const SALES_LITERALS = [
+  '9,900',
+  '9900',
+  '₩',
+  '구매',
+  '결제',
+  '유료',
+  '업그레이드',
+  '프리미엄',
+  '잠금 해제',
+  '잠금해제',
+  'ms-windows-store',
 ];
 
 /** 큰 JPEG 픽스처 런타임 생성 (a26 관용구 — 채점기 저장소에 이미지 미포함) */
@@ -123,7 +146,7 @@ async function makeJpegFixture(page, tmpDir, name) {
   return p;
 }
 
-/** Free 컨트롤 비잠금 단언: disabled 금지 + 자신/조상 [data-pro-lock] 금지 */
+/** 무료 컨트롤 비잠금 단언: disabled 금지 + 자신/조상 [data-pro-lock] 금지 */
 async function assertNotProLocked(page, selector, label) {
   const bad = await page.evaluate((sel) => {
     const els = Array.from(document.querySelectorAll(sel));
@@ -138,9 +161,13 @@ async function assertNotProLocked(page, selector, label) {
   }, selector);
   if (bad !== 'ok') {
     throw new Error(
-      `A45: Free 동결 하한 위반 — ${label}(${selector}) 이(가) ` +
-        (bad === null ? '존재하지 않습니다' : bad === 'pro-lock' ? '[data-pro-lock] 잠금 아래에 있습니다' : 'disabled 상태입니다') +
-        ' (2026-08-18 동결 빌드 기능은 라이선스 없이 전부 동작해야 함 — B rev.6 무료 후퇴 금지)'
+      `A45: 무료 하한 위반 — ${label}(${selector}) 이(가) ` +
+        (bad === null
+          ? '존재하지 않습니다'
+          : bad === 'pro-lock'
+            ? '[data-pro-lock] 잠금 아래에 있습니다'
+            : 'disabled 상태입니다') +
+        ' (무료 단독 출시판: 동결 빌드 기능 + 보드 무제한 + 예약 자동 백업은 라이선스 없이 전부 동작해야 함 — B rev.9 무료 후퇴 금지)'
     );
   }
 }
@@ -159,82 +186,159 @@ async function chooseFileVia(page, clickLoc, filePath, label) {
 /** [data-add-board] 클릭 → visible [data-board-tab] 수가 want 가 될 때까지 폴링 */
 async function addBoardExpectTabs(page, want, label) {
   const btn = await requireHook(page, '[data-add-board]', label);
-  await btn.click({ timeout: 5000 });
+  await btn.click({ timeout: 5000 }).catch(() => {
+    /* disabled 구현도 "막힘"이다 — 판정은 아래 탭 수로 한다 */
+  });
   await pollPage(
     page,
-    (want) => document.querySelectorAll('[data-board-tab]').length === want,
+    (want2) => document.querySelectorAll('[data-board-tab]').length === want2,
     want,
     5000,
-    `${label}: [data-add-board] 클릭 후 [data-board-tab] 이 ${want}개가 되지 않았습니다`
+    `${label}: [data-add-board] 클릭 후 [data-board-tab] 이 ${want}개가 되지 않았습니다 — ` +
+      (want >= 4
+        ? 'rev.9 무료 단독 출시판은 **보드 개수 무제한**입니다 (FREE_BOARD_MAX 게이트 해제 필요 — 감사 권고 #25)'
+        : '보드 생성 자체가 동작하지 않습니다')
   );
 }
 
-/** 문서 배경색 (a36 관용구: body 부터 조상 방향 첫 불투명 background-color) */
-async function docBg(page) {
+/** 설정 모달 열기 (#settingsBtn → #settingsPanel visible) */
+async function openSettingsPanel(page, label) {
+  const btn = page.locator('#settingsBtn');
+  if ((await btn.count()) === 0) {
+    throw new Error(`${label}: 설정 버튼(#settingsBtn)이 없습니다 — 동결 빌드 UI 후퇴 (fail-closed)`);
+  }
+  if ((await countVisibleStrict(page, '#settingsPanel')) === 0) {
+    await btn.click({ timeout: 5000 });
+  }
+  await pollVisibleStrict(page, '#settingsPanel', true, 5000, `${label}: 설정 패널(#settingsPanel)이 열리지 않았습니다`);
+}
+
+/** 설정 모달 닫기 (실패해도 진행 — 판정 대상 아님) */
+async function closeSettingsPanel(page) {
+  await page.locator('#spClose').first().click({ timeout: 3000 }).catch(() => {});
+  await sleep(250);
+}
+
+/** 꾸미기 패널 열기 (#decorBtn → #dpStSeason visible) */
+async function openDecorPanel(page, label) {
+  const decorBtn = page.locator('#decorBtn');
+  if ((await decorBtn.count()) === 0) {
+    throw new Error(`${label}: 꾸미기 버튼(#decorBtn)이 없습니다 — 동결 빌드 기능(꾸미기) 후퇴 (fail-closed)`);
+  }
+  if ((await countVisibleStrict(page, '#dpStSeason')) === 0) {
+    await decorBtn.click({ timeout: 5000 });
+  }
+  await pollVisibleStrict(page, '#dpStSeason', true, 5000, `${label}: 꾸미기 패널이 열리지 않았습니다 (#dpStSeason 비가시)`);
+}
+
+/** 지정 컨테이너와 그 안의 모든 스크롤 가능한 자손을 끝까지 훑는다 (지연 렌더 유도) */
+async function scrollThrough(page, selector) {
+  for (let step = 1; step <= 4; step++) {
+    await page.evaluate(
+      ({ sel, frac }) => {
+        const root = document.querySelector(sel);
+        if (!root) return;
+        const targets = [root, ...root.querySelectorAll('*')].filter((el) => el.scrollHeight - el.clientHeight > 4);
+        for (const el of targets) el.scrollTop = (el.scrollHeight - el.clientHeight) * frac;
+      },
+      { sel: selector, frac: step / 4 }
+    );
+    await sleep(200);
+  }
+}
+
+/** 실제로 화면에 렌더된 텍스트만 수집 (display:none·visibility:hidden·유효 opacity ≤0.05 제외) */
+async function visibleText(page) {
   return page.evaluate(() => {
-    const parse = (s) => {
-      const m = /rgba?\(([^)]+)\)/.exec(s || '');
-      if (!m) return null;
-      const p = m[1].split(',').map((x) => parseFloat(x));
-      return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    const effOpacity = (el) => {
+      let o = 1;
+      for (let c = el; c && c.nodeType === 1; c = c.parentElement) o *= parseFloat(getComputedStyle(c).opacity) || 0;
+      return o;
     };
-    let el = document.body;
-    while (el) {
-      const s = getComputedStyle(el).backgroundColor;
-      const c = parse(s);
-      if (c && c.a >= 0.99) return s;
-      el = el.parentElement;
-    }
-    return 'rgb(255, 255, 255)';
+    const shown = (el) => {
+      const s = getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden' && effOpacity(el) > 0.05;
+    };
+    const out = [];
+    const walk = (el) => {
+      if (!shown(el)) return;
+      for (const n of el.childNodes) {
+        if (n.nodeType === 3) {
+          const t = (n.nodeValue || '').trim();
+          if (t) out.push(t);
+        } else if (n.nodeType === 1) {
+          walk(n);
+        }
+      }
+    };
+    if (document.body) walk(document.body);
+    return out.join('\n');
   });
 }
 
-function hexToRgbObj(hex) {
-  const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+function salesHits(text) {
+  const t = String(text || '');
+  return SALES_LITERALS.filter((lit) => t.includes(lit));
 }
 
-/** [data-license-import] 로 라이선스 파일 적용 (계약 4의 3가지 형태 순서대로 시도) */
-async function importLicenseFile(page, filePath, label) {
-  let imp = page.locator('[data-license-import]').first();
-  if ((await imp.count()) === 0) {
-    throw new Error(`${label}: 필수 훅 [data-license-import] 이(가) 페이지에 없습니다 — rev.6 계약 미구현 (fail-closed)`);
-  }
-  if (!(await imp.isVisible().catch(() => false))) {
-    // 계약: 숨겨져 있으면 visible [data-pro-lock] 클릭으로 도달 가능해야 한다
-    if ((await countVisibleStrict(page, '[data-pro-lock]')) > 0) {
-      await page
-        .locator('[data-pro-lock]:visible')
-        .first()
-        .click({ timeout: 5000 })
-        .catch(() => {});
-      await sleep(400);
-    }
-    if (!(await imp.isVisible().catch(() => false))) {
-      throw new Error(
-        `${label}: [data-license-import] 이 숨겨져 있고 [data-pro-lock] 클릭으로도 visible 이 되지 않습니다 — 계약 4 위반 (fail-closed)`
-      );
-    }
-  }
-  const shape = await imp.evaluate((el) => {
-    if (el.tagName === 'INPUT' && el.type === 'file') return 'self-input';
-    if (el.querySelector('input[type="file"]')) return 'child-input';
-    return 'chooser';
-  });
-  if (shape === 'self-input') {
-    await imp.setInputFiles(filePath);
-  } else if (shape === 'child-input') {
-    await imp.locator('input[type="file"]').first().setInputFiles(filePath);
-  } else {
-    await chooseFileVia(page, imp, filePath, label + ' 라이선스 가져오기');
+/** 한 단계의 노출 상태 스냅샷 (잠금·라이선스 UI·판매 문구) */
+async function snapshotExposure(page, stageName) {
+  const locks = await countVisibleStrict(page, '[data-pro-lock]').catch(() => 0);
+  const imports = await countVisibleStrict(page, '[data-license-import]').catch(() => 0);
+  const hits = salesHits(await visibleText(page).catch(() => ''));
+  return { stage: stageName, locks, imports, hits };
+}
+
+/** userData\backup-config.json 판독 (부재·손상 = null) */
+function readBackupConfig(userDir) {
+  const p = path.join(userDir, 'backup-config.json');
+  if (!fs.existsSync(p)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (e) {
+    return null;
   }
 }
 
-test.describe('A45 Free/Pro 경계', () => {
-  /* ════ 1) Free 동결 하한 안티-테스트 ════ */
-  test('A45: Free 동결 하한 — 라이선스 없이 사진 첨부·배경 업로드·사진 스티커·스티커 3세트·스킨 3종·보드 3개·꾸미기 전부 동작 (하나라도 잠기면 FAIL)', async () => {
+/** backup-config.json 의 auto 가 want 가 될 때까지 폴링 */
+async function pollBackupAuto(userDir, want, timeoutMs, failMsg) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const cfg = readBackupConfig(userDir);
+    if (cfg && cfg.auto === want) return cfg;
+    if (Date.now() > deadline) {
+      const cfg2 = readBackupConfig(userDir);
+      throw new Error(failMsg + ` (현재 backup-config.json: ${cfg2 ? JSON.stringify(cfg2) : '파일 없음'})`);
+    }
+    await sleep(150);
+  }
+}
+
+/** 백업 섹션 도달 (설정 열기 → 카테고리 순회 → [data-backup-section] visible)
+ *  백업 섹션이 어느 카테고리에 배치되든(현행: 💾 데이터) 찾아낸다 — 배치는 계약 대상이 아니다. */
+async function openBackupSection(page, label) {
+  await openSettingsPanel(page, label);
+  await requireHook(page, '[data-backup-section]', `${label} 백업 섹션`);
+  if ((await countVisibleStrict(page, '[data-backup-section]')) === 0) {
+    const cats = await page.locator('#spNav [data-spcat]').evaluateAll((els) => els.map((el) => el.getAttribute('data-spcat')));
+    for (const cat of cats) {
+      await page.locator(`#spNav [data-spcat="${cat}"]`).first().click({ timeout: 5000 }).catch(() => {});
+      await sleep(300);
+      if ((await countVisibleStrict(page, '[data-backup-section]')) > 0) break;
+    }
+  }
+  await pollVisibleStrict(
+    page,
+    '[data-backup-section]',
+    true,
+    5000,
+    `${label}: 설정 전 카테고리를 순회해도 백업 섹션([data-backup-section])이 보이지 않습니다 — 셸 백업 UI 주입 실패 (fail-closed)`
+  );
+}
+
+test.describe('A45 무료 단독 출시판 경계', () => {
+  /* ════ 1) 무료 하한 안티-테스트 — 동결 실기능 전체 + 보드 무제한 ════ */
+  test('A45: 무료 하한 — 라이선스 없이 사진 첨부·배경 업로드·사진 스티커·스티커 3세트·스킨 3종·꾸미기 전부 + 보드 5개까지 동작 (하나라도 잠기면 FAIL)', async () => {
     test.setTimeout(240 * 1000);
     requirePostit();
     requireElectronShell('A45');
@@ -242,16 +346,18 @@ test.describe('A45 Free/Pro 경계', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'grader-a45-fx-'));
     let shell = null;
     try {
-      shell = await launchElectronShell(userDir, { label: 'A45' });
+      shell = await launchElectronShell(userDir, { label: 'A45', env: NO_AUTORUN_ENV });
       const page = await getAppWindow(shell, 'postit.html', 30000, 'A45');
       await dismissMigrateIfPresent(page, 'A45');
       await dismissOnboardingIfPresent(page, 'A45');
 
-      // ── 보드 3개까지 무료 (A25 확장 재단언) ──
+      // ── 보드 무제한 (rev.9 확대: 4·5번째까지 실제 생성) ──
       await requireHook(page, '[data-board-switcher]', 'A45 보드 전환기');
       await assertNotProLocked(page, '[data-add-board]', '새 보드 버튼');
-      await addBoardExpectTabs(page, 2, 'A45 보드 2');
-      await addBoardExpectTabs(page, 3, 'A45 보드 3');
+      for (let want = 2; want <= BOARD_TARGET; want++) {
+        await addBoardExpectTabs(page, want, `A45 보드 ${want}`);
+        await assertNotProLocked(page, '[data-add-board]', `보드 ${want}개 상태의 새 보드 버튼`);
+      }
 
       // ── 노트 2개 생성 (1=사진 첨부, 2=스킨) ──
       await addNote(page);
@@ -280,7 +386,7 @@ test.describe('A45 Free/Pro 경계', () => {
           }),
         POSTIT_SEL.NOTE,
         8000,
-        'A45: 라이선스 없는 상태에서 노트 사진 첨부가 동작하지 않았습니다 (data:image img 미표시 — Free 동결 하한 위반)'
+        'A45: 라이선스 없는 상태에서 노트 사진 첨부가 동작하지 않았습니다 (data:image img 미표시 — 무료 하한 위반)'
       );
 
       // ── 스킨 3종 (A27 계약 재단언) — 노트 2에 적용 ──
@@ -314,17 +420,12 @@ test.describe('A45 Free/Pro 경계', () => {
         },
         { N: POSTIT_SEL.NOTE, before: bgBefore },
         5000,
-        'A45: 줄노트 스킨 적용 후 노트 background-image 가 변하지 않았습니다 (Free 동결 하한 위반)'
+        'A45: 줄노트 스킨 적용 후 노트 background-image 가 변하지 않았습니다 (무료 하한 위반)'
       );
       await page.keyboard.press('Escape').catch(() => {});
 
       // ── 꾸미기 패널 열기 (동결 빌드 UI: #decorBtn) ──
-      const decorBtn = page.locator('#decorBtn');
-      if ((await decorBtn.count()) === 0) {
-        throw new Error('A45: 꾸미기 버튼(#decorBtn)이 없습니다 — 동결 빌드 기능(꾸미기) 후퇴 (fail-closed)');
-      }
-      await decorBtn.click({ timeout: 5000 });
-      await pollVisibleStrict(page, '#dpStSeason', true, 5000, 'A45: 꾸미기 패널이 열리지 않았습니다 (#dpStSeason 비가시)');
+      await openDecorPanel(page, 'A45');
 
       // ── 스티커 3세트 — 각 ≥12종·비잠금·클릭 부착 ──
       for (const [host, name] of [['#dpStSeason', '계절'], ['#dpStMood', '기분'], ['#dpStOffice', '사무']]) {
@@ -417,117 +518,305 @@ test.describe('A45 Free/Pro 경계', () => {
     }
   });
 
-  /* ════ 2) Pro 신규성 — 매니페스트 검증 ════ */
-  test('A45: Pro 신규성 — pro-manifest 검증 (신규 스티커 ≥2팩×≥8종·동결 45종과 중복 0, 신규 스킨 ≥2종·기존 테마와 색거리 ≥40)', async () => {
-    test.setTimeout(120 * 1000);
+  /* ════ 2) 무료 하한 확대 — 예약 자동 백업 (감사 권고 #24) ════ */
+  test('A45: 무료 하한 — 예약 자동 백업이 라이선스 없이 켜지고(backup-config.json auto:true) 재기동 후에도 유지된다', async () => {
+    test.setTimeout(240 * 1000);
     requirePostit();
-
-    // ── 매니페스트 존재·형식 (fail-closed) ──
-    if (!fs.existsSync(PRO_MANIFEST_PATH)) {
-      throw new Error(
-        'A45: Pro 신규성 매니페스트 assets/pro/pro-manifest.json 이 없습니다 — ' +
-          '계약 3({stickerPacks:[{id,name,stickers[≥8]}×≥2], skins:[{id,name,baseColor}×≥2]}) 미구현 (fail-closed)'
-      );
-    }
-    let manifest = null;
+    requireElectronShell('A45');
+    const userDir = freshUserDataDir('grader-a45-auto-');
+    let shell = null;
     try {
-      manifest = JSON.parse(fs.readFileSync(PRO_MANIFEST_PATH, 'utf8'));
-    } catch (e) {
-      throw new Error('A45: assets/pro/pro-manifest.json 파싱 실패 (유효한 UTF-8 JSON 이어야 함): ' + e.message);
-    }
-    const packs = Array.isArray(manifest.stickerPacks) ? manifest.stickerPacks : [];
-    const skins = Array.isArray(manifest.skins) ? manifest.skins : [];
-    expect(packs.length >= 2, `A45: 신규 스티커 팩이 ${packs.length}개입니다 (≥2팩 계약)`).toBe(true);
-    expect(skins.length >= 2, `A45: 신규 프리미엄 스킨이 ${skins.length}종입니다 (≥2종 계약)`).toBe(true);
+      shell = await launchElectronShell(userDir, { label: 'A45 자동백업', env: NO_AUTORUN_ENV });
+      let page = await getAppWindow(shell, 'postit.html', 30000, 'A45 자동백업');
+      await dismissMigrateIfPresent(page, 'A45 자동백업');
+      await dismissOnboardingIfPresent(page, 'A45 자동백업');
 
-    // ── 스티커: 팩당 ≥8종, 전 팩 중복 0, 동결 45종과 교집합 0, 경로형은 실존 ──
-    const frozen = new Set(FROZEN_FREE_STICKERS);
-    const seen = new Set();
-    for (const pack of packs) {
-      const pid = pack && pack.id ? String(pack.id) : '(id 없음)';
-      const stickers = pack && Array.isArray(pack.stickers) ? pack.stickers : [];
+      await openBackupSection(page, 'A45 자동백업');
+
+      // 비잠금 단언 — 토글 자체와 백업 섹션 전체
+      await assertNotProLocked(page, '[data-backup-auto]', '예약 자동 백업 토글');
+      const secLocks = await countVisibleStrict(page, '[data-backup-section] [data-pro-lock]');
       expect(
-        typeof pack.id === 'string' && pack.id.length > 0 && typeof pack.name === 'string' && pack.name.length > 0,
-        `A45: 팩 ${pid} 에 id/name 문자열이 없습니다 (매니페스트 계약)`
-      ).toBe(true);
-      expect(stickers.length >= 8, `A45: 팩 ${pid} 스티커가 ${stickers.length}종입니다 (팩당 ≥8종 계약)`).toBe(true);
-      for (const s of stickers) {
-        expect(typeof s === 'string' && s.length > 0, `A45: 팩 ${pid} 에 빈/비문자열 스티커 식별자가 있습니다`).toBe(true);
-        expect(!seen.has(s), `A45: 스티커 식별자 "${s}" 가 팩 간/팩 내 중복입니다 (중복 0 계약)`).toBe(true);
-        seen.add(s);
-        expect(!frozen.has(s), `A45: 스티커 "${s}" 는 동결 무료 3세트(45종)와 중복입니다 — 기존 무료 에셋의 Pro 재포장 금지 (B rev.6)`).toBe(true);
-        if (/[\\/]/.test(s) || /\.(png|jpe?g|webp|gif|svg)$/i.test(s)) {
-          const abs = path.join(APP_ROOT, s.replace(/\//g, path.sep));
-          expect(
-            abs.startsWith(path.join(APP_ROOT, 'assets')) && fs.existsSync(abs),
-            `A45: 경로형 스티커 "${s}" 가 assets/ 하위 실파일이 아닙니다 (로컬 번들 원칙·매니페스트 실존 계약)`
-          ).toBe(true);
-        }
-      }
-    }
+        secLocks,
+        `A45: 백업 섹션에 visible [data-pro-lock] 이 ${secLocks}개입니다 — ` +
+          '무료 단독 출시판에서 예약 자동 백업은 무료 기능입니다 (감사 권고 #24: 무료 사용자에게 자동 백업이 없는 것이 현재 최대 데이터 유실 리스크)'
+      ).toBe(0);
 
-    // ── 스킨: baseColor 형식 + 기존 테마 3종 실측과 거리 ≥40 + 신규끼리 ≥40 ──
-    const newColors = [];
-    for (const sk of skins) {
-      const sid = sk && sk.id ? String(sk.id) : '(id 없음)';
-      const c = hexToRgbObj(sk && sk.baseColor);
+      // 켜기 → main 이 실제로 수락했는지 userData\backup-config.json 로 확인
+      const autoBox = page.locator('[data-backup-auto]').first();
+      await autoBox.click({ timeout: 5000 }).catch((e) => {
+        throw new Error(
+          'A45: [data-backup-auto] 를 클릭할 수 없습니다 (disabled/가림 여부 확인) — 예약 자동 백업 무료화 미구현: ' + e.message
+        );
+      });
+      await pollBackupAuto(
+        userDir,
+        true,
+        6000,
+        'A45: [data-backup-auto] 를 켠 뒤 6초 내 userData\\backup-config.json 의 auto 가 true 가 되지 않았습니다 — ' +
+          "main 의 Pro 게이트(petit:backup:set-auto → isProUnlocked)가 여전히 살아 있습니다 (감사 권고 #24: Free 에게 개방)"
+      );
+      await pollPage(
+        page,
+        () => {
+          const el = document.querySelector('[data-backup-auto]');
+          return !!el && el.checked === true && el.disabled !== true;
+        },
+        null,
+        5000,
+        'A45: 켠 뒤에도 [data-backup-auto] 가 checked/enabled 로 관찰되지 않습니다 (UI 가 잠금 상태로 되돌아갔는지 확인)'
+      );
+
+      assertNoDialogs(shell.state, 'A45 자동백업');
       expect(
-        typeof sk.id === 'string' && sk.id.length > 0 && typeof sk.name === 'string' && sk.name.length > 0 && !!c,
-        `A45: 스킨 ${sid} 에 id/name/baseColor(#RRGGBB) 가 없습니다 (매니페스트 계약)`
+        shell.state.pageErrors,
+        `A45: pageerror ${shell.state.pageErrors.length}건 (0건이어야 함): ${shell.state.pageErrors.join(' | ')}`
+      ).toHaveLength(0);
+      await closeElectronShell(shell);
+      shell = null;
+
+      // ── 재기동 유지 ──
+      shell = await launchElectronShell(userDir, { label: 'A45 자동백업 재기동', env: NO_AUTORUN_ENV });
+      page = await getAppWindow(shell, 'postit.html', 30000, 'A45 자동백업 재기동');
+      await dismissMigrateIfPresent(page, 'A45 자동백업 재기동');
+      await dismissOnboardingIfPresent(page, 'A45 자동백업 재기동');
+      await openBackupSection(page, 'A45 자동백업 재기동');
+      await pollPage(
+        page,
+        () => {
+          const el = document.querySelector('[data-backup-auto]');
+          return !!el && el.checked === true && el.disabled !== true;
+        },
+        null,
+        7000,
+        'A45: 재기동 후 [data-backup-auto] 가 켜진 상태(checked·enabled)로 복원되지 않았습니다 — 예약 자동 백업 설정 유지 실패'
+      );
+      const cfg = readBackupConfig(userDir);
+      expect(
+        cfg && cfg.auto === true,
+        `A45: 재기동 후 backup-config.json 의 auto 가 true 가 아닙니다 (${cfg ? JSON.stringify(cfg) : '파일 없음'})`
       ).toBe(true);
-      newColors.push({ id: sid, c });
-    }
-    const ids = new Set(newColors.map((x) => x.id));
-    expect(ids.size === newColors.length, 'A45: 스킨 id 가 중복입니다').toBe(true);
+      const secLocks2 = await countVisibleStrict(page, '[data-backup-section] [data-pro-lock]');
+      expect(secLocks2, `A45: 재기동 후 백업 섹션에 visible [data-pro-lock] ${secLocks2}개 (0개여야 함)`).toBe(0);
 
-    // 기존 테마 3종 문서 배경 실측 (file:// — Electron 은 바이트 동일 HTML 을 로드하므로 동일 값)
-    const existing = await withFreshApp(POSTIT_PATH, async ({ page }) => {
-      const hook = page.locator('select[data-theme-preset]').first();
-      if ((await hook.count()) === 0) {
-        throw new Error('A45: [data-theme-preset] select 를 찾을 수 없습니다 (A36 계약 — 기존 테마 실측 불가)');
-      }
-      const optionCount = await hook.locator('option').count();
-      const colors = [];
-      for (let i = 0; i < optionCount; i++) {
-        const value = await hook.locator('option').nth(i).getAttribute('value');
-        await hook.selectOption(value);
-        await sleep(250);
-        const bg = parseRgb(await docBg(page));
-        if (bg) colors.push({ label: value, c: bg });
-      }
-      return colors;
-    });
-    expect(existing.length >= 3, `A45: 기존 테마 실측이 ${existing.length}종입니다 (basic/dark/white 3종 필요)`).toBe(true);
-
-    for (const nc of newColors) {
-      for (const ex of existing) {
-        const d = rgbDist(nc.c, ex.c);
-        expect(
-          d >= MIN_COLOR_DIST,
-          `A45: 신규 스킨 ${nc.id}(${JSON.stringify(nc.c)})와 기존 테마 "${ex.label}" 의 색거리 ${d.toFixed(1)} < ${MIN_COLOR_DIST} — 기존 재포장 금지 (신규 가치 계약)`
-        ).toBe(true);
-      }
-    }
-    for (let i = 0; i < newColors.length; i++) {
-      for (let j = i + 1; j < newColors.length; j++) {
-        const d = rgbDist(newColors[i].c, newColors[j].c);
-        expect(
-          d >= MIN_COLOR_DIST,
-          `A45: 신규 스킨 ${newColors[i].id}·${newColors[j].id} 간 색거리 ${d.toFixed(1)} < ${MIN_COLOR_DIST} — 자기 복제로 ≥2종 계수 금지 (D 굿하트)`
-        ).toBe(true);
-      }
+      assertNoDialogs(shell.state, 'A45 자동백업 재기동');
+      expect(
+        shell.state.pageErrors,
+        `A45: 재기동 pageerror ${shell.state.pageErrors.length}건 (0건이어야 함): ${shell.state.pageErrors.join(' | ')}`
+      ).toHaveLength(0);
+    } finally {
+      await closeElectronShell(shell);
+      await removeDirWithRetry(userDir);
     }
   });
 
-  /* ════ 3) 서명 라이선스 — 잠금 관찰 → 적용 즉시 해제 → 재기동 유지 → 변조 거부 ════ */
-  test('A45: 라이선스 서명 파일 — [data-pro-lock] 잠금 관찰 → [data-license-import] 적용 즉시 해제·재기동 유지, 바이트 변조본 거부', async () => {
+  /* ════ 3) 잠금 비노출 단언 — 정상 조작 전수 + 지연 주입 감시 ════ */
+  test('A45: 잠금 비노출 — 정상 조작 전수·3초 지연 감시에서 visible [data-pro-lock]·[data-license-import] 0개, 가격·구매 유도 문구 0건', async () => {
     test.setTimeout(300 * 1000);
     requirePostit();
     requireElectronShell('A45');
+    const userDir = freshUserDataDir('grader-a45-nolock-');
+    let shell = null;
+    try {
+      shell = await launchElectronShell(userDir, { label: 'A45 비노출', env: NO_AUTORUN_ENV });
+      const page = await getAppWindow(shell, 'postit.html', 30000, 'A45 비노출');
+      await dismissMigrateIfPresent(page, 'A45 비노출');
+      await dismissOnboardingIfPresent(page, 'A45 비노출');
+
+      const snaps = [];
+      snaps.push(await snapshotExposure(page, '기동 직후'));
+
+      // ── 보드 5개까지 생성 시도 (막히더라도 계속 — 여기서는 "노출" 만 판정한다) ──
+      await requireHook(page, '[data-add-board]', 'A45 비노출');
+      for (let i = 2; i <= BOARD_TARGET; i++) {
+        await page.locator('[data-add-board]').first().click({ timeout: 5000 }).catch(() => {});
+        await sleep(600);
+        const tabs = await page.locator('[data-board-tab]').count();
+        snaps.push(await snapshotExposure(page, `보드 ${i}번째 생성 시도 (현재 탭 ${tabs}개)`));
+      }
+
+      // ── 꾸미기 패널 전 섹션 스크롤 ──
+      await openDecorPanel(page, 'A45 비노출');
+      await scrollThrough(page, '#decorPanel');
+      snaps.push(await snapshotExposure(page, '꾸미기 패널 전 섹션 스크롤'));
+      await page.locator('#dpClose').first().click({ timeout: 3000 }).catch(() => {});
+      await sleep(250);
+
+      // ── 설정 전 카테고리 개방 ──
+      await openSettingsPanel(page, 'A45 비노출');
+      const cats = await page.locator('#spNav [data-spcat]').evaluateAll((els) =>
+        els.map((el) => ({ cat: el.getAttribute('data-spcat'), label: (el.textContent || '').trim() }))
+      );
+      if (cats.length === 0) {
+        throw new Error('A45 비노출: 설정 카테고리 탭(#spNav [data-spcat])이 없습니다 — 동결 빌드 UI 후퇴 (fail-closed)');
+      }
+      for (const c of cats) {
+        await page.locator(`#spNav [data-spcat="${c.cat}"]`).first().click({ timeout: 5000 }).catch(() => {});
+        await sleep(300);
+        await scrollThrough(page, '#settingsPanel');
+        snaps.push(await snapshotExposure(page, `설정 카테고리 "${c.label || c.cat}" 개방`));
+      }
+
+      // ── 백업 섹션 조작 (첫 카테고리로 복귀 후 토글 시도) ──
+      await page.locator(`#spNav [data-spcat="${cats[0].cat}"]`).first().click({ timeout: 5000 }).catch(() => {});
+      await sleep(300);
+      if ((await page.locator('[data-backup-auto]').count()) > 0) {
+        await page.locator('[data-backup-auto]').first().click({ timeout: 5000 }).catch(() => {});
+        await sleep(700);
+      }
+      snaps.push(await snapshotExposure(page, '백업 섹션 조작(예약 자동 백업 토글)'));
+
+      // ── 설정 검색: Pro 항목이 검색 결과로 노출되는가 ──
+      const searchExposure = [];
+      if ((await page.locator('[data-settings-search]').count()) > 0) {
+        for (const q of ['프리미엄', '구매']) {
+          const input = page.locator('[data-settings-search]').first();
+          await input.fill(q).catch(() => {});
+          await sleep(700);
+          const hitTexts = await page.locator('[data-settings-hit]').evaluateAll((els) => {
+            const effOpacity = (el) => {
+              let o = 1;
+              for (let c = el; c && c.nodeType === 1; c = c.parentElement) o *= parseFloat(getComputedStyle(c).opacity) || 0;
+              return o;
+            };
+            return els
+              .filter((el) => {
+                const r = el.getBoundingClientRect();
+                const s = getComputedStyle(el);
+                return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && effOpacity(el) > 0.05;
+              })
+              .map((el) => (el.textContent || '').trim());
+          });
+          const bad = hitTexts.filter((t) => salesHits(t).length > 0);
+          if (bad.length > 0) searchExposure.push(`"${q}" → ${bad.length}행: ${bad.slice(0, 3).join(' / ')}`);
+          await input.fill('').catch(() => {});
+          await sleep(300);
+        }
+      }
+      await closeSettingsPanel(page);
+
+      // ── 지연 주입 감시 (3초) — 뒤늦게 뜨는 잠금 배너·프로모 팝업 차단 ──
+      const watchDeadline = Date.now() + 3000;
+      let maxLocks = 0;
+      let maxImports = 0;
+      const lateHits = new Set();
+      for (;;) {
+        const s = await snapshotExposure(page, '지연 주입 감시(3초)');
+        maxLocks = Math.max(maxLocks, s.locks);
+        maxImports = Math.max(maxImports, s.imports);
+        for (const h of s.hits) lateHits.add(h);
+        if (Date.now() > watchDeadline) break;
+        await sleep(250);
+      }
+      snaps.push({ stage: '지연 주입 감시(3초)', locks: maxLocks, imports: maxImports, hits: Array.from(lateHits) });
+
+      // ── 판정 (한 번에 전부 보고) ──
+      const lockBad = snaps.filter((s) => s.locks > 0);
+      const importBad = snaps.filter((s) => s.imports > 0);
+      const salesBad = snaps.filter((s) => s.hits.length > 0);
+      const problems = [];
+      if (lockBad.length > 0) {
+        problems.push(
+          'visible [data-pro-lock] 노출 — ' +
+            lockBad.map((s) => `${s.stage}: ${s.locks}개`).join(' / ') +
+            ' (무료 단독 출시판 계약: 잠금 UI 는 어떤 정상 조작에서도 보이면 안 됩니다 — 감사 권고 #25, proBanner·dpProSec·셸 백업 잠금 마크를 전부 끌 것)'
+        );
+      }
+      if (importBad.length > 0) {
+        problems.push(
+          'visible [data-license-import] 노출 — ' +
+            importBad.map((s) => `${s.stage}: ${s.imports}개`).join(' / ') +
+            ' (라이선스 적용 UI 는 이번 판에서 노출 금지 — 코드는 보존하되 화면에는 내보내지 않습니다)'
+        );
+      }
+      if (salesBad.length > 0) {
+        problems.push(
+          '가격·구매 유도 문구 노출 — ' +
+            salesBad.map((s) => `${s.stage}: [${s.hits.join(', ')}]`).join(' / ') +
+            ' (구매 채널이 0건인 판에서 유료 문구는 원망만 남깁니다 — 문구 제거 필요)'
+        );
+      }
+      if (searchExposure.length > 0) {
+        problems.push(
+          '설정 검색에 Pro 항목 잔존 — ' +
+            searchExposure.join(' / ') +
+            ' (검색 사전에서 Pro 항목·유료 동의어를 제거할 것 — 검색은 숨긴 잠금 UI 로 가는 뒷문입니다)'
+        );
+      }
+      expect(problems.length === 0, 'A45: 잠금 비노출 계약 위반 —\n  · ' + problems.join('\n  · ')).toBe(true);
+
+      assertNoDialogs(shell.state, 'A45 비노출');
+      expect(
+        shell.state.pageErrors,
+        `A45: pageerror ${shell.state.pageErrors.length}건 (0건이어야 함): ${shell.state.pageErrors.join(' | ')}`
+      ).toHaveLength(0);
+    } finally {
+      await closeElectronShell(shell);
+      await removeDirWithRetry(userDir);
+    }
+  });
+
+  /* ════ 4) 라이선스 검증 코드 보존 (정적) — 미래 Pro 재출시용, UI 노출은 금지 ════ */
+  test('A45: 라이선스 검증 코드 보존 — 공개키(EC P-256)·WebCrypto verify 정적 존재, 개인키·서명 생성 코드 0건, 테스트 픽스처 보존', async () => {
+    test.setTimeout(60 * 1000);
+    requirePostit();
+
+    const src = fs.readFileSync(POSTIT_SRC, 'utf8');
+
+    // ── 공개키 JWK (kty EC / crv P-256 / x·y base64url ≥40자) ──
+    const hasKty = /\bkty\s*:\s*['"]EC['"]/.test(src);
+    const hasCrv = /\bcrv\s*:\s*['"]P-256['"]/.test(src);
+    const hasX = /\bx\s*:\s*['"][A-Za-z0-9_-]{40,}['"]/.test(src);
+    const hasY = /\by\s*:\s*['"][A-Za-z0-9_-]{40,}['"]/.test(src);
+    expect(
+      hasKty && hasCrv && hasX && hasY,
+      'A45: postit.html 에서 서명 검증용 공개키 JWK(kty:"EC", crv:"P-256", x·y)를 찾지 못했습니다 — ' +
+        `관찰: kty=${hasKty} crv=${hasCrv} x=${hasX} y=${hasY}. ` +
+        '무료 단독 출시판에서도 **검증 경로는 보존**해야 합니다 (미래 Pro 재출시 시 A45-P 로 복원 — UI 만 끄고 코드는 남길 것)'
+    ).toBe(true);
+
+    // ── WebCrypto 오프라인 검증 경로 ──
+    const hasImport = /crypto\.subtle\.importKey/.test(src);
+    const hasVerify = /crypto\.subtle\.verify/.test(src);
+    const hasEcdsa = /['"]ECDSA['"]/.test(src);
+    const hasSha = /['"]SHA-256['"]/.test(src);
+    expect(
+      hasImport && hasVerify && hasEcdsa && hasSha,
+      'A45: postit.html 에서 WebCrypto 서명 검증 경로를 찾지 못했습니다 — ' +
+        `관찰: importKey=${hasImport} verify=${hasVerify} ECDSA=${hasEcdsa} SHA-256=${hasSha}. ` +
+        '라이선스 검증 함수는 삭제하지 말고 보존할 것 (UI 노출만 금지)'
+    ).toBe(true);
+
+    // ── 개인키·서명 생성 코드 0건 (앱·셸 어디에도) ──
+    const scanFiles = [POSTIT_SRC, CALENDAR_SRC];
+    for (const f of fs.readdirSync(ELECTRON_DIR)) {
+      if (f.toLowerCase().endsWith('.js')) scanFiles.push(path.join(ELECTRON_DIR, f));
+    }
+    const forbidden = [
+      { re: /-----BEGIN[A-Z ]*PRIVATE KEY/, why: 'PEM 개인키' },
+      { re: /subtle\.sign\s*\(/, why: 'WebCrypto 서명 생성(subtle.sign)' },
+      { re: /createSign\s*\(/, why: 'Node 서명 생성(createSign)' },
+      { re: /subtle\.generateKey\s*\(/, why: '키쌍 생성(generateKey)' },
+      { re: /\bd\s*:\s*['"][A-Za-z0-9_-]{40,}['"]/, why: 'JWK 개인키 필드 d' },
+    ];
+    const leaks = [];
+    for (const file of scanFiles) {
+      if (!fs.existsSync(file)) continue;
+      const text = fs.readFileSync(file, 'utf8');
+      for (const rule of forbidden) {
+        if (rule.re.test(text)) leaks.push(`${path.relative(APP_ROOT, file)} — ${rule.why}`);
+      }
+    }
+    expect(
+      leaks.length === 0,
+      'A45: 개인키·서명 생성 코드가 앱/셸에 포함되어 있습니다 (배포물 포함 금지 — 라이선스 위조 가능): ' + leaks.join(' | ')
+    ).toBe(true);
+
+    // ── 테스트 라이선스 픽스처 보존 (미래 A45-P 재개용 — 삭제 금지) ──
     if (!fs.existsSync(LICENSE_FIXTURE_PATH)) {
       throw new Error(
         'A45: 커밋된 테스트 라이선스 픽스처 electron/test-license/petit-test.license 가 없습니다 — ' +
-          '계약 4(서명 파일 방식: 앱엔 공개키만, WebCrypto 오프라인 검증, 픽스처는 정식 서명본 커밋) 미구현 (fail-closed)'
+          'rev.9 는 라이선스 UI 를 끄지만 픽스처·검증 코드는 **보존** 대상입니다 (Pro 재출시 시 A45-P 로 즉시 복원)'
       );
     }
     const licBuf = fs.readFileSync(LICENSE_FIXTURE_PATH);
@@ -535,130 +824,5 @@ test.describe('A45 Free/Pro 경계', () => {
       licBuf.length > 0 && licBuf.length <= 64 * 1024,
       `A45: 라이선스 픽스처 크기 ${licBuf.length}바이트 (1바이트~64KB 계약)`
     ).toBe(true);
-
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'grader-a45-lic-'));
-    const tampered = Buffer.from(licBuf);
-    tampered[Math.floor(tampered.length / 2)] ^= 0xff; // 중앙 1바이트 반전
-    const tamperedPath = path.join(tmpDir, 'petit-test.tampered.license');
-    fs.writeFileSync(tamperedPath, tampered);
-
-    const dirA = freshUserDataDir('grader-a45-licA-');
-    const dirB = freshUserDataDir('grader-a45-licB-');
-    let shell = null;
-    try {
-      /* ── 잠금 관찰 (라이선스 없음) ── */
-      shell = await launchElectronShell(dirA, { label: 'A45' });
-      let page = await getAppWindow(shell, 'postit.html', 30000, 'A45');
-      await dismissMigrateIfPresent(page, 'A45');
-      await dismissOnboardingIfPresent(page, 'A45');
-      await addBoardExpectTabs(page, 2, 'A45 보드 2');
-      await addBoardExpectTabs(page, 3, 'A45 보드 3');
-
-      // 기능 잠금 실증(계약 2 — 감사 수정 2026-08-19): 4번째 보드 시도는 잠금 UI 노출 여부와
-      // 무관하게 "항상" 수행한다. 이전 판은 꾸미기 패널에 [data-pro-lock] 이 보이면 시도를
-      // 생략해, 장식적 잠금 표시만 있고 실제로는 4번째 보드가 열리는 배반을 놓칠 수 있었다.
-      // (버튼이 disabled 인 구현도 정당한 잠금이므로 클릭 실패는 삼키고, 판정은 탭 수로 한다.)
-      await page.locator('[data-add-board]').first().click({ timeout: 5000 }).catch(() => {});
-      await sleep(800);
-      let tabs = await page.locator('[data-board-tab]').count();
-      expect(tabs, `A45: 라이선스 없이 4번째 보드가 생성되었습니다 (탭 ${tabs}개) — Pro 경계(보드 4개째부터) 미작동`).toBe(3);
-      // 잠금 UI 관찰: 4번째 시도 직후 또는 꾸미기 패널에서 visible [data-pro-lock] (계약 2 도달 경로)
-      if ((await countVisibleStrict(page, '[data-pro-lock]')) === 0) {
-        await page.locator('#decorBtn').click({ timeout: 5000 }).catch(() => {});
-        await sleep(500);
-      }
-      const lockCount = await countVisibleStrict(page, '[data-pro-lock]');
-      if (lockCount === 0) {
-        throw new Error(
-          'A45: 라이선스 없는 상태에서 잠금 UI([data-pro-lock])가 4번째 보드 시도에서도, 꾸미기 패널에서도 관찰되지 않습니다 — ' +
-            'Pro 경계 미구현 (fail-closed)'
-        );
-      }
-
-      /* ── 정식 라이선스 적용 → 즉시 해제 ── */
-      await importLicenseFile(page, LICENSE_FIXTURE_PATH, 'A45');
-      await pollPage(
-        page,
-        () => {
-          const effOpacity = (el) => {
-            let o = 1;
-            for (let c = el; c && c.nodeType === 1; c = c.parentElement) o *= parseFloat(getComputedStyle(c).opacity) || 0;
-            return o;
-          };
-          return (
-            Array.from(document.querySelectorAll('[data-pro-lock]')).filter((el) => {
-              const r = el.getBoundingClientRect();
-              const s = getComputedStyle(el);
-              return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && effOpacity(el) > 0.05;
-            }).length === 0
-          );
-        },
-        null,
-        5000,
-        'A45: 정식 서명 라이선스 적용 후 5초 내 visible [data-pro-lock] 이 0개가 되지 않았습니다 (즉시 해제 계약)'
-      );
-      await addBoardExpectTabs(page, 4, 'A45 해제 후 보드 4');
-      assertNoDialogs(shell.state, 'A45');
-      await closeElectronShell(shell);
-      shell = null;
-
-      /* ── 재기동 유지 ── */
-      shell = await launchElectronShell(dirA, { label: 'A45' });
-      page = await getAppWindow(shell, 'postit.html', 30000, 'A45');
-      await dismissMigrateIfPresent(page, 'A45');
-      await pollPage(
-        page,
-        () => document.querySelectorAll('[data-board-tab]').length === 4,
-        null,
-        7000,
-        'A45: 재기동 후 보드 4개 구성이 유지되지 않았습니다 (라이선스 재기동 유지 실패)'
-      );
-      await page.locator('#decorBtn').click({ timeout: 5000 }).catch(() => {});
-      await sleep(800);
-      const lockAfterRestart = await countVisibleStrict(page, '[data-pro-lock]');
-      expect(
-        lockAfterRestart,
-        `A45: 재기동 후 visible [data-pro-lock] ${lockAfterRestart}개 — 라이선스 해제 상태가 유지되어야 합니다`
-      ).toBe(0);
-      assertNoDialogs(shell.state, 'A45');
-      await closeElectronShell(shell);
-      shell = null;
-
-      /* ── 변조 라이선스 거부 (fresh 프로필 B) ── */
-      shell = await launchElectronShell(dirB, { label: 'A45' });
-      page = await getAppWindow(shell, 'postit.html', 30000, 'A45');
-      await dismissMigrateIfPresent(page, 'A45');
-      await dismissOnboardingIfPresent(page, 'A45');
-      await addBoardExpectTabs(page, 2, 'A45 변조 보드 2');
-      await addBoardExpectTabs(page, 3, 'A45 변조 보드 3');
-      await page.locator('#decorBtn').click({ timeout: 5000 }).catch(() => {});
-      await sleep(500);
-      if ((await countVisibleStrict(page, '[data-pro-lock]')) === 0) {
-        await page.locator('[data-add-board]').first().click({ timeout: 5000 });
-        await sleep(800);
-      }
-      await importLicenseFile(page, tamperedPath, 'A45 변조');
-      await sleep(3000);
-      const lockAfterTamper = await countVisibleStrict(page, '[data-pro-lock]');
-      expect(
-        lockAfterTamper > 0,
-        'A45: 바이트 변조 라이선스가 수리되었습니다 (visible [data-pro-lock] 0개) — 서명 검증(WebCrypto) 미작동'
-      ).toBe(true);
-      // disabled 구현 허용 — 판정은 아래 탭 수 (감사 수정: 클릭 실패 삼킴은 기능 판정을 약화하지 않음)
-      await page.locator('[data-add-board]').first().click({ timeout: 5000 }).catch(() => {});
-      await sleep(800);
-      tabs = await page.locator('[data-board-tab]').count();
-      expect(tabs, `A45: 변조 라이선스 후 4번째 보드가 생성되었습니다 (탭 ${tabs}개) — 거부 실패`).toBe(3);
-      expect(
-        shell.state.pageErrors,
-        `A45: 변조 라이선스 처리 중 pageerror ${shell.state.pageErrors.length}건 (크래시 없이 거부해야 함): ${shell.state.pageErrors.join(' | ')}`
-      ).toHaveLength(0);
-      assertNoDialogs(shell.state, 'A45');
-    } finally {
-      await closeElectronShell(shell);
-      await removeDirWithRetry(dirA);
-      await removeDirWithRetry(dirB);
-      await removeDirWithRetry(tmpDir);
-    }
   });
 });

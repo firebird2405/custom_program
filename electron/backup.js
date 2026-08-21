@@ -1,7 +1,7 @@
 // ============================================================================
 // 쁘띠캘린더 — 백업 엔진 (main 프로세스 모듈)
 //
-// 발주: 클라우드 폴더 백업 + Pro 예약 자동 백업
+// 발주: 클라우드 폴더 백업 + 예약 자동 백업 (rev.9 무료 단독 출시판 — 라이선스 게이트 없음)
 //   - 두 앱 저장소를 "기존 내보내기 v2 형식" 그대로 지정 폴더에 저장:
 //       calendar-backup-<타임스탬프>.json — { …평면 날짜 키, version:2, events, repeats }
 //         (calendar.html buildExportPayload 와 동형 — 구형식 가져오기 호환 유지)
@@ -9,15 +9,16 @@
 //         boards:{저장키:노트[]}, decor?, decorImages? } (postit.html doExport 와 동형)
 //   - 기존 파일 미덮어쓰기: 'wx' 플래그 + 이름 충돌 시 -2·-3… 접미 (SCORECARD 93행
 //     "backups/ 내 기존 파일의 삭제·덮어쓰기는 금지" 준용 — 어느 폴더든 동일 원칙).
-//   - 기본 폴더: 저장소 루트의 backups\ — 사용자가 OneDrive/드라이브 동기화 폴더를
-//     지정하면 그 자체로 클라우드 백업이 된다 (안내 문구는 preload UI 담당).
+//   - 기본 폴더: 사용자 문서 폴더의 "쁘띠캘린더 백업"(발주 #24 — 예전 기본값이던 저장소
+//     루트 backups\ 는 패키지에서 설치 폴더 안이라 MSIX 쓰기 불가·NSIS 업데이트 시 소실).
+//     사용자가 OneDrive/드라이브 동기화 폴더를 지정하면 그 자체로 클라우드 백업이 된다
+//     (안내 문구·[폴더 열기] 버튼은 preload UI 담당, 폴더 열기는 shell.openPath).
 //   - IDB 이미지(배경·사진 스티커)는 용량이 커 기본 제외 — includeImages 옵션일 때만
 //     postit 파일에 decorImages 로 동봉 (앱 "이미지 포함" 내보내기와 동일 형식).
-//   - 예약 자동 백업 = Pro 게이트: postit-license(A45 서명 라이선스)를 main 에서
-//     재검증(동일 공개키·형식 — postit.html verifyLicenseText 로직 재사용)해 통과할
-//     때만 주기 실행. Free 는 수동 "지금 백업"만 (신규 기능의 무료 부분 —
-//     동결 하한 침해 아님). 주기는 매일 1회(앱 실행 중 체크), 테스트 훅
-//     PETIT_BACKUP_INTERVAL_MS 로 단축 가능.
+//   - 예약 자동 백업: 라이선스 없이 누구나 켤 수 있다 (rev.9 · 감사 권고 #24·#25 —
+//     구매 채널 0건 상태의 잠금 폐지). 주기는 매일 1회(앱 실행 중 체크), 테스트 훅
+//     PETIT_BACKUP_INTERVAL_MS 로 단축 가능. 아래 서명 재검증 경로는 status().pro
+//     보고용으로만 남아 있고 어떤 기능도 잠그지 않는다 (Pro 재출시 대비 보존).
 //   - 설정 파일: userData\backup-config.json { folder, includeImages, auto, lastAutoAt }
 //     — 손상 시 크래시 없이 기본값 강등 (아키텍처 원칙 5 준용).
 //
@@ -29,16 +30,16 @@
 
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const {
-  REPO_ROOT,
   readJsonFile,
   writeJsonFile,
   appWindows,
   assertTrustedSender,
+  logEvent,
 } = require('./lib-shared');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -53,8 +54,29 @@ function intervalMs() {
   return DAY_MS;
 }
 
+// ── 기본 백업 폴더 (발주 #24 — 치명 결함 수정) ──────────────────────────────
+// 예전 기본값은 REPO_ROOT\backups 였다. 개발 트리에서는 저장소 루트라 잘 돌았지만
+// 패키지에서 REPO_ROOT 는 resources\ 를 가리킨다:
+//   · MSIX  → C:\Program Files\WindowsApps\…\resources\backups = 쓰기 불가 →
+//             "지금 백업" 첫 클릭부터 "백업 폴더를 만들 수 없어요"
+//   · NSIS  → 업데이트가 설치 폴더를 갈아엎어 백업 전량 소실
+//   · 포터블 → 앱 폴더를 지우면 백업도 같이 소멸
+// 그래서 기본값을 사용자 문서 폴더로 옮긴다 — 어떤 배포 형태에서도 쓰기 가능하고,
+// 앱 제거·업데이트와 수명이 분리된다. (이미 폴더를 고른 사용자는 그 설정을 유지한다:
+// effectiveFolder 가 cfg.folder 를 우선한다 — 기본값 변경은 미설정 프로필에만 적용.)
+const DEFAULT_FOLDER_NAME = '쁘띠캘린더 백업';
+
 function defaultFolder() {
-  return path.join(REPO_ROOT, 'backups');
+  let base = null;
+  try {
+    base = app.getPath('documents');
+  } catch (_err) {
+    base = null; // 문서 폴더가 없는 계정(드문 경우) — 아래에서 userData 로 강등
+  }
+  if (!base) {
+    try { base = app.getPath('userData'); } catch (_err2) { base = null; }
+  }
+  return base ? path.join(base, DEFAULT_FOLDER_NAME) : path.join(process.cwd(), DEFAULT_FOLDER_NAME);
 }
 
 // ── 설정 (userData\backup-config.json) ──────────────────────────────────────
@@ -63,12 +85,15 @@ function configPath() {
 }
 
 function sanitizeConfig(v) {
-  const out = { folder: null, includeImages: false, auto: false, lastAutoAt: 0 };
+  // defaultNoticeAck: additive 필드 — "기본 폴더가 문서 폴더로 정해졌어요" 1회 안내를
+  // 사용자가 확인했는지 (부재 = false = 아직 안내하지 않음, 발주 #24)
+  const out = { folder: null, includeImages: false, auto: false, lastAutoAt: 0, defaultNoticeAck: false };
   if (v && typeof v === 'object') {
     if (typeof v.folder === 'string' && v.folder.trim() !== '') out.folder = v.folder;
     out.includeImages = v.includeImages === true;
     out.auto = v.auto === true;
     if (Number.isFinite(v.lastAutoAt) && v.lastAutoAt > 0) out.lastAutoAt = v.lastAutoAt;
+    out.defaultNoticeAck = v.defaultNoticeAck === true;
   }
   return out;
 }
@@ -93,7 +118,7 @@ function effectiveFolder() {
   return getConfig().folder || defaultFolder();
 }
 
-// ── Pro 게이트: postit-license 서명 재검증 ──────────────────────────────────
+// ── postit-license 서명 재검증 (보고 전용 — 어떤 기능도 잠그지 않는다) ─────────
 // postit.html A45 verifyLicenseText 와 동일한 검증(동일 공개키 JWK·형식·알고리즘)을
 // main 에서 수행한다 — 라이선스 정본은 렌더러 localStorage(postit-license)이며
 // 여기서는 읽기만 한다. 실패는 전부 조용한 거부 (throw 없음).
@@ -335,6 +360,7 @@ async function runBackup(kind, preferredWin) {
       fs.mkdirSync(dir, { recursive: true });
     } catch (err) {
       result = { ok: false, reason: '백업 폴더를 만들 수 없어요: ' + dir };
+      logEvent('backup-fail', '백업 폴더 생성 실패 (' + kind + '): ' + String((err && err.code) || err));
       return result;
     }
 
@@ -353,6 +379,7 @@ async function runBackup(kind, preferredWin) {
     return result;
   } catch (err) {
     result = { ok: false, reason: String((err && err.message) || err).slice(0, 400) };
+    logEvent('backup-fail', '백업 실패 (' + kind + '): ' + result.reason);
     return result;
   } finally {
     bkState.running = false;
@@ -365,40 +392,23 @@ async function runBackup(kind, preferredWin) {
   }
 }
 
-// ── 예약 자동 백업 (Pro 게이트 — 매일 1회, 앱 실행 중 체크) ─────────────────
+// ── 예약 자동 백업 (무료 — 매일 1회, 앱 실행 중 체크) ───────────────────────
 let schedTimer = null;
 
 // 라이선스 무효 백오프: auto=true 인데 라이선스가 무효면, 체크(창 executeJavaScript)를
 // 60초마다 무한 반복하지 않는다 — 연속 3회 무효 확인 후 이번 세션에서는 중단(로그 1회).
 // 재개 지점: 라이선스가 유효로 관찰되는 순간(status/set-auto) 게이트를 리셋한다.
-const autoLicenseGate = { misses: 0, stopped: false };
-
-function resetAutoLicenseGate() {
-  autoLicenseGate.misses = 0;
-  autoLicenseGate.stopped = false;
-}
-
+// rev.9 무료 단독 출시판(감사 권고 #24·#25): 예약 자동 백업의 라이선스 게이트를 폐지했다.
+// auto 가 켜져 있으면 라이선스 여부와 무관하게 주기마다 돈다 — 무료 사용자에게 자동
+// 백업이 없는 것이 이 앱의 최대 데이터 유실 리스크였기 때문이다.
 async function checkAutoBackup() {
   try {
     if (bkState.running) return;
     const cfg = getConfig();
-    if (cfg.auto !== true) { resetAutoLicenseGate(); return; } // auto 꺼짐 — 게이트도 초기화
-    if (autoLicenseGate.stopped) return; // 세션 내 중단 — 창 평가 반복 자체를 멈춘다
+    if (cfg.auto !== true) return;
     const iv = intervalMs();
     const now = Date.now();
     if (now - (cfg.lastAutoAt || 0) < iv) return;
-    if (!(await isProUnlocked(null))) { // 라이선스 없이는 예약 백업이 절대 돌지 않는다
-      autoLicenseGate.misses += 1;
-      if (autoLicenseGate.misses >= 3 && !autoLicenseGate.stopped) {
-        autoLicenseGate.stopped = true;
-        console.error(
-          '[쁘띠캘린더 백업] 자동 백업이 켜져 있지만 유효한 Pro 라이선스를 3회 연속 확인하지 못했어요 — ' +
-          '이번 실행에서는 더 확인하지 않아요. (라이선스 적용 뒤 백업 설정을 열거나 자동 백업을 다시 켜면 재개돼요)'
-        );
-      }
-      return;
-    }
-    resetAutoLicenseGate(); // 유효 확인 — 연속 실패 카운트 초기화
     await runBackup('auto', null);
     // 실패해도 다음 주기까지 대기 — 실패 연타로 폴더·디스크를 괴롭히지 않는다
     cfg.lastAutoAt = Date.now();
@@ -416,6 +426,17 @@ function startBackupScheduler() {
 // ── IPC (preload 화이트리스트 채널의 main 측 종단) ──────────────────────────
 // 호출자 검증(assertTrustedSender)은 lib-shared — 우리 앱 창(file://)의 요청만 처리한다.
 
+/**
+ * 기본 폴더 1회 안내 문구 — 폴더를 한 번도 고르지 않았고 아직 확인하지 않았을 때만.
+ * (발주 #24: 기본값을 문서 폴더로 옮겼다는 사실을 사용자가 한 번은 알아야 한다.)
+ * @returns {string|null}
+ */
+function defaultFolderNotice() {
+  const cfg = getConfig();
+  if (cfg.folder || cfg.defaultNoticeAck === true) return null;
+  return '백업은 "' + defaultFolder() + '" 폴더에 저장돼요. OneDrive 같은 동기화 폴더로 바꾸면 클라우드에도 함께 보관돼요.';
+}
+
 /** 'petit:backup:status' 응답 본문 — 설정·Pro 여부·실행 상태를 한 번에 담는다. */
 function statusPayload(pro) {
   const cfg = getConfig();
@@ -424,6 +445,7 @@ function statusPayload(pro) {
     folder: effectiveFolder(),
     folderIsDefault: !cfg.folder,
     defaultFolder: defaultFolder(),
+    notice: defaultFolderNotice(),
     auto: cfg.auto === true,
     includeImages: cfg.includeImages === true,
     pro: pro === true,
@@ -439,7 +461,6 @@ function registerBackupIpc() {
     assertTrustedSender(event);
     const win = BrowserWindow.fromWebContents(event.sender);
     const pro = await isProUnlocked(win);
-    if (pro) resetAutoLicenseGate(); // 라이선스 유효 관찰 — 세션 백오프 해제 (예약 재개)
     return statusPayload(pro);
   });
 
@@ -472,25 +493,48 @@ function registerBackupIpc() {
     return runBackup('manual', win); // Free 포함 누구나 — 수동 백업은 무료 기능
   });
 
+  // 예약 자동 백업 켜기/끄기 — 무료 기능이다 (rev.9, 감사 권고 #24·#25).
+  // 라이선스 확인 없이 즉시 backup-config.json 에 반영하고 재기동 후에도 유지된다.
   ipcMain.handle('petit:backup:set-auto', async (event, enabled) => {
     assertTrustedSender(event);
     const on = enabled === true;
     const cfg = getConfig();
-    if (on) {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      const pro = await isProUnlocked(win);
-      if (!pro) {
-        return {
-          ok: false,
-          locked: true,
-          reason: '예약 자동 백업은 프리미엄(Pro) 기능이에요. 라이선스를 적용하면 켤 수 있어요.'
-        };
-      }
-      resetAutoLicenseGate(); // 유효 라이선스로 켬 — 세션 백오프 해제
-    }
     cfg.auto = on;
     saveConfig(cfg);
     return { ok: true, auto: cfg.auto };
+  });
+
+  // 백업 폴더 열기 (발주 #24) — 경로 인자를 받지 않는다: 여는 대상은 언제나 "현재 백업
+  // 폴더" 하나뿐이라 렌더러가 임의 경로를 열 수 없다 (A49 화이트리스트 채널 원칙).
+  // 폴더가 아직 없으면 만들어서 연다 — 첫 백업 전에도 "여기에 쌓입니다"를 보여 준다.
+  ipcMain.handle('petit:backup:open-folder', async (event) => {
+    assertTrustedSender(event);
+    const dir = effectiveFolder();
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (_err) {
+      return { ok: false, folder: dir, reason: '백업 폴더를 만들 수 없어요: ' + dir };
+    }
+    let failure = '';
+    try {
+      failure = await shell.openPath(dir); // 성공 시 빈 문자열
+    } catch (err) {
+      failure = String((err && err.message) || err);
+    }
+    if (failure) {
+      logEvent('backup-open-folder', 'openPath 실패: ' + failure);
+      return { ok: false, folder: dir, reason: '폴더를 열지 못했어요: ' + failure.slice(0, 200) };
+    }
+    return { ok: true, folder: dir };
+  });
+
+  // 기본 폴더 1회 안내 확인 — 사용자가 안내를 본 뒤 다시 띄우지 않는다 (additive 필드)
+  ipcMain.handle('petit:backup:ack-notice', (event) => {
+    assertTrustedSender(event);
+    const cfg = getConfig();
+    cfg.defaultNoticeAck = true;
+    saveConfig(cfg);
+    return { ok: true };
   });
 
   ipcMain.handle('petit:backup:set-include-images', (event, enabled) => {
@@ -502,4 +546,6 @@ function registerBackupIpc() {
   });
 }
 
-module.exports = { registerBackupIpc, startBackupScheduler };
+// effectiveBackupFolder: 진단 정보(발주 #28②)가 "지금 백업이 어디로 가는지"를 표기하려고
+// 읽는 조회 전용 게터 — 설정을 바꾸지 않는다.
+module.exports = { registerBackupIpc, startBackupScheduler, effectiveBackupFolder: effectiveFolder };

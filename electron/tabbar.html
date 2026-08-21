@@ -14,6 +14,9 @@
       상태의 단일 진실은 OS. 앱 설정 모달의 같은 항목과 main push 로 양방향 동기)
     - 창은 항상 1개다 — 창 분리·재병합 진입점은 rev.8 에서 폐지됐다 (재도입 금지)
   셸 자체 훅 (채점 계약 아님 — 스모크·유지보수용):
+    - [data-alwaystop-toggle] 항상 위 (발주 #30, 드로어 안 — 창 실측값 표시, 재기동 유지)
+    - [data-capture-copy]·[data-capture-save] 보드 자랑하기 (발주 #31 — 활성 앱 뷰만 PNG로)
+    - [data-shell-version] 버전 표기 (발주 #28① — 정본은 electron/package.json)
     - [data-alarm-badge] 캘린더 탭 알림 배지 (빨간 점 + 건수)
     - [data-alarm-strip] 미니 알림 스트립 (클릭 = 캘린더 탭 전환) / [data-alarm-strip-text]
     - [data-tab-indicator] 활성 탭 인디케이터 (transform 슬라이드)
@@ -25,7 +28,7 @@
     - 스크립트의 동적 텍스트는 textContent 만 사용 (innerHTML 계열 금지 조항)
     - 장식 모션은 transform/opacity 전용 0.18s — prefers-reduced-motion 과 앱 [효과]
       설정(postit-settings.anim ≠ "on")을 존중해 끈다 (body.motion 게이트)
-    - 상단 header 높이 40px·드로어 높이 138px 은 main.js 의
+    - 상단 header 높이 40px·드로어 높이 186px 은 main.js 의
       TABBAR_HEIGHT·SETTINGS_DRAWER_HEIGHT 와 동기 유지 (수동 관리 — 드로어에 줄을
       더하면 실측 높이(스크롤 없는 최소 높이)를 두 곳에 함께 반영한다)
 -->
@@ -167,10 +170,13 @@
   .actions button:hover { background: #fff; }
   .actions button:disabled { opacity: 0.55; cursor: default; }
   .actions button.gear.open { background: var(--accent); border-color: var(--cork-deep); }
+  /* 보드 담기 버튼 — 좁은 창(최소 480px)에서도 탭·설정과 함께 들어가도록 조금 작게 */
+  .actions button.cap { font-size: 13.5px; padding: 4px 9px; }
 
-  /* ── 설정 드로어 (고정 138px — main.js SETTINGS_DRAWER_HEIGHT 동기) ── */
+  /* ── 설정 드로어 (고정 186px — main.js SETTINGS_DRAWER_HEIGHT 동기)
+        발주 #30 으로 [창] 행이, 발주 #28① 로 버전 줄이 늘어 138px → 186px ── */
   section[data-shell-settings] {
-    height: 138px;
+    height: 186px;
     padding: 10px 16px 8px;
     background: var(--cream-hi);
     border-bottom: 2px solid var(--cork);
@@ -249,6 +255,9 @@
     <span>🔔</span><span class="strip-text" data-alarm-strip-text></span>
   </button>
   <div class="actions">
+    <!-- 보드 자랑하기 (발주 #31) — 지금 보이는 화면만 그림으로. 탭바·드로어는 프레임에 없다 -->
+    <button type="button" class="cap" data-capture-copy title="지금 보이는 화면을 그림으로 클립보드에 복사해요">📋 복사</button>
+    <button type="button" class="cap" data-capture-save title="지금 보이는 화면을 PNG 그림 파일로 저장해요">📸 저장</button>
     <button type="button" class="gear" data-shell-settings-open title="셸 설정을 열고 닫아요">⚙️ 설정</button>
   </div>
 </header>
@@ -269,7 +278,16 @@
     </label>
     <span class="chk-hint">컴퓨터를 켜면 쁘띠캘린더가 함께 열려요.</span>
   </div>
+  <div class="seg-row">
+    <span class="seg-label">창</span>
+    <label class="chk" title="다른 창을 열어도 쁘띠캘린더가 위에 남아요">
+      <input type="checkbox" data-alwaystop-toggle>
+      <span>항상 위에 두기</span>
+    </label>
+    <span class="chk-hint">꾸며 둔 보드를 계속 보고 싶을 때 켜요.</span>
+  </div>
   <p class="hint">설정은 바로 저장되고, 기본 탭은 다음 실행부터 적용돼요. (Ctrl+Tab으로 탭을 오갈 수 있어요)</p>
+  <p class="hint" data-shell-version>쁘띠캘린더</p>
   <p class="status" data-shell-status></p>
 </section>
 
@@ -284,6 +302,10 @@
   var drawer = document.querySelector('[data-shell-settings]');
   var statusLine = document.querySelector('[data-shell-status]');
   var startupChk = document.querySelector('[data-startup-toggle]');
+  var aotChk = document.querySelector('[data-alwaystop-toggle]');
+  var versionLine = document.querySelector('[data-shell-version]');
+  var capCopyBtn = document.querySelector('[data-capture-copy]');
+  var capSaveBtn = document.querySelector('[data-capture-save]');
   var indicator = document.querySelector('[data-tab-indicator]');
   var badge = document.querySelector('[data-alarm-badge]');
   var strip = document.querySelector('[data-alarm-strip]');
@@ -358,6 +380,12 @@
     });
     /* 자동 실행 표시는 OS 실측값(main 이 매번 읽어 보낸다)만 따른다 — 탭바는 저장하지 않는다 */
     if (typeof st.openAtLogin === 'boolean') startupChk.checked = st.openAtLogin;
+    /* 항상 위 표시도 창 실측값만 따른다 (발주 #30) */
+    if (typeof st.alwaysOnTop === 'boolean') aotChk.checked = st.alwaysOnTop;
+    /* 버전 정본 = electron/package.json (main 의 app.getVersion) — 발주 #28① */
+    if (versionLine && typeof st.version === 'string' && st.version) {
+      versionLine.textContent = '쁘띠캘린더 ' + st.version + ' · 인터넷 없이 이 컴퓨터에만 저장돼요.';
+    }
   }
 
   /* ── 알림 배지 + 미니 스트립 (백그라운드 캘린더 탭의 일정 알림 릴레이) ── */
@@ -478,6 +506,75 @@
       setStatus('윈도우 시작 설정을 바꾸지 못했어요.');
     });
   });
+
+  /* ── 항상 위 (발주 #30) — 즉시 적용, 표시는 창 실측값으로 확정 ──
+     실패해도 크래시·모달 없이 안내 한 줄 + 체크 상태를 실측값으로 되돌린다. */
+  aotChk.addEventListener('change', function () {
+    var want = aotChk.checked;
+    aotChk.disabled = true;
+    api.setAlwaysOnTop(want).then(function (res) {
+      aotChk.disabled = false;
+      if (res && typeof res.alwaysOnTop === 'boolean') aotChk.checked = res.alwaysOnTop;
+      if (res && res.ok === true) {
+        setStatus(want ? '이제 다른 창 위에 떠 있어요.' : '항상 위를 껐어요.', true);
+      } else {
+        setStatus((res && res.reason) || '항상 위 설정을 바꾸지 못했어요.');
+      }
+    }).catch(function () {
+      aotChk.disabled = false;
+      aotChk.checked = !want;
+      setStatus('항상 위 설정을 바꾸지 못했어요.');
+    });
+  });
+
+  /* ── 보드 자랑하기 (발주 #31) — 지금 보이는 앱 화면만 그림으로 (탭바·드로어 제외).
+        복사·저장 모두 로컬 처리이고 외부로 나가는 통신은 없다. */
+  /* 결과 알림: 드로어가 닫혀 있으면 [data-shell-status] 는 안 보인다. 그래서 버튼 라벨을
+     잠깐 바꿔 그 자리에서 결과를 말한다 (레이아웃 변화·새 오버레이 없음). */
+  function flashLabel(btn, text, ms) {
+    var original = btn.getAttribute('data-label-original');
+    if (original === null) {
+      original = btn.textContent;
+      btn.setAttribute('data-label-original', original);
+    }
+    if (btn._flashTimer) clearTimeout(btn._flashTimer);
+    btn.textContent = text;
+    btn._flashTimer = setTimeout(function () {
+      btn._flashTimer = null;
+      btn.textContent = btn.getAttribute('data-label-original') || original;
+    }, ms || 2200);
+  }
+
+  function runCapture(btn, mode, busyLabel) {
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      if (drawerOpen) setDrawer(false);      /* 드로어는 캡처 프레임 밖이지만 화면을 가린다 */
+      btn.disabled = true;
+      flashLabel(btn, busyLabel, 30000);     /* 저장 대화상자가 열려 있는 동안 유지 */
+      api.captureBoard(mode).then(function (res) {
+        btn.disabled = false;
+        if (!res || res.ok !== true) {
+          flashLabel(btn, '⚠️ 실패');
+          setStatus((res && res.reason) || '보드를 그림으로 담지 못했어요.');
+          return;
+        }
+        if (res.canceled) { flashLabel(btn, '취소됨', 1200); return; }
+        if (res.copied) {
+          flashLabel(btn, '✅ 복사됨');
+          setStatus('보드를 그림으로 복사했어요. 붙여넣기(Ctrl+V)로 자랑해 보세요!', true);
+        } else {
+          flashLabel(btn, '✅ 저장됨');
+          setStatus('보드를 그림으로 저장했어요: ' + (res.file || ''), true);
+        }
+      }).catch(function () {
+        btn.disabled = false;
+        flashLabel(btn, '⚠️ 실패');
+        setStatus('보드를 그림으로 담지 못했어요.');
+      });
+    });
+  }
+  runCapture(capCopyBtn, 'clipboard', '담는 중…');
+  runCapture(capSaveBtn, 'file', '저장 중…');
 
   /* ── main push 구독 — 단축키 탭 전환·알림 배지 등 탭바 요청 없이 바뀐 상태 반영 ── */
   if (typeof api.onUiPush === 'function') {

@@ -3,14 +3,17 @@
 이 저장소에서 작업하는 에이전트를 위한 지침이다. 판정 기준의 원문은 `protocol/SCORECARD.md`,
 확정 목적문은 `protocol/STATUS.md` — 본 문서와 충돌하면 그쪽이 우선한다.
 
-## 현재 상태 (2026-08-20)
+## 현재 상태 (2026-08-21)
 
 - 로컬 트랙: 발주 #1~#9b 완료 — 설정·꾸미기·삭제 확인·보드 이름·창 기억·탭 우클릭 메뉴까지. 상세는 `protocol/STATUS.md`.
-- **출시 트랙 v2 가동 중** (브랜드: **쁘띠캘린더/PetitCalendar**): Electron 셸(`electron/`) — **병합 1창 탭 모드 기본**(분리/재병합·설정 영속), 마이그레이션·온보딩·Pro 서명 라이선스·클라우드 폴더 백업·MSIX 아이콘 세트 완비. 상업 전환 승인됨(확정문 v2 — `protocol/COMMERCIAL.md`·`MARKET.md`).
-- 채점표 **rev.8 (A1~A50, 창 분리 폐지)** 가동 중 — 전체 87테스트 **85 green** (허용 red 1 = A48② 파트너센터 identity 대기, 허용 SKIP 1 = A50 MSIX).
-- 채점기 SHA256 기대값 `4999fc3d…` SCORECARD 하단에 동결 기재, A12 green. 잠금(deny) 복원 상태.
+- **출시 트랙 v2 가동 중** (브랜드: **쁘띠캘린더/PetitCalendar**): Electron 셸(`electron/`) — **단일 창 탭 모드**(분리 폐지), 마이그레이션·온보딩·클라우드 폴더 백업·MSIX 아이콘 세트 완비. 상업 전환 승인됨(확정문 v2 — `protocol/COMMERCIAL.md`·`MARKET.md`).
+- **첫 출시는 무료 단독** (전문가 감사 B4 승인 — 발주 #25): Pro 잠금 UI 전면 비노출(`postit.html` `html.pro-hidden` 단일 플래그), 보드 무제한, 예약 자동 백업 무료. **라이선스 검증 코드·공개키·테스트 픽스처는 보존**(A45 ③) — Pro 재출시 때 `pro-hidden` 클래스만 걷으면 복귀한다. 상품 신규성 매니페스트 검사는 **A45-P 로 보류**.
+- **전문가 감사 반영 완료** — 발주 #22·#23·#24·#26~#31 (`protocol/EXPERT-REVIEW.md` Blocker B1~B10). 항목별 계량 채점은 `protocol/SCORE-AUDIT.md` (가중 45.5 → 51.8, 판정 "2주 연기" 유지).
+- 채점표 **rev.9 (A1~A50, 무료 단독 출시판)** 가동 중 — 전체 88테스트 **86 green** (허용 red 1 = A48② 파트너센터 identity 대기, 허용 SKIP 1 = A50 MSIX).
+- 채점기 SHA256 기대값 `7a5d22f1…` SCORECARD 하단에 동결 기재(rev.9, 이중 계산 일치), A12 green. 잠금(deny) 복원 상태.
 - git: 원격 origin `github.com/firebird2405/custom_program` — push는 사용자 액션.
 - 대기 게이트: **파트너센터 identity 3값 전달**(`protocol/STORE-GUIDE.md`) → appx 빌드 → 4주차 제출. G0(지인 검증)·확산 준비는 `protocol/MARKET.md`·`LAUNCH-KIT.md`.
+- **출시 전 잔여 조건 7건**은 `protocol/SCORE-AUDIT.md` §8 — 그중 코드 미착수 4건: `{CONTACT}` 실주소(`main.js:310`), 포스트잇 저장 실패 배너, 자동 백업 기본 ON, 온보딩 2단계 정지 버그(`preload.js:784-843`).
 
 ## 목적 (확정문 요약)
 
@@ -60,8 +63,8 @@
 
 규칙:
 - **같은 지점에서 3회 실패하면 중단**하고, 무엇을 시도했고 왜 막혔는지 상태를 정리해 보고한다. 임의 우회(테스트 수정·기준 완화)는 금지.
-- 현재 기준선은 **87테스트 중 85 green** (2026-08-20 실증 — 허용 red 1: A48② identity 대기 / 허용 SKIP 1: A50) — 그 외 red가 생기면 회귀이며, 원인은 앱/스크립트 쪽에서 찾는다 (채점기 수정 금지).
-- A12는 채점기 해시(`4999fc3d…`, SCORECARD 하단 기재)와 일치해야 green — 채점기 파일을 건드리면 즉시 red가 된다.
+- 현재 기준선은 **88테스트 중 86 green** (2026-08-21 실증, rev.9 — 허용 red 1: A48② identity 대기 / 허용 SKIP 1: A50) — 그 외 red가 생기면 회귀이며, 원인은 앱/스크립트 쪽에서 찾는다 (채점기 수정 금지).
+- A12는 채점기 해시(`7a5d22f1…`, SCORECARD 하단 기재)와 일치해야 green — 채점기 파일을 건드리면 즉시 red가 된다.
 
 ## 채점 명령
 

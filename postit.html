@@ -706,6 +706,10 @@ html[data-theme-preset="white"] #board {
 
 /* ── 꾸미기: 스티커 레이어 — 노트([data-note]) 뒤 z-레이어, 채점 셀렉터와 무간섭 ── */
 .sticker-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+/* 노트 앞 레이어(opt-in): 노트(z 10+)보다 위에 그린다. 레이어 자체는 pointer-events:none 이라
+   조작을 받는 것은 .psticker 뿐 — 노트 클릭·편집·드래그는 그대로 통과한다.
+   [data-note] 의 자식이 아니라 형제이므로 노트 가시성 판정(rect·opacity)에는 영향이 없다. */
+.sticker-layer-front { position: absolute; inset: 0; z-index: 9000; pointer-events: none; }
 .psticker {
   position: absolute;
   pointer-events: auto;
@@ -713,7 +717,11 @@ html[data-theme-preset="white"] #board {
   user-select: none;
   touch-action: none;
   line-height: 1;
+  transform-origin: 50% 50%;
+  transition: transform 0.16s ease;   /* 회전 모션은 transform 전용 */
 }
+/* 포인터로 잡고 있는 동안에는 전이를 끈다 — 손끝을 그대로 따라오게 */
+.psticker.st-live { transition: none; }
 .psticker .stq { display: block; pointer-events: none; filter: drop-shadow(2px 5px 4px rgba(46,26,9,0.35)); }
 .psticker.photo {
   padding: 7px 7px 24px;
@@ -740,6 +748,110 @@ html[data-theme-preset="white"] #board {
 .psticker:hover .stgrip { opacity: 1; }
 /* 방금 붙인 스티커: 2초간 손잡이를 보여줘 "크기를 바꿀 수 있다"를 알려준다 (opacity 전용) */
 .psticker.fresh .stgrip { opacity: 1; }
+/* 회전 손잡이 — 크기 그립(오른쪽 아래)과 헷갈리지 않게 위쪽 가운데에 둔다 */
+.strot {
+  position: absolute;
+  left: 50%;
+  top: -21px;
+  width: 15px;
+  height: 15px;
+  margin-left: -7.5px;
+  border-radius: 50%;
+  background: rgba(255,251,240,0.94);
+  box-shadow: 0 1px 4px rgba(50,30,10,0.5), inset 0 0 0 1px rgba(94,62,24,0.4);
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.strot::after {   /* 손잡이와 스티커를 잇는 짧은 대 — 무엇을 돌리는지 보이게 (장식, 클릭 불가) */
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 15px;
+  width: 1px;
+  height: 6px;
+  margin-left: -0.5px;
+  background: rgba(94,62,24,0.5);
+  pointer-events: none;
+}
+.psticker:hover .strot { opacity: 1; }
+.psticker.fresh .strot { opacity: 1; }
+/* 고른 스티커: 은은한 아웃라인 + 손잡이 상시 노출.
+   outline 은 레이아웃·크기·배경 어디에도 영향이 없다 (노트 판정과 무간섭). */
+.psticker.sel { outline: 2px dashed rgba(255,217,102,0.92); outline-offset: 3px; }
+.psticker.sel .stgrip, .psticker.sel .strot { opacity: 1; }
+
+/* ── 반짝임 스티커 (opt-in, 저장 필드 fx:'twinkle') ──
+   애니메이션은 안쪽 글리프(.stq)에만 건다 — .psticker 의 transform 은 회전값의 정본이라
+   절대 건드리지 않는다(회전·클램프 계산 불변). opacity + scale 전용 (합성 전용 속성). */
+@keyframes st-twinkle {
+  0%, 100% { opacity: 0.72; transform: scale(0.94); }
+  46%      { opacity: 1;    transform: scale(1.06); }
+}
+.psticker.fx-twinkle .stq { animation: st-twinkle 2.6s ease-in-out infinite; will-change: opacity, transform; }
+/* 같은 종류를 여러 개 붙여도 한 박자로 껌뻑이지 않게 지연을 흩뿌린다 (장식 전용) */
+.psticker.fx-twinkle:nth-of-type(3n) .stq { animation-delay: -0.9s; }
+.psticker.fx-twinkle:nth-of-type(3n+1) .stq { animation-delay: -1.7s; }
+
+/* ── 분위기 효과 캔버스 (배경 z0·스티커 z1 위, 노트 z10+ 아래) ──
+   기본값 'none' 에서는 요소 자체를 만들지 않는다 — fresh 프로필 DOM 불변. */
+.fx-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── 순간 이펙트(축포) 레이어 — 앞 스티커(z9000)보다 위, 도구 선반(z100000)보다 아래 ──
+   레이어·파티클 모두 pointer-events:none 이라 어떤 조작도 가로채지 않고,
+   연출이 끝나면 컨테이너째 DOM 에서 제거된다 (잔여 0). */
+.fx-burst-layer { position: absolute; inset: 0; z-index: 9500; pointer-events: none; }
+.fx-burst { position: absolute; width: 0; height: 0; pointer-events: none; }
+.fx-p {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 2px;
+  opacity: 0;
+  pointer-events: none;
+  animation-name: fx-pop;
+  animation-duration: var(--dur, 1s);
+  animation-timing-function: cubic-bezier(0.15, 0.7, 0.3, 1);
+  animation-fill-mode: forwards;
+}
+.fx-p.round { border-radius: 50%; }
+@keyframes fx-pop {
+  0%   { opacity: 0; transform: translate3d(0, 0, 0) scale(0.35) rotate(0deg); }
+  14%  { opacity: 1; }
+  70%  { opacity: 0.9; }
+  100% { opacity: 0; transform: translate3d(var(--dx, 0px), var(--dy, 0px), 0) scale(var(--sc, 1)) rotate(var(--rz, 0deg)); }
+}
+
+/* ── 포스트잇 모두 숨기기 (보드 우클릭 · 기본 꺼짐) ──
+   시각적으로만 감춘다: 모델·저장 데이터는 한 글자도 바뀌지 않는다.
+   스티커·배경은 그대로 보인다(꾸미기 감상이 이 기능의 목적). */
+body.notes-hidden .pnote { display: none; }
+.hidden-chip {
+  display: none;
+  position: fixed;
+  left: 18px;
+  bottom: 26px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: #fff8e9;
+  color: #4a3421;
+  font-size: 16px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(30,15,5,0.36);
+  z-index: 100001;
+}
+body.notes-hidden .hidden-chip.show { display: flex; }
+.hidden-chip .notice-undo { display: inline-block; }
 
 /* ── 꾸미기: 이모지 팔레트 (패널 내부) ── */
 .stpal { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
@@ -1532,23 +1644,29 @@ html[data-theme-preset="dark"] .sp-tag:hover, html[data-theme-preset="dark"] .sp
 body.fx-calm .pnote, body.fx-calm .swatch, body.fx-calm .add-btn, body.fx-calm .sndbtn, body.fx-calm .ndel,
 body.fx-calm .tool-btn, body.fx-calm .ctx-item, body.fx-calm .ctx-dot, body.fx-calm .rgrip,
 body.fx-calm .board-tab, body.fx-calm .spanel, body.fx-calm .snd-caret,
-body.fx-calm .board-tab-del, body.fx-calm .stgrip,
+body.fx-calm .board-tab-del, body.fx-calm .stgrip, body.fx-calm .strot, body.fx-calm .psticker,
 body.fx-calm .sp-modal, body.fx-calm .sp-frame, body.fx-calm .sp-navi { transition: none; }
 body.fx-calm .sp-frame { transform: none; }
 body.fx-calm .pnote.pop-in, body.fx-calm .pnote.removing { animation: none; }
 body.fx-calm .notice.show { animation: none; }
+/* 장식 모션(반짝임 스티커·축포·분위기 효과)은 [효과] 줄임/끔에서 완전 정지 — JS 게이트와 이중 차단 */
+body.fx-calm .psticker.fx-twinkle .stq { animation: none; }
+body.fx-calm .fx-burst-layer, body.fx-calm .fx-ambient { display: none; }
 body.fx-calm .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
 body.fx-off *, body.fx-off *::before, body.fx-off *::after { transition: none !important; animation: none !important; }
 
 /* ── 동작 축소 선호: 장식 애니메이션·기울임은 즉시 상태로 (소리는 음소거 단추가 담당) ── */
 @media (prefers-reduced-motion: reduce) {
   .pnote, .swatch, .add-btn, .sndbtn, .ndel, .tool-btn, .ctx-item, .ctx-dot, .rgrip, .board-tab, .spanel,
-  .snd-caret, .board-tab-del, .stgrip,
+  .snd-caret, .board-tab-del, .stgrip, .strot, .psticker,
   .sp-modal, .sp-frame, .sp-navi { transition: none; }
   .sp-frame, .sp-modal.open .sp-frame { transform: none; }
   .pnote.pop-in, .pnote.removing { animation: none; }
   .notice.show { animation: none; }
   .pnote.dragging { transform: rotate(var(--rot, 0deg)) scale(1.035); }
+  /* 장식 모션 3종 전면 비활성 (JS 게이트 calmMotion() 과 이중 차단) */
+  .psticker.fx-twinkle .stq { animation: none; }
+  .fx-burst-layer, .fx-ambient { display: none; }
 }
 /* ── 프리미엄(Pro) — 발주 #9 A45: 잠금 표시([data-pro-lock])·라이선스 팝업·프리미엄 테마 ──
    해제 상태는 html.pro-ok 클래스가 정본: 잠금 표시는 전부 숨고 Pro 콘텐츠가 열린다.
@@ -1728,6 +1846,14 @@ html[data-pro-theme="lavender"] #board {
   <span id="noticeText"></span>
   <button type="button" class="notice-undo" id="noticeUndo" data-undo hidden>실행 취소</button>
   <button type="button" class="notice-close" id="noticeClose">닫기</button>
+</div>
+
+<!-- 포스트잇 숨김 안내 칩 (비모달) — 숨김 상태일 때만 보인다.
+     기본(표시) 상태에서는 body.notes-hidden 이 없어 CSS 상 display:none 이므로 렌더 불변. -->
+<div class="hidden-chip" id="notesHiddenChip" data-notes-hidden-chip role="status" aria-live="polite">
+  <span>포스트잇을 숨겨 뒀어요</span>
+  <button type="button" class="notice-undo" id="notesShowBtn" data-notes-show>보이기</button>
+  <button type="button" class="notice-close" id="notesChipClose" title="이 안내만 닫기">닫기</button>
 </div>
 
 <div class="ctxmenu" id="ctxMenu" data-ctx-menu role="menu"></div>
@@ -1978,14 +2104,37 @@ html[data-pro-theme="lavender"] #board {
       </span>
       <button type="button" id="dpBgRemove" class="tool-btn" title="기본 코르크 배경으로 되돌리기">배경 제거</button>
     </div>
-    <p class="sp-small">배경은 보드마다 따로 저장돼요. 사진은 이 컴퓨터의 이미지 저장소(IndexedDB)에 보관돼요.</p>
+    <!-- 분위기 효과: 라벨·버튼 문구를 짧게 유지한다 — 이 줄이 두 줄로 접히면 아래 스티커
+         팔레트가 그만큼 밀려 내려가고, 셸 온보딩이 지목·드래그하는 "#dpStSeason button" 이
+         작은 창(단일 창 탭 모드)에서 화면 밖으로 나간다 (A47 실측 회귀). -->
+    <div class="sp-row"><span class="sp-lab">분위기</span>
+      <span class="seg" id="dpAmbient" data-ambient-seg>
+        <button type="button" data-val="none" title="분위기 효과 없음 (기본)">없음</button>
+        <button type="button" data-val="twinkle" title="보드 곳곳이 은은하게 반짝여요">반짝임</button>
+        <button type="button" data-val="stars" title="옅은 별빛이 천천히 내려와요">별빛</button>
+        <button type="button" data-val="snow" title="작은 눈이 천천히 내려요">눈</button>
+      </span>
+    </div>
+    <p class="sp-small">배경은 보드마다, 분위기는 모든 보드에 함께 적용돼요.</p>
   </div>
 
   <div class="sp-sec">
     <h3>스티커</h3>
-    <p class="sp-small">누르면 보드 가운데쯤에 붙어요. 끌어서 옮기고, 모서리 손잡이로 크기를 바꾸고, 우클릭 메뉴로 맨 앞에 올리거나 떼어내요(떼어낸 건 실행 취소 가능). 스티커는 늘 포스트잇 뒤에 깔려요.</p>
+    <!-- 문구를 짧게 유지한다 — 이 문단이 길어지면 아래 팔레트가 밀려 내려가 작은 창에서
+         온보딩의 드래그 대상(#dpStSeason button)이 화면 밖으로 나간다 (A47 실측 회귀). -->
+    <p class="sp-small">누르면 보드에 붙어요. 손잡이로 크기·각도(Shift = 15°씩)를 바꾸고, 우클릭 메뉴에서 회전·앞뒤·떼어내기를 골라요.</p>
+    <div class="sp-row"><span class="sp-lab">붙일 위치</span>
+      <span class="seg" id="dpStLayer" data-sticker-layer-default>
+        <button type="button" data-val="back">노트 뒤(기본)</button>
+        <button type="button" data-val="front">노트 위</button>
+      </span>
+    </div>
     <div class="sp-row"><span class="sp-lab">계절·자연</span></div>
     <div class="stpal" id="dpStSeason"></div>
+    <!-- 반짝임 계열은 기존 3세트 뒤에 둔다 — 위쪽 세트들의 화면 위치를 밀지 않기 위해서다
+         (셸 온보딩이 "#dpStSeason button" 을 실제로 끌어 붙이므로 그 자리를 지켜야 한다). -->
+    <div class="sp-row"><span class="sp-lab">반짝임 ✨ (은은하게 껌뻑여요)</span></div>
+    <div class="stpal" id="dpStSparkle"></div>
     <div class="sp-row"><span class="sp-lab">기분</span></div>
     <div class="stpal" id="dpStMood"></div>
     <div class="sp-row"><span class="sp-lab">사무</span></div>
@@ -2102,6 +2251,16 @@ html[data-pro-theme="lavender"] #board {
   var EMOJI_ST_MAX_PX = 200;
   var PHOTO_ST_MIN_PX = 64;          // 사진 스티커 너비 클램프
   var PHOTO_ST_MAX_PX = 420;
+  var ST_ROT_SNAP_DEG = 15;          // Shift 회전 스냅 · 메뉴 회전 1클릭 각도
+  var ST_PHOTO_BASE_ROT = -1.6;      // 폴라로이드 액자가 타고난 기울임(현행 CSS 와 같은 값) = rot 0 의 기준각
+
+  /* 장식 파티클 상한 (발주 #19) — 성능 상한을 코드 한 곳에서만 정한다 */
+  var FX_BURST_MAX = 40;             // 축포 1회 요소 상한 (발주 계약: 20~40개)
+  var FX_BURST_SMALL = 14;           // 체크 1줄 완료 — 그 줄 근처 작은 축포
+  var FX_BURST_BIG = 34;             // 보드 체크리스트 전부 완료 — 큰 축포 (요소 20~40개 상한 안)
+  var FX_BURST_LIVE_MAX = 80;        // 동시에 살아 있는 파티클 총량 — 넘으면 새 축포를 건너뛴다
+  var FX_BURST_MS = 1100;            // 축포 수명 (0.8~1.2초) — 이 시간 뒤 컨테이너째 DOM 제거
+  var FX_AMBIENT_MAX = 60;           // 분위기 효과 동시 파티클 상한 (rAF 1개, 창 비활성 시 정지)
 
   var LS_QUOTA_BYTES = 5 * 1024 * 1024;   // localStorage 용량 게이지 기준 (file:// 오리진 추정치)
 
@@ -2114,6 +2273,7 @@ html[data-pro-theme="lavender"] #board {
   var noticeEl = document.getElementById('notice');
   var noticeTextEl = document.getElementById('noticeText');
   var noticeUndoEl = document.getElementById('noticeUndo');
+  var hiddenChipEl = document.getElementById('notesHiddenChip');
   var addBtn = document.getElementById('addBtn');
   var searchBox = document.getElementById('searchBox');
   var ctxMenuEl = document.getElementById('ctxMenu');
@@ -2125,14 +2285,19 @@ html[data-pro-theme="lavender"] #board {
   var decorBgInput = document.getElementById('decorBgInput');
   var decorPhotoInput = document.getElementById('decorPhotoInput');
 
-  /* 꾸미기 레이어: 배경(z0)·스티커(z1)는 노트(z10+) 뒤에 깔린다 — [data-note] 계약과 무간섭 */
+  /* 꾸미기 레이어: 배경(z0)·스티커(z1)는 노트(z10+) 뒤에 깔린다 — [data-note] 계약과 무간섭.
+     앞 레이어(z9000)는 opt-in — 스티커가 'front' 일 때만 그쪽에 들어간다 (기본은 예전 그대로 뒤). */
   var decorBgEl = document.createElement('div');
   decorBgEl.className = 'decor-bg';
   var stickerLayer = document.createElement('div');
   stickerLayer.className = 'sticker-layer';
   stickerLayer.setAttribute('data-sticker-layer', '');
+  var stickerLayerFront = document.createElement('div');
+  stickerLayerFront.className = 'sticker-layer-front';
+  stickerLayerFront.setAttribute('data-sticker-layer', 'front');
   board.insertBefore(decorBgEl, board.firstChild);
   board.insertBefore(stickerLayer, decorBgEl.nextSibling);
+  board.insertBefore(stickerLayerFront, stickerLayer.nextSibling);
 
   var data = [];        // 로컬 노트 모델 [{id,text,color,x,y,rot,z,updatedAt,w?,h?,skin?,img?}]
   var els = {};         // id -> {root, textEl, ta, imgEl}
@@ -2157,7 +2322,10 @@ html[data-pro-theme="lavender"] #board {
   var DECOR_KEY = 'postit-decor-layout';
   var decor = { bg: null, stickers: [] };   /* 활성 보드 몫 */
   var stickerEls = {};                       /* sticker id -> element */
-  var stDrag = null;                         /* 스티커 드래그/리사이즈 상태 */
+  var stDrag = null;                         /* 스티커 드래그/리사이즈/회전 상태 */
+  var selStickerId = null;                   /* 고른 스티커 id (아웃라인·손잡이 상시 노출) */
+  var decorDefLayer = 'back';                /* 새 스티커 기본 레이어 — DECOR_KEY 최상위 defLayer (부재 = back) */
+  var decorAmbient = 'none';                 /* 분위기 효과 — DECOR_KEY 최상위 ambient (부재 = none = 현행) */
   var bgLoadToken = 0;                       /* 보드 전환 중 비동기 배경 로드 경합 방지 */
   var imgCache = {};                         /* IndexedDB 이미지 캐시 (key -> data URI | null) */
   var idbFresh = {};                         /* 이 창이 방금 넣은 이미지 키 (기동 고아 청소와의 경합 방지) */
@@ -2178,7 +2346,8 @@ html[data-pro-theme="lavender"] #board {
     tapeColor: 'default', /* default(현행 반투명 흰 테이프) | sun | rose | mint | sky — 꾸미기 */
     tapePattern: 'default', /* default(무지) | stripe | dot — 꾸미기 */
     frameColor: 'default',  /* default(현행 월넛) | green | navy | rose — 꾸미기 */
-    confirmDelete: 'off'    /* off(현행 — 즉시 삭제+실행 취소) | on(삭제 전 앱 내 확인) — [안전] */
+    confirmDelete: 'off',   /* off(현행 — 즉시 삭제+실행 취소) | on(삭제 전 앱 내 확인) — [안전] */
+    notesHidden: 'off'      /* off(기본 — 포스트잇 표시) | on(보드 우클릭으로 시각적 숨김, 데이터 불변) */
   };
   var SETTINGS = loadSettings();
   applySettings();
@@ -2207,6 +2376,8 @@ html[data-pro-theme="lavender"] #board {
     if (v.tapePattern === 'stripe' || v.tapePattern === 'dot') s.tapePattern = v.tapePattern;
     if (v.frameColor === 'green' || v.frameColor === 'navy' || v.frameColor === 'rose') s.frameColor = v.frameColor;
     if (v.confirmDelete === 'on' || v.confirmDelete === 'off') s.confirmDelete = v.confirmDelete;
+    /* additive: 부재 = 'off'(표시) — 구버전 저장분·fresh 프로필은 언제나 "포스트잇 보임" */
+    if (v.notesHidden === 'on' || v.notesHidden === 'off') s.notesHidden = v.notesHidden;
     return s;
   }
 
@@ -2235,6 +2406,10 @@ html[data-pro-theme="lavender"] #board {
     b.classList.toggle('frame-green', SETTINGS.frameColor === 'green');
     b.classList.toggle('frame-navy', SETTINGS.frameColor === 'navy');
     b.classList.toggle('frame-rose', SETTINGS.frameColor === 'rose');
+    /* 포스트잇 모두 숨기기 (기본 off = 클래스 없음 → 현행 렌더 그대로) */
+    b.classList.toggle('notes-hidden', SETTINGS.notesHidden === 'on');
+    paintHiddenChip();
+    syncAmbient();       /* [효과] 변경 시 분위기 효과도 함께 켜지고 꺼진다 */
     syncPanelUI();
     syncDecorUI();
     /* 글자 크기·폰트가 바뀌면 넘침 여부도 바뀐다 — 어포던스 상태를 다시 칠한다 (발주 #12) */
@@ -2276,6 +2451,20 @@ html[data-pro-theme="lavender"] #board {
     noticeUndoEl.setAttribute('hidden', '');
   }
   document.getElementById('noticeClose').addEventListener('click', hideNotice);
+
+  /* 숨김 안내 칩 — [보이기] 로 즉시 복귀, [닫기] 는 이 창에서 안내만 접는다 (숨김 상태는 유지) */
+  (function () {
+    var showBtn = document.getElementById('notesShowBtn');
+    var chipClose = document.getElementById('notesChipClose');
+    if (showBtn) showBtn.addEventListener('click', function () {
+      setNotesHidden(false);
+      playTick();   /* 직접 제스처(클릭) 내부 */
+    });
+    if (chipClose) chipClose.addEventListener('click', function () {
+      hiddenChipDismissed = true;
+      paintHiddenChip();
+    });
+  })();
   noticeUndoEl.addEventListener('click', function () {
     var h = undoHandler;
     undoHandler = null;
@@ -2360,6 +2549,300 @@ html[data-pro-theme="lavender"] #board {
   /* OS 동작 축소 선호 또는 설정 [효과] 줄임/끔 — 장식 모션 공통 게이트 */
   function calmMotion() {
     return prefersReducedMotion() || SETTINGS.anim !== 'on';
+  }
+
+  /* ══ 장식 모션 (발주 #19): 반짝임 스티커 · 순간 축포 · 보드 분위기 효과 ══
+     공통 원칙
+      · 게이트: calmMotion() 이 참이면 파티클을 단 하나도 만들지 않는다 (요소 자체 부재).
+        CSS 쪽에도 같은 차단(body.fx-calm/fx-off·prefers-reduced-motion)이 있어 이중으로 막힌다.
+      · 그리기: 이미지·폰트·네트워크 0 — CSS 애니메이션과 캔버스 path 로만 만든다.
+      · 애니메이션 속성은 transform/opacity 뿐이고, 모든 레이어는 pointer-events:none 이라
+        노트·스티커의 판정(rect·opacity·클릭)에 어떤 영향도 주지 않는다.
+      · 기본값(축포 = 직접 제스처에만, 분위기 = 'none')이라 fresh 프로필의 초기 렌더는 불변이다. */
+
+  /* ── 순간 이펙트(축포): DOM 파티클, 수명이 끝나면 컨테이너째 제거 (잔여 DOM 0) ── */
+  var burstLayer = null;   /* 첫 축포 때 게으르게 만들고, 마지막 축포가 끝나면 걷는다 */
+  var fxLive = 0;          /* 지금 살아 있는 파티클 수 — FX_BURST_LIVE_MAX 를 넘기지 않는다 */
+  var FX_COLORS = ['#FFD966', '#FF8FAB', '#8ED9C4', '#9FD4FF', '#FFB86B', '#E4B7FF'];
+
+  function burstLayerEl() {
+    if (burstLayer && burstLayer.parentNode) return burstLayer;
+    burstLayer = document.createElement('div');
+    burstLayer.className = 'fx-burst-layer';
+    burstLayer.setAttribute('data-fx-layer', '');
+    burstLayer.setAttribute('aria-hidden', 'true');
+    board.appendChild(burstLayer);
+    return burstLayer;
+  }
+
+  /* 보드 좌표 (x,y) 에서 n 개를 터뜨린다. rise 만큼 위로 솟았다가 흩어진다. */
+  function burstAt(x, y, n, spread, rise) {
+    if (calmMotion() || !board) return 0;
+    var count = Math.max(1, Math.min(FX_BURST_MAX, n));
+    if (fxLive + count > FX_BURST_LIVE_MAX) count = FX_BURST_LIVE_MAX - fxLive;
+    if (count <= 0) return 0;   /* 상한 초과 = 이번 축포는 건너뛴다 (성능 보호) */
+    var layer = burstLayerEl();
+    var wrap = document.createElement('div');
+    wrap.className = 'fx-burst';
+    wrap.setAttribute('data-fx-burst', '');
+    wrap.style.left = Math.round(x) + 'px';
+    wrap.style.top = Math.round(y) + 'px';
+    for (var i = 0; i < count; i++) {
+      var p = document.createElement('div');
+      p.className = 'fx-p' + (i % 3 === 0 ? ' round' : '');
+      var ang = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+      var dist = spread * (0.45 + Math.random() * 0.8);
+      var sz = 5 + Math.round(Math.random() * 5);
+      p.style.width = sz + 'px';
+      p.style.height = sz + 'px';
+      p.style.marginLeft = (-sz / 2) + 'px';
+      p.style.marginTop = (-sz / 2) + 'px';
+      p.style.backgroundColor = FX_COLORS[i % FX_COLORS.length];
+      p.style.setProperty('--dx', Math.round(Math.cos(ang) * dist) + 'px');
+      p.style.setProperty('--dy', Math.round(Math.sin(ang) * dist * 0.85 - rise) + 'px');
+      p.style.setProperty('--sc', (0.45 + Math.random() * 0.55).toFixed(2));
+      p.style.setProperty('--rz', Math.round(-220 + Math.random() * 440) + 'deg');
+      p.style.setProperty('--dur', (FX_BURST_MS - 260 + Math.round(Math.random() * 260)) + 'ms');
+      wrap.appendChild(p);
+    }
+    layer.appendChild(wrap);
+    fxLive += count;
+    var live = count;
+    setTimeout(function () {
+      fxLive -= live;
+      if (fxLive < 0) fxLive = 0;
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      if (burstLayer && !burstLayer.firstChild && burstLayer.parentNode) {
+        burstLayer.parentNode.removeChild(burstLayer);   /* 기본 상태 DOM 으로 완전 복귀 */
+        burstLayer = null;
+      }
+    }, FX_BURST_MS + 150);
+    return count;
+  }
+
+  /* 화면(client) 좌표로 터뜨리기 — 체크한 그 줄 근처에 쓰기 위한 얇은 변환 */
+  function burstAtClient(cx, cy, n, spread, rise) {
+    if (calmMotion() || !board) return 0;
+    var b = board.getBoundingClientRect();
+    return burstAt(cx - b.left, cy - b.top, n, spread, rise);
+  }
+
+  /* 이 보드 전체의 체크리스트 진행도 — "다 끝냈다" 판정용 (모델만 읽고 아무것도 바꾸지 않는다) */
+  function checklistProgress() {
+    var total = 0;
+    var done = 0;
+    data.forEach(function (n) {
+      if (!n || typeof n.text !== 'string' || n.text.indexOf('- [') === -1) return;
+      n.text.split('\n').forEach(function (line) {
+        var m = CHECK_RE.exec(line);
+        if (!m) return;
+        total += 1;
+        if (m[1] === 'x') done += 1;
+      });
+    });
+    return { total: total, done: done };
+  }
+
+  /* ── 보드 분위기 효과: 캔버스 1장 + requestAnimationFrame 1개 ──
+     기본값 'none' 에서는 캔버스도 루프도 존재하지 않는다. */
+  var ambCanvas = null;
+  var ambCtx = null;
+  var ambParts = [];
+  var ambRaf = 0;
+  var ambPrev = 0;
+  var ambW = 0;
+  var ambH = 0;
+  var ambDpr = 0;
+
+  function ambValid(v) {
+    return v === 'none' || v === 'twinkle' || v === 'stars' || v === 'snow';
+  }
+
+  function ambOn() {
+    return decorAmbient === 'twinkle' || decorAmbient === 'stars' || decorAmbient === 'snow';
+  }
+
+  function ambTeardown() {
+    if (ambRaf) { cancelAnimationFrame(ambRaf); ambRaf = 0; }
+    ambParts = [];
+    ambPrev = 0;
+    if (ambCanvas && ambCanvas.parentNode) ambCanvas.parentNode.removeChild(ambCanvas);
+    ambCanvas = null;
+    ambCtx = null;
+  }
+
+  function ambResize() {
+    if (!ambCanvas || !board) return;
+    var w = board.clientWidth || 1280;
+    var h = board.clientHeight || 800;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (w === ambW && h === ambH && dpr === ambDpr) return;
+    ambW = w;
+    ambH = h;
+    ambDpr = dpr;
+    ambCanvas.width = Math.max(1, Math.round(w * dpr));
+    ambCanvas.height = Math.max(1, Math.round(h * dpr));
+    ambCanvas.style.width = w + 'px';
+    ambCanvas.style.height = h + 'px';
+    if (ambCtx) ambCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function ambMake(mode, spread) {
+    var w = ambW || 1280;
+    var h = ambH || 800;
+    return {
+      x: Math.random() * w,
+      y: spread ? Math.random() * h : -14 - Math.random() * 60,
+      r: mode === 'snow' ? 1.2 + Math.random() * 2.3 : 0.9 + Math.random() * 1.7,
+      vx: mode === 'twinkle' ? 0 : -6 + Math.random() * 12,
+      vy: mode === 'twinkle' ? 0 : (mode === 'stars' ? 9 + Math.random() * 17 : 14 + Math.random() * 26),
+      ph: Math.random() * Math.PI * 2,
+      sp: 0.6 + Math.random() * 1.1
+    };
+  }
+
+  function ambSeed() {
+    var n = decorAmbient === 'twinkle' ? 34 : (decorAmbient === 'stars' ? 44 : 48);
+    if (n > FX_AMBIENT_MAX) n = FX_AMBIENT_MAX;   /* 동시 파티클 상한 (성능 계약) */
+    ambParts = [];
+    for (var i = 0; i < n; i++) ambParts.push(ambMake(decorAmbient, true));
+  }
+
+  /* 네 갈래 별빛 — 이미지 없이 캔버스 path 로만 그린다 (에셋·네트워크 0) */
+  function ambGlint(x, y, r) {
+    ambCtx.beginPath();
+    ambCtx.moveTo(x, y - r);
+    ambCtx.quadraticCurveTo(x, y, x + r, y);
+    ambCtx.quadraticCurveTo(x, y, x, y + r);
+    ambCtx.quadraticCurveTo(x, y, x - r, y);
+    ambCtx.quadraticCurveTo(x, y, x, y - r);
+    ambCtx.fill();
+  }
+
+  function ambStep(ts) {
+    ambRaf = 0;
+    if (!ambCtx || !ambOn() || calmMotion()) { ambTeardown(); return; }
+    if (document.hidden) { ambPrev = 0; return; }   /* 창 비활성 = 정지 (캔버스는 두고 루프만 멈춘다) */
+    var dt = ambPrev ? Math.min(0.05, (ts - ambPrev) / 1000) : 0.016;
+    ambPrev = ts;
+    ambResize();
+    var mode = decorAmbient;
+    var w = ambW;
+    var h = ambH;
+    ambCtx.clearRect(0, 0, w, h);
+    ambCtx.fillStyle = '#fff6dd';
+    for (var i = 0; i < ambParts.length; i++) {
+      var p = ambParts[i];
+      p.ph += dt * p.sp * 2.2;
+      if (mode !== 'twinkle') {
+        p.y += p.vy * dt;
+        p.x += p.vx * dt + (mode === 'snow' ? Math.sin(p.ph) * 7 * dt : 0);
+        if (p.y > h + 16) { ambParts[i] = ambMake(mode, false); continue; }
+        if (p.x < -16) p.x = w + 14;
+        else if (p.x > w + 16) p.x = -14;
+      }
+      ambCtx.globalAlpha = mode === 'snow' ? 0.3 : 0.16 + 0.24 * (0.5 + 0.5 * Math.sin(p.ph));
+      if (mode === 'snow') {
+        ambCtx.beginPath();
+        ambCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ambCtx.fill();
+      } else {
+        ambGlint(p.x, p.y, p.r * 2.7);
+      }
+    }
+    ambCtx.globalAlpha = 1;
+    ambRaf = requestAnimationFrame(ambStep);
+  }
+
+  /* 상태(설정·[효과]·창 활성)를 보고 캔버스와 루프를 켜고 끈다 — 진입점 하나 */
+  function syncAmbient() {
+    if (!board || !ambOn() || calmMotion()) {
+      if (ambCanvas || ambRaf) ambTeardown();
+      return;
+    }
+    if (!ambCanvas) {
+      var cv = document.createElement('canvas');
+      cv.className = 'fx-ambient';
+      cv.setAttribute('data-fx-ambient', '');
+      cv.setAttribute('aria-hidden', 'true');
+      var cx = null;
+      try { cx = cv.getContext('2d'); } catch (err) { cx = null; }
+      if (!cx) return;                 /* 캔버스 미지원 = 조용한 강등 (기본 보드 그대로) */
+      ambCanvas = cv;
+      ambCtx = cx;
+      ambW = 0;
+      ambH = 0;
+      ambDpr = 0;
+      board.insertBefore(ambCanvas, stickerLayer.nextSibling);
+      ambResize();
+      ambSeed();
+    }
+    if (document.hidden) return;       /* 비활성 창에서는 루프를 시작하지 않는다 */
+    if (!ambRaf) {
+      ambPrev = 0;
+      ambRaf = requestAnimationFrame(ambStep);
+    }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (ambRaf) { cancelAnimationFrame(ambRaf); ambRaf = 0; }
+      ambPrev = 0;
+    } else {
+      syncAmbient();
+    }
+  });
+  window.addEventListener('resize', function () { if (ambCanvas) ambResize(); });
+  try {
+    var rmq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (rmq.addEventListener) rmq.addEventListener('change', syncAmbient);
+    else if (rmq.addListener) rmq.addListener(syncAmbient);
+  } catch (err) { /* 미지원 브라우저 — 게이트는 calmMotion() 이 계속 담당한다 */ }
+
+  /* 분위기 효과 저장: 신규 키를 만들지 않고 DECOR_KEY 최상위에 additive 로 얹는다 (부재 = none) */
+  function loadAmbient() {
+    var all = readDecorAll();
+    decorAmbient = all && ambValid(all.ambient) ? all.ambient : 'none';
+    return decorAmbient;
+  }
+
+  function saveAmbient(v) {
+    decorAmbient = ambValid(v) ? v : 'none';
+    var all = readDecorAll();          /* merge-on-write — 다른 창이 쓴 보드 몫을 덮지 않는다 */
+    if (decorAmbient === 'none') delete all.ambient;
+    else all.ambient = decorAmbient;
+    try { localStorage.setItem(DECOR_KEY, JSON.stringify(all)); }
+    catch (err) { showNotice('저장 공간이 가득 차서 설정을 저장하지 못했어요.'); }
+    syncAmbient();
+  }
+
+  /* ── 포스트잇 모두 숨기기 (보드 우클릭) ──
+     시각 표시만 바꾼다: data 모델도 localStorage 도 한 글자 손대지 않는다(삭제 아님).
+     기본값 'off' 라 fresh 프로필·구버전 설정에서는 언제나 "보임"이다. */
+  var hiddenChipDismissed = false;
+
+  function notesHidden() {
+    return SETTINGS.notesHidden === 'on';
+  }
+
+  function paintHiddenChip() {
+    if (!hiddenChipEl) return;
+    hiddenChipEl.classList.toggle('show', SETTINGS.notesHidden === 'on' && !hiddenChipDismissed);
+  }
+
+  function setNotesHidden(on) {
+    SETTINGS.notesHidden = on ? 'on' : 'off';
+    hiddenChipDismissed = false;
+    saveSettings();
+    applySettings();
+  }
+
+  /* 숨김 중에 새 포스트잇이 생기면 자동으로 다시 보여 준다 —
+     "방금 썼는데 안 보인다"가 가장 혼란스러운 상태이므로 생성은 곧 표시 의사로 읽는다. */
+  function revealNotesForNewContent() {
+    if (SETTINGS.notesHidden !== 'on') return;
+    setNotesHidden(false);
+    showNotice('숨겨 뒀던 포스트잇을 다시 보이게 했어요.');
   }
 
   /* ── 효과음: Web Audio 순수 합성 (파일·네트워크 없음) ──
@@ -2794,12 +3277,18 @@ html[data-pro-theme="lavender"] #board {
         var id = typeof s.id === 'string' && s.id ? s.id : 'st-' + uid();
         var x = typeof s.x === 'number' && isFinite(s.x) ? Math.round(s.x) : 60;
         var y = typeof s.y === 'number' && isFinite(s.y) ? Math.round(s.y) : 120;
+        /* additive: rot(-180~180, 부재=0) · layer('front'|'back', 부재='back') —
+           구버전 저장분에는 두 필드가 없으므로 그대로 기본값으로 강등된다 */
+        var rot = normRot(s.rot);
+        var layer = s.layer === 'front' ? 'front' : 'back';
+        /* additive: fx('twinkle', 부재=null=정적) — 모르는 값은 정적으로 강등된다 */
+        var fx = s.fx === 'twinkle' ? 'twinkle' : null;
         if (s.type === 'emoji' && typeof s.emoji === 'string' && s.emoji && s.emoji.length <= 8) {
           var size = typeof s.size === 'number' && isFinite(s.size) ? Math.max(EMOJI_ST_MIN_PX, Math.min(EMOJI_ST_MAX_PX, Math.round(s.size))) : 64;
-          out.stickers.push({ id: id, type: 'emoji', emoji: s.emoji, x: x, y: y, size: size });
+          out.stickers.push({ id: id, type: 'emoji', emoji: s.emoji, x: x, y: y, size: size, rot: rot, layer: layer, fx: fx });
         } else if (s.type === 'photo' && typeof s.img === 'string' && /^img-[\w-]+$/.test(s.img)) {
           var w = typeof s.w === 'number' && isFinite(s.w) ? Math.max(PHOTO_ST_MIN_PX, Math.min(PHOTO_ST_MAX_PX, Math.round(s.w))) : 160;
-          out.stickers.push({ id: id, type: 'photo', img: s.img, x: x, y: y, w: w });
+          out.stickers.push({ id: id, type: 'photo', img: s.img, x: x, y: y, w: w, rot: rot, layer: layer });
         }
       });
     }
@@ -2810,9 +3299,14 @@ html[data-pro-theme="lavender"] #board {
     if (!d || (!d.bg && (!d.stickers || !d.stickers.length))) return null;
     var entry = {
       stickers: (d.stickers || []).map(function (s) {
-        return s.type === 'photo'
+        var o = s.type === 'photo'
           ? { id: s.id, type: 'photo', img: s.img, x: s.x, y: s.y, w: s.w }
           : { id: s.id, type: 'emoji', emoji: s.emoji, x: s.x, y: s.y, size: s.size };
+        /* additive 필드는 기본값이 아닐 때만 적는다 — 구버전 판독기는 모르는 키를 그냥 무시한다 */
+        if (s.rot) o.rot = s.rot;
+        if (s.layer === 'front') o.layer = 'front';
+        if (s.fx === 'twinkle') o.fx = 'twinkle';
+        return o;
       })
     };
     if (d.bg) entry.bg = d.bg.type === 'preset' ? { type: 'preset', id: d.bg.id } : { type: 'image', fit: d.bg.fit };
@@ -2868,6 +3362,82 @@ html[data-pro-theme="lavender"] #board {
     });
   }
 
+  /* ── 스티커: 회전·레이어 공통 계산 ──
+     · rot 은 "그 스티커가 타고난 각도(base)에서 사용자가 더 돌린 각" 이다. 이모지는 base 0,
+       사진은 폴라로이드 액자의 기울임(-1.6°, 현행 CSS 와 같은 값)이 base 라 rot=0 = 지금 모습 그대로다.
+     · 위치의 정본은 계속 left/top, 크기의 정본은 계속 font-size/width — transform 은 회전만 싣는다.
+       그래야 기존 스폰·겹침·클램프 계산(offsetWidth/left/top 기반)이 한 줄도 흔들리지 않는다. */
+
+  function normRot(v) {
+    if (typeof v !== 'number' || !isFinite(v)) return 0;
+    var r = Math.round(v) % 360;
+    if (r > 180) r -= 360;
+    if (r < -180) r += 360;
+    return r;
+  }
+
+  function stickerBaseRot(s) {
+    return s && s.type === 'photo' ? ST_PHOTO_BASE_ROT : 0;
+  }
+
+  function stickerLayerOf(s) {
+    return s && s.layer === 'front' ? stickerLayerFront : stickerLayer;
+  }
+
+  /* 회전 뒤 화면에 실제로 차지하는 바깥 상자(AABB) — 경계 클램프의 기준.
+     rot=0 이면 w/h 가 그대로라 아래 클램프 식이 현행 식과 글자 그대로 같아진다 (강등 안전). */
+  function stickerAabb(el, s) {
+    var w = el.offsetWidth;
+    var h = el.offsetHeight;
+    var a = (stickerBaseRot(s) + (s.rot || 0)) * Math.PI / 180;
+    var c = Math.abs(Math.cos(a));
+    var n = Math.abs(Math.sin(a));
+    return { w: w * c + h * n, h: w * n + h * c, ow: w, oh: h };
+  }
+
+  function applyStickerTransform(el, s) {
+    var deg = stickerBaseRot(s) + (s.rot || 0);
+    el.style.transform = 'translate3d(0px, 0px, 0px) rotate(' + deg + 'deg) scale(1)';
+  }
+
+  /* 회전으로 보드 밖에 튀어나간 만큼만 되당긴다 (드래그 클램프와 같은 식) */
+  function clampStickerPos(s, el) {
+    var bw = board.clientWidth;
+    var bh = board.clientHeight;
+    if (!bw || !bh) return;
+    var bb = stickerAabb(el, s);
+    var offX = (bb.ow - bb.w) / 2;
+    var offY = (bb.oh - bb.h) / 2;
+    var nx = s.x;
+    var ny = s.y;
+    if (nx < 24 - bb.w - offX) nx = 24 - bb.w - offX;
+    if (nx > bw - 24 - offX) nx = bw - 24 - offX;
+    if (ny < -offY) ny = -offY;
+    if (ny > bh - 24 - offY) ny = bh - 24 - offY;
+    nx = Math.round(nx);
+    ny = Math.round(ny);
+    if (nx === s.x && ny === s.y) return;
+    s.x = nx;
+    s.y = ny;
+    el.style.left = nx + 'px';
+    el.style.top = ny + 'px';
+  }
+
+  /* 새 스티커의 기본 레이어 — 신규 키를 만들지 않고 DECOR_KEY 최상위에 additive 로 얹는다 */
+  function loadDefLayer() {
+    var all = readDecorAll();
+    decorDefLayer = all && all.defLayer === 'front' ? 'front' : 'back';
+    return decorDefLayer;
+  }
+
+  function saveDefLayer(v) {
+    decorDefLayer = v === 'front' ? 'front' : 'back';
+    var all = readDecorAll();          /* merge-on-write — 다른 창이 쓴 보드 몫을 덮지 않는다 */
+    all.defLayer = decorDefLayer;
+    try { localStorage.setItem(DECOR_KEY, JSON.stringify(all)); }
+    catch (err) { showNotice('저장 공간이 가득 차서 설정을 저장하지 못했어요.'); }
+  }
+
   /* ── 스티커 ── */
 
   function findStickerIndex(id) {
@@ -2882,9 +3452,10 @@ html[data-pro-theme="lavender"] #board {
 
   function renderSticker(s) {
     var el = document.createElement('div');
-    el.className = 'psticker' + (s.type === 'photo' ? ' photo' : '');
+    el.className = 'psticker' + (s.type === 'photo' ? ' photo' : '') + (s.fx === 'twinkle' ? ' fx-twinkle' : '');
     el.setAttribute('data-sticker', '');
     el.setAttribute('data-sid', s.id);
+    if (s.fx === 'twinkle') el.setAttribute('data-fx', 'twinkle');   /* 반짝임 계열 표시 (관찰용 훅) */
     el.style.left = s.x + 'px';
     el.style.top = s.y + 'px';
     if (s.type === 'emoji') {
@@ -2909,28 +3480,80 @@ html[data-pro-theme="lavender"] #board {
     grip.setAttribute('data-sticker-resize', '');
     grip.title = '모서리를 끌어 크기 조절';
     el.appendChild(grip);
-    el.addEventListener('pointerdown', function (e) { onStickerDown(e, s.id, false); });
-    grip.addEventListener('pointerdown', function (e) { onStickerDown(e, s.id, true); });
-    stickerLayer.appendChild(el);
+    var rgrip = document.createElement('div');
+    rgrip.className = 'strot';
+    rgrip.setAttribute('data-sticker-rotate', '');
+    rgrip.title = '끌어서 회전 (Shift = 15°씩)';
+    el.appendChild(rgrip);
+    el.addEventListener('pointerdown', function (e) { onStickerDown(e, s.id, 'move'); });
+    grip.addEventListener('pointerdown', function (e) { onStickerDown(e, s.id, 'resize'); });
+    rgrip.addEventListener('pointerdown', function (e) { onStickerDown(e, s.id, 'rotate'); });
+    applyStickerTransform(el, s);
+    if (s.id === selStickerId) el.classList.add('sel');
+    stickerLayerOf(s).appendChild(el);
     stickerEls[s.id] = el;
     return el;
   }
 
-  function onStickerDown(e, id, isResize) {
+  /* 배열 순서 = 같은 레이어 안 DOM 순서 로 다시 맞춘다 (레이어가 둘이라 인덱스로 끼워 넣지 않는다) */
+  function reflowStickerOrder() {
+    decor.stickers.forEach(function (s) {
+      var el = stickerEls[s.id];
+      if (el) stickerLayerOf(s).appendChild(el);
+    });
+  }
+
+  /* 고른 스티커 표시 — outline 만 바꾼다 (레이아웃·크기·배경 어디에도 영향 없음) */
+  function selectSticker(id) {
+    if (selStickerId === id) return;
+    var prev = selStickerId ? stickerEls[selStickerId] : null;
+    if (prev) prev.classList.remove('sel');
+    selStickerId = id || null;
+    var cur = selStickerId ? stickerEls[selStickerId] : null;
+    if (cur) cur.classList.add('sel');
+  }
+
+  function setStickerRot(id, rot) {
+    var s = findSticker(id);
+    var el = stickerEls[id];
+    if (!s || !el) return;
+    s.rot = normRot(rot);
+    applyStickerTransform(el, s);
+    clampStickerPos(s, el);
+    saveDecorNow();
+  }
+
+  function setStickerLayer(id, layer) {
+    var s = findSticker(id);
+    var el = stickerEls[id];
+    if (!s || !el) return;
+    s.layer = layer === 'front' ? 'front' : 'back';
+    reflowStickerOrder();
+    saveDecorNow();
+  }
+
+  function onStickerDown(e, id, mode) {
     if (e.button !== 0) return;
     var s = findSticker(id);
     var el = stickerEls[id];
     if (!s || !el) return;
     e.preventDefault();
     e.stopPropagation();
+    selectSticker(id);
+    el.classList.add('st-live');
+    var r = el.getBoundingClientRect();   /* 회전축이 50% 50% 라 중심은 각도와 무관하게 같은 자리다 */
     stDrag = {
       id: id,
-      resize: isResize,
+      mode: mode === 'resize' ? 'resize' : (mode === 'rotate' ? 'rotate' : 'move'),
+      resize: mode === 'resize',
       pid: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
+      cx: r.left + r.width / 2,
+      cy: r.top + r.height / 2,
       origX: s.x,
       origY: s.y,
+      origRot: s.rot || 0,
       origSize: s.type === 'emoji' ? s.size : s.w,
       moved: false
     };
@@ -2948,8 +3571,19 @@ html[data-pro-theme="lavender"] #board {
     var dx = e.clientX - stDrag.startX;
     var dy = e.clientY - stDrag.startY;
     if (dx !== 0 || dy !== 0) stDrag.moved = true;
-    if (stDrag.resize) {
-      var delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    if (stDrag.mode === 'rotate') {
+      /* 손잡이는 12시 방향에 달려 있다 — 중심→포인터 각도에 +90° 하면 그 손잡이가 가리키는 각이 된다 */
+      var ang = Math.atan2(e.clientY - stDrag.cy, e.clientX - stDrag.cx) * 180 / Math.PI + 90;
+      var want = normRot(ang - stickerBaseRot(s));
+      if (e.shiftKey) want = normRot(Math.round(want / ST_ROT_SNAP_DEG) * ST_ROT_SNAP_DEG);
+      s.rot = want;
+      applyStickerTransform(el, s);
+    } else if (stDrag.mode === 'resize') {
+      /* 화면 delta 를 스티커 로컬 축으로 역회전해 읽는다 — 돌아간 스티커도 "바깥으로 끌면 커진다" */
+      var a = -(stickerBaseRot(s) + (s.rot || 0)) * Math.PI / 180;
+      var ldx = dx * Math.cos(a) - dy * Math.sin(a);
+      var ldy = dx * Math.sin(a) + dy * Math.cos(a);
+      var delta = Math.abs(ldx) > Math.abs(ldy) ? ldx : ldy;
       if (s.type === 'emoji') {
         s.size = Math.max(EMOJI_ST_MIN_PX, Math.min(EMOJI_ST_MAX_PX, Math.round(stDrag.origSize + delta)));
         el.style.fontSize = s.size + 'px';
@@ -2958,15 +3592,21 @@ html[data-pro-theme="lavender"] #board {
         el.style.width = s.w + 'px';
       }
     } else {
+      /* 레이어 자체는 돌아가 있지 않으므로 화면 delta 는 left/top delta 와 1:1 이다 — 역회전 보정 불필요.
+         클램프만 회전 AABB 기준으로 재는데, rot=0 이면 아래 네 줄은 현행 식과 글자 그대로 같다. */
       var bw = board.clientWidth;
       var bh = board.clientHeight;
-      var w = el.offsetWidth;
+      var bb = stickerAabb(el, s);
+      var offX = (bb.ow - bb.w) / 2;
+      var offY = (bb.oh - bb.h) / 2;
       var nx = stDrag.origX + dx;
       var ny = stDrag.origY + dy;
-      if (nx < 24 - w) nx = 24 - w;
-      if (nx > bw - 24) nx = bw - 24;
-      if (ny < 0) ny = 0;
-      if (ny > bh - 24) ny = bh - 24;
+      if (nx < 24 - bb.w - offX) nx = 24 - bb.w - offX;
+      if (nx > bw - 24 - offX) nx = bw - 24 - offX;
+      if (ny < -offY) ny = -offY;
+      if (ny > bh - 24 - offY) ny = bh - 24 - offY;
+      nx = Math.round(nx);
+      ny = Math.round(ny);
       s.x = nx;
       s.y = ny;
       el.style.left = nx + 'px';
@@ -2984,6 +3624,8 @@ html[data-pro-theme="lavender"] #board {
     document.removeEventListener('pointerup', onStickerUp);
     document.removeEventListener('pointercancel', onStickerUp);
     if (!d) return;
+    var upEl = stickerEls[d.id];
+    if (upEl) upEl.classList.remove('st-live');
     if (d.moved) {
       saveDecorNow();
       playDrop();   /* 직접 제스처(드래그 끝) 내부 */
@@ -3044,9 +3686,9 @@ html[data-pro-theme="lavender"] #board {
     setTimeout(function () { el.classList.remove('fresh'); }, 2000);
   }
 
-  function addEmojiSticker(emoji) {
+  function addEmojiSticker(emoji, fx) {
     var p = stickerSpawnXY(93, 70);   /* 이모지 실측 점유(≈ size×1.45 × size×1.1) 기준으로 자리 잡기 */
-    var s = { id: 'st-' + uid(), type: 'emoji', emoji: emoji, x: p.x, y: p.y, size: 64 };
+    var s = { id: 'st-' + uid(), type: 'emoji', emoji: emoji, x: p.x, y: p.y, size: 64, rot: 0, layer: decorDefLayer, fx: fx === 'twinkle' ? 'twinkle' : null };
     decor.stickers.push(s);
     revealStickerGrip(renderSticker(s));
     saveDecorNow();
@@ -3219,6 +3861,7 @@ html[data-pro-theme="lavender"] #board {
     decor.stickers.splice(idx, 1);
     var el = stickerEls[id];
     delete stickerEls[id];
+    if (selStickerId === id) selStickerId = null;
     if (el && el.parentNode) el.parentNode.removeChild(el);
     saveDecorNow();
     var bid = boardId;
@@ -3237,8 +3880,7 @@ html[data-pro-theme="lavender"] #board {
         var at = Math.max(0, Math.min(idx, decor.stickers.length));
         decor.stickers.splice(at, 0, s);
         var el = renderSticker(s);
-        var ref = stickerLayer.children[at];   /* 원래 쌓임 순서 복원 (레이어 안은 스티커뿐) */
-        if (ref && ref !== el) stickerLayer.insertBefore(el, ref);
+        reflowStickerOrder();                  /* 원래 쌓임 순서 복원 (배열 순서 = 레이어 안 DOM 순서) */
         revealStickerGrip(el);
       }
       saveDecorNow();
@@ -3265,7 +3907,7 @@ html[data-pro-theme="lavender"] #board {
     var s = decor.stickers.splice(idx, 1)[0];
     decor.stickers.push(s);
     var el = stickerEls[id];
-    if (el) stickerLayer.appendChild(el);
+    if (el) stickerLayerOf(s).appendChild(el);
     saveDecorNow();
   }
 
@@ -3278,8 +3920,12 @@ html[data-pro-theme="lavender"] #board {
     stickerEls = {};
     var all = readDecorAll();
     decor = sanitizeDecor(all.boards && typeof all.boards === 'object' && !Array.isArray(all.boards) ? all.boards[boardId] : null);
+    decorDefLayer = all && all.defLayer === 'front' ? 'front' : 'back';
+    decorAmbient = all && ambValid(all.ambient) ? all.ambient : 'none';   /* 분위기 효과는 전 보드 공통 */
+    syncAmbient();
+    selStickerId = null;
     applyDecorBg();
-    decor.stickers.forEach(renderSticker);
+    decor.stickers.forEach(function (s) { renderSticker(s); });
     syncDecorUI();
   }
 
@@ -3700,6 +4346,27 @@ html[data-pro-theme="lavender"] #board {
     playTick();   /* 직접 제스처(체크) 내부 */
     applySearch();
     saveNow();
+    /* 축포 (발주 #19) — 저장이 끝난 뒤의 순수 연출. 체크 해제에는 터뜨리지 않는다. */
+    if (checked) celebrateCheck(ref, lineIdx);
+  }
+
+  /* 완료 축포: 그 줄 근처에 작게, 보드의 체크리스트를 전부 끝냈으면 그 대신 크게 한 번.
+     연출뿐이라 실패해도 체크·저장 결과에는 아무 영향이 없다. */
+  function celebrateCheck(ref, lineIdx) {
+    if (calmMotion()) return;
+    var prog = checklistProgress();
+    if (prog.total >= 2 && prog.done === prog.total) {
+      var bw = board.clientWidth || 1280;
+      var bh = board.clientHeight || 800;
+      burstAt(Math.round(bw / 2), Math.round(bh * 0.62), FX_BURST_BIG, 300, 150);
+      showNotice('체크리스트를 모두 끝냈어요! 🎉');
+      return;
+    }
+    /* renderNoteText 는 체크 줄·일반 줄 모두를 줄 순서대로 넣으므로 children[lineIdx] 가 그 줄이다 */
+    var rowEl = ref.textEl.children[lineIdx] || ref.root;
+    var r = rowEl.getBoundingClientRect();
+    if (!r.width && !r.height) return;
+    burstAtClient(r.left + Math.min(r.width, 110) / 2, r.top + r.height / 2, FX_BURST_SMALL, 48, 14);
   }
 
   /* 노트별 크기 반영 — left/top 은 건드리지 않는다 (A23: 리사이즈 ≠ 이동) */
@@ -4064,6 +4731,7 @@ html[data-pro-theme="lavender"] #board {
   }
 
   function addNoteAt(x, y) {
+    revealNotesForNewContent();   /* 숨김 상태에서 새 포스트잇 = 다시 보이게 (갇힘 방지) */
     zCounter += 1;
     var n = {
       id: uid(),
@@ -4497,6 +5165,7 @@ html[data-pro-theme="lavender"] #board {
     updateWelcome();
     applySearch();
     saveNow();
+    if (count) revealNotesForNewContent();   /* 가져온 메모가 안 보이면 혼란스럽다 */
     return count;
   }
 
@@ -4643,6 +5312,7 @@ html[data-pro-theme="lavender"] #board {
   function duplicateNote(id) {
     var src = findNote(id);
     if (!src) return;
+    revealNotesForNewContent();   /* 복제도 새 포스트잇 — 숨김 상태면 함께 풀린다 */
     var ref = els[id];
     var w = ref ? ref.root.offsetWidth : NOTE_W;
     var h = ref ? ref.root.offsetHeight : NOTE_H;
@@ -5006,8 +5676,10 @@ html[data-pro-theme="lavender"] #board {
     updateWelcome();
     applySearch();
     saveNow();
-    if (count) showNotice('메모 ' + count + '개를 포스트잇으로 가져왔어요. (원본 메모는 그대로예요)');
-    else showNotice('가져올 수 있는 형식의 메모가 없어요.');
+    if (count) {
+      if (notesHidden()) setNotesHidden(false);   /* 가져온 메모가 안 보이면 혼란스럽다 */
+      showNotice('메모 ' + count + '개를 포스트잇으로 가져왔어요. (원본 메모는 그대로예요)');
+    } else showNotice('가져올 수 있는 형식의 메모가 없어요.');
   }
 
   /* ── 우클릭 메뉴: 브라우저 기본 메뉴 대체, 바깥 클릭으로 닫힘 (A21) ── */
@@ -5252,6 +5924,17 @@ html[data-pro-theme="lavender"] #board {
 
     /* ② 가끔 — 보드 자체를 손보는 일들 */
     ctxMenuEl.appendChild(ctxItem('🎨 꾸미기', function () { openDecorPanel(); }));
+    /* 포스트잇 모두 숨기기/보이기 — 같은 자리에서 라벨만 뒤집힌다 (시각 표시 전용, 데이터 불변) */
+    var nowHidden = notesHidden();
+    var hideItem = ctxItem(nowHidden ? '포스트잇 모두 보이기' : '포스트잇 모두 숨기기', function () {
+      setNotesHidden(!nowHidden);
+      playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+    });
+    hideItem.setAttribute('data-notes-hide-toggle', nowHidden ? 'on' : 'off');
+    hideItem.title = nowHidden
+      ? '감춰 둔 포스트잇을 다시 보여요'
+      : '포스트잇을 잠시 감춰 배경·스티커 꾸미기만 봐요 (메모는 그대로 저장돼 있어요)';
+    ctxMenuEl.appendChild(hideItem);
     var memoItem = ctxItem('메모 가져오기', function () { importMemos(); });
     memoItem.setAttribute('data-import-memo', '');   /* A29 진입점 — 보드 컨텍스트 메뉴 */
     ctxMenuEl.appendChild(memoItem);
@@ -5308,13 +5991,66 @@ html[data-pro-theme="lavender"] #board {
     ctxMenuEl.appendChild(del);
   }
 
-  /* 스티커 미니 메뉴: 맨 앞으로 / (사진이면) 배경 다듬기 / 삭제(실행 취소 가능) */
+  /* 스티커 회전 행: ↺15° / ↻15° / 각도 초기화 — [data-sticker-rot] · [data-rot-left|right|reset] */
+  function buildStickerRotRow(id) {
+    var row = document.createElement('div');
+    row.className = 'ctx-item ctx-row-wrap';
+    row.setAttribute('data-ctx-item', '');
+    row.setAttribute('data-sticker-rot', '');
+    var lab = document.createElement('span');
+    lab.textContent = '회전';
+    row.appendChild(lab);
+    var opts = document.createElement('span');
+    opts.className = 'size-opts';
+    var mk = function (hook, label, title, fn) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'size-opt';
+      b.setAttribute(hook, '');
+      b.textContent = label;
+      b.title = title;
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        fn();
+        playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+        closeCtxMenu();
+      });
+      opts.appendChild(b);
+    };
+    mk('data-rot-left', '↺ 15°', '왼쪽으로 15° 돌려요', function () {
+      var s = findSticker(id);
+      if (s) setStickerRot(id, (s.rot || 0) - ST_ROT_SNAP_DEG);
+    });
+    mk('data-rot-right', '↻ 15°', '오른쪽으로 15° 돌려요', function () {
+      var s = findSticker(id);
+      if (s) setStickerRot(id, (s.rot || 0) + ST_ROT_SNAP_DEG);
+    });
+    mk('data-rot-reset', '각도 초기화', '기울이지 않은 처음 각도로 되돌려요', function () {
+      setStickerRot(id, 0);
+    });
+    row.appendChild(opts);
+    return row;
+  }
+
+  /* 스티커 미니 메뉴: 맨 앞으로 / 회전 / 노트 앞뒤 / (사진이면) 배경 다듬기 / 삭제(실행 취소 가능) */
   function buildStickerMenu(id) {
     ctxMenuEl.appendChild(ctxItem('맨 앞으로', function () {
       bringStickerToFront(id);
       playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
     }));
     var stForMenu = findSticker(id);
+    ctxMenuEl.appendChild(buildStickerRotRow(id));
+    if (stForMenu) {
+      var isFront = stForMenu.layer === 'front';
+      var layItem = ctxItem(isFront ? '노트 뒤로' : '노트 위로', function () {
+        setStickerLayer(id, isFront ? 'back' : 'front');
+        showNotice(isFront ? '스티커를 포스트잇 뒤로 보냈어요.' : '스티커를 포스트잇 위로 올렸어요.');
+        playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+      });
+      layItem.setAttribute('data-sticker-layer-toggle', isFront ? 'front' : 'back');
+      layItem.title = '스티커를 포스트잇 위에 붙일지, 뒤에 깔지 골라요';
+      ctxMenuEl.appendChild(layItem);
+    }
     if (stForMenu && stForMenu.type === 'photo') {
       var trim = ctxItem('배경 다듬기', function () {
         reeditStickerBackground(id);   /* IDB 원본 → 같은 누끼 편집 카드 재편집 (발주 #10) */
@@ -5366,10 +6102,12 @@ html[data-pro-theme="lavender"] #board {
     /* 입력창·알림 위에서는 브라우저 기본 메뉴(복사·붙여넣기)를 그대로 둔다 */
     if (t.closest('input, textarea, .notice')) return;
     if (t.closest('.ctxmenu')) { e.preventDefault(); return; }
-    /* 스티커 우클릭 = 미니 메뉴(맨 앞으로/삭제) — 노트 뒤 레이어라 노트와 겹치면 노트 메뉴가 우선 */
+    /* 스티커 우클릭 = 미니 메뉴 — 뒤 레이어(기본) 스티커는 노트와 겹치면 노트 메뉴가 우선이고,
+       앞 레이어 스티커는 실제로 위에 있으므로 그 스티커 메뉴가 열린다 (보이는 대로) */
     var stEl = t.closest('[data-sticker]');
     if (stEl && stEl.getAttribute('data-sid')) {
       e.preventDefault();
+      selectSticker(stEl.getAttribute('data-sid'));
       openCtxMenu('sticker', e.clientX, e.clientY, stEl.getAttribute('data-sid'));
       return;
     }
@@ -5392,6 +6130,14 @@ html[data-pro-theme="lavender"] #board {
     e.preventDefault();
     if (t.closest('.toolbar')) { closeCtxMenu(); return; }
     openCtxMenu('board', e.clientX, e.clientY, null);
+  });
+
+  /* 스티커 고르기 해제: 스티커·미니 메뉴 바깥을 누르면 아웃라인을 거둔다 */
+  document.addEventListener('pointerdown', function (e) {
+    if (!selStickerId) return;
+    var st = e.target;
+    if (st && st.closest && (st.closest('[data-sticker]') || st.closest('.ctxmenu'))) return;
+    selectSticker(null);
   });
 
   document.addEventListener('pointerdown', function (e) {
@@ -5929,6 +6675,8 @@ html[data-pro-theme="lavender"] #board {
       }
     }
     paintSeg(document.getElementById('dpBgFit'), decor.bg && decor.bg.type === 'image' ? decor.bg.fit : '');
+    paintSeg(document.getElementById('dpStLayer'), decorDefLayer);
+    paintSeg(document.getElementById('dpAmbient'), decorAmbient);
     var tw = document.getElementById('dpTapeColor');
     if (tw) {
       Array.prototype.forEach.call(tw.querySelectorAll('button[data-tval]'), function (b) {
@@ -6060,26 +6808,61 @@ html[data-pro-theme="lavender"] #board {
 
   /* 이모지 스티커 팔레트 — 계절·기분·사무 3세트 (각 12종 이상) */
   var EMOJI_SETS = {
+    /* 반짝임 계열(무료, 발주 #19): 기존 이모지 스티커 체계 그대로에 fx:'twinkle' 만 얹는다 —
+       배치·회전·크기·앞뒤 전환은 다른 스티커와 완전히 같고, 다른 점은 은은한 CSS 반짝임뿐이다. */
+    sparkle: ['✨', '⭐', '🌟', '💫', '🌠', '🎇', '🎆', '🔆', '☄️', '🪐', '💎', '🌙'],
     season: ['🌸', '🌷', '🌻', '🍀', '🌿', '🍁', '🍂', '🍄', '⛄', '❄️', '🌊', '☀️', '🌙', '🌈', '🎄'],
     mood: ['😀', '😍', '🥳', '😎', '🤔', '😴', '😭', '😡', '🤩', '🥰', '😆', '🙌', '💖', '✨', '🔥'],
     office: ['📌', '📎', '✏️', '📚', '💡', '📅', '⏰', '✅', '❗', '⭐', '📞', '💻', '☕', '📝', '📊']
   };
 
-  function fillPalette(hostId, list) {
+  function fillPalette(hostId, list, fx) {
     var host = document.getElementById(hostId);
     if (!host) return;
     list.forEach(function (em) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.title = '스티커 붙이기';
+      b.title = fx === 'twinkle' ? '반짝이는 스티커 붙이기' : '스티커 붙이기';
       b.textContent = em;
-      b.addEventListener('click', function () { addEmojiSticker(em); });
+      b.addEventListener('click', function () { addEmojiSticker(em, fx); });
       host.appendChild(b);
     });
   }
+  fillPalette('dpStSparkle', EMOJI_SETS.sparkle, 'twinkle');
   fillPalette('dpStSeason', EMOJI_SETS.season);
   fillPalette('dpStMood', EMOJI_SETS.mood);
   fillPalette('dpStOffice', EMOJI_SETS.office);
+
+  /* 새 스티커를 붙일 기본 레이어 세그 — 기본값 back (현행 동작 그대로) */
+  loadDefLayer();
+  (function () {
+    var seg = document.getElementById('dpStLayer');
+    if (!seg) return;
+    Array.prototype.forEach.call(seg.querySelectorAll('button[data-val]'), function (b) {
+      b.addEventListener('click', function () {
+        saveDefLayer(b.getAttribute('data-val'));
+        paintSeg(seg, decorDefLayer);
+        playTick();   /* 직접 제스처(세그 클릭) 내부 */
+      });
+    });
+    paintSeg(seg, decorDefLayer);
+  })();
+
+  /* 보드 분위기 효과 세그 — 기본값 none(현행 그대로), 저장은 DECOR_KEY 최상위 ambient */
+  loadAmbient();
+  syncAmbient();
+  (function () {
+    var seg = document.getElementById('dpAmbient');
+    if (!seg) return;
+    Array.prototype.forEach.call(seg.querySelectorAll('button[data-val]'), function (b) {
+      b.addEventListener('click', function () {
+        saveAmbient(b.getAttribute('data-val'));
+        paintSeg(seg, decorAmbient);
+        playTick();   /* 직접 제스처(세그 클릭) 내부 */
+      });
+    });
+    paintSeg(seg, decorAmbient);
+  })();
 
   /* 사진 스티커: filechooser → 1024px 다운스케일 → IndexedDB → 폴라로이드 프레임 배치.
      발주 #10: 배치 직후 비모달 누끼(배경 지우기) 편집 카드를 띄운다 — "그대로 붙이기"가 기본
@@ -6104,7 +6887,7 @@ html[data-pro-theme="lavender"] #board {
         }
         imgCache[key] = uri;
         var p = stickerSpawnXY(160, 190);
-        var s = { id: 'st-' + uid(), type: 'photo', img: key, x: p.x, y: p.y, w: 160 };
+        var s = { id: 'st-' + uid(), type: 'photo', img: key, x: p.x, y: p.y, w: 160, rot: 0, layer: decorDefLayer };
         decor.stickers.push(s);
         revealStickerGrip(renderSticker(s));
         saveDecorNow();
@@ -6398,7 +7181,7 @@ html[data-pro-theme="lavender"] #board {
       } else {
         /* 편집 중 스티커가 사라진 경우 — 결과를 새 스티커로 붙인다 (실패 없는 강등) */
         var p = stickerSpawnXY(160, 190);
-        var ns = { id: 'st-' + uid(), type: 'photo', img: newKey, x: p.x, y: p.y, w: 160 };
+        var ns = { id: 'st-' + uid(), type: 'photo', img: newKey, x: p.x, y: p.y, w: 160, rot: 0, layer: decorDefLayer };
         decor.stickers.push(ns);
         revealStickerGrip(renderSticker(ns));
         saveDecorNow();

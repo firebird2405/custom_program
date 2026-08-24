@@ -861,6 +861,10 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
           <option value="15">15분 전</option>
         </select>
       </div>
+      <!-- 알림 한계 고지 (발주 #33-3 ① · SCORE-AUDIT §8 I2) — store-description.md 의
+           "앱이 열려 있는 동안 일정 알림" 표현과 정합. 셸 트레이 상주도 "열려 있는" 상태라
+           OS 알림 승격(셸 몫) 이후에도 참으로 남는 문구다. -->
+      <p class="spSmall">일정 알림은 쁘띠캘린더가 열려 있는 동안 알려 드려요.</p>
     </section>
     <section class="spSec" data-spcat="decor">
       <h3>꾸미기</h3>
@@ -2453,6 +2457,58 @@ importFile.addEventListener('change', ()=>{
   };
   reader.onerror = ()=>{ showToast('파일을 읽을 수 없습니다.'); importFile.value = ''; };
   reader.readAsText(file);
+});
+
+/* ---------- 셸 백업 복원 수신부 (발주 #33-3 ②) ----------
+ * 계약(고정): document CustomEvent 'petit:restore-request' detail={text, name}
+ *           → document CustomEvent 'petit:restore-result'  detail={ok, message}
+ * Electron 셸의 복원 UI가 백업 파일 내용을 text 로 보내면, 기존 가져오기([data-import])와
+ * 동일한 병합 규칙으로 비파괴 병합한다 — importEventsFrom(id 기준 중복 0)·importRepeatsFrom
+ * (규칙 id 병합 + 예외 날짜 합집합) 재사용, cal-events 스키마 하위호환 유지.
+ * 수용 형식: 신형식({version, events, repeats} — electron/backup.js buildCollectScript 의
+ * calendar 페이로드 = buildExportPayload 동형)과 구형식(평면 날짜 키만) 모두.
+ * file:// 단독 실행에서는 아무도 이 이벤트를 쏘지 않으므로 리스너만 상주 — 기본 동작 영향 0. */
+function sendRestoreResult(ok, message){
+  try{
+    document.dispatchEvent(new CustomEvent('petit:restore-result', { detail: { ok: ok, message: message } }));
+  }catch(e){ /* 응답 이벤트 실패는 삼킨다 — pageerror 0 */ }
+}
+document.addEventListener('petit:restore-request', (ev)=>{
+  try{
+    const d = (ev && ev.detail && typeof ev.detail === 'object') ? ev.detail : {};
+    const text = (typeof d.text === 'string') ? d.text : '';
+    if (!text){ sendRestoreResult(false, '복원할 파일 내용이 비어 있어요.'); return; }
+    let obj;
+    try{ obj = JSON.parse(text); }
+    catch(e){ sendRestoreResult(false, '이 파일은 읽을 수 있는 백업이 아니에요. 백업 JSON 파일을 골라 주세요.'); return; }
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)){
+      sendRestoreResult(false, '이 파일은 캘린더 백업 형식이 아니에요.'); return;
+    }
+    /* 포스트잇 백업 감지 — backup.js 포스트잇 페이로드는 app:"postit" + boards 객체 */
+    if (obj.app === 'postit' || (obj.boards && typeof obj.boards === 'object' && !Array.isArray(obj.boards))){
+      sendRestoreResult(false, '이 파일은 포스트잇 백업이에요. 캘린더 백업 파일을 골라 주세요.'); return;
+    }
+    /* 캘린더 백업 신호가 하나도 없으면 이종 파일로 거절 (병합 규칙 자체는 기존 그대로) */
+    const hasEventsObj = !!(obj.events && typeof obj.events === 'object' && !Array.isArray(obj.events));
+    const hasRepeats = Array.isArray(obj.repeats);
+    const hasFlatDateKey = Object.keys(obj).some(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+    if (!hasEventsObj && !hasRepeats && !hasFlatDateKey){
+      sendRestoreResult(false, '이 파일은 캘린더 백업 형식이 아니에요.'); return;
+    }
+    /* 기존 가져오기와 동일: 신형식은 events 객체에서, 구형식은 평면 날짜 키에서 */
+    const src = hasEventsObj ? obj.events : obj;
+    const count = importEventsFrom(src);
+    const repCount = hasRepeats ? importRepeatsFrom(obj.repeats) : 0;
+    saveEvents();
+    renderGrid(false);
+    renderPanel();
+    const msg = '일정 ' + count + '건을 복원했어요.'
+      + (repCount > 0 ? ' 반복 일정 규칙 ' + repCount + '개도 함께 돌아왔어요.' : '');
+    showToast(msg);
+    sendRestoreResult(true, msg);
+  }catch(err){
+    sendRestoreResult(false, '복원 중 문제가 생겼어요: ' + String((err && err.message) || err).slice(0, 200));
+  }
 });
 
 /* ---------- context menu (A21) — 우클릭: 셀 = 일정 추가 / 일정 = 수정·삭제·복제 ---------- */

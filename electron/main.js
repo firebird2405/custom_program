@@ -30,11 +30,21 @@
 //     unhandledRejection·render-process-gone·unresponsive 훅, [로그 폴더 열기].
 //   - 항상 위: shell-settings.json 의 additive 필드 alwaysOnTop (기본 꺼짐, 재기동 유지).
 //   - 보드 자랑하기: 활성 앱 뷰만 capturePage → 클립보드 복사 / PNG 저장 (탭바 미포함).
+//
+// 발주 #33 (셸 몫 — 전부 로컬 처리, 외부 전송 0):
+//   ① 트레이 상주 + 닫기 1회 선택 — shell-settings.json additive 필드 closeToTray·
+//      closeAskAck (부재=false=현행 X=종료). 트레이로 내릴 때는 hide 만 한다 (destroy 금지 —
+//      렌더러 타이머·알림 폴링 유지). app.quit() 경로는 before-quit → isQuitting 플래그로
+//      닫기 인터셉트를 우회한다 (Playwright electronApp.close() 정상 종료 계약 — 필수).
+//   ② OS 알림 승격 — alarm-relay 수신 시 창이 미표시·최소화·비포커스면 Notification 발화,
+//      클릭 = 복귀+캘린더 탭. AppUserModelId 는 electron-builder appId 와 동일 값.
+//   ③ 코르크색 즉시 창 — backgroundColor + 생성 직후 show (ready-to-show 대기 폐지),
+//      탭바 페이지를 앱 뷰보다 먼저 로드 시작 (콜드 기동 무화면 구간 제거).
 // ============================================================================
 
 'use strict';
 
-const { app, BrowserWindow, WebContentsView, screen, ipcMain, shell, dialog, clipboard } = require('electron');
+const { app, BrowserWindow, WebContentsView, screen, ipcMain, shell, dialog, clipboard, Tray, Menu, nativeImage, Notification } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -121,7 +131,9 @@ function sanitizeBounds(saved) {
 // ============================================================================
 
 // alwaysOnTop: additive 필드 (발주 #30) — 부재 = false = 현행 동작(끄기). 재기동 시 복원.
-const SHELL_SETTINGS_DEFAULTS = { defaultTab: 'postit', alwaysOnTop: false };
+// closeToTray: additive 필드 (발주 #33 ①) — 부재 = false = 현행 동작(X = 종료).
+// closeAskAck: additive 필드 (발주 #33 ①) — 닫기 1회 선택 카드에 답했는가 (부재 = 아직).
+const SHELL_SETTINGS_DEFAULTS = { defaultTab: 'postit', alwaysOnTop: false, closeToTray: false, closeAskAck: false };
 
 function shellSettingsPath() {
   return path.join(app.getPath('userData'), 'shell-settings.json');
@@ -133,6 +145,8 @@ function loadShellSettings() {
   if (raw && typeof raw === 'object') {
     if (raw.defaultTab === 'postit' || raw.defaultTab === 'calendar') s.defaultTab = raw.defaultTab;
     s.alwaysOnTop = raw.alwaysOnTop === true; // 부재·비불리언 = 기본값(꺼짐)
+    s.closeToTray = raw.closeToTray === true; // 부재·비불리언 = 기본값(X = 종료, 발주 #33)
+    s.closeAskAck = raw.closeAskAck === true; // 부재·비불리언 = 기본값(아직 안 물음)
   }
   return s;
 }
@@ -187,7 +201,10 @@ const runtime = {
   activeTab: 'postit',   // 활성 탭
   drawerOpen: false,     // 탭바 설정 드로어 개폐 (열리면 앱 뷰를 아래로 밀어 공간 확보)
   pendingAlarms: 0,      // 캘린더가 백그라운드 탭일 때 쌓인 일정 알림 건수 (탭바 배지)
-  lastAlarmText: ''      // 마지막 알림 텍스트 (탭바 미니 알림 스트립 표시용, ≤200자)
+  lastAlarmText: '',     // 마지막 알림 텍스트 (탭바 미니 알림 스트립 표시용, ≤200자)
+  tray: null,            // 트레이 아이콘 (발주 #33 ① — 기동 시 항상 생성, GC 방지 참조)
+  isQuitting: false,     // 종료 경로 표식 — before-quit 에서 세워 닫기 인터셉트를 우회한다
+  closeAskPending: false // 닫기 1회 선택 카드가 떠 있는 동안 true (X 재클릭 = 그냥 종료)
 };
 
 // ============================================================================
@@ -203,7 +220,12 @@ const TABBAR_HEIGHT = 40;
 // 설정 드로어 높이(px) — tabbar.html 의 [data-shell-settings] 높이와 동기 유지.
 // 드로어가 열리면 앱 뷰를 이만큼 아래로 밀어, 창의 기본 페이지(탭바)에 그린
 // 드로어가 뷰에 가려지지 않게 한다 (뷰는 항상 기본 페이지 위에 그려진다).
-const SETTINGS_DRAWER_HEIGHT = 186;
+// 발주 #33 으로 [닫기](트레이) 행이 늘어 186px → 216px.
+const SETTINGS_DRAWER_HEIGHT = 216;
+
+// 즉시 표시 배경 (발주 #33 ③) — 포스트잇 보드의 코르크 톤 (tabbar.html --cork 와 동일 계열).
+// 창·앱 뷰의 첫 페인트 전 배경으로 써서 콜드 기동의 흰 플래시·무화면 구간을 없앤다.
+const CORK_BG = '#B08968';
 
 // A49 ② 정적 검사 대상 — 아래 보안 기본선은 절대 완화 금지.
 // preload: A49③ 화이트리스트 브리지(window.petit) + 셸 전용 UI 레이어(A43 카드·A47 온보딩).
@@ -295,6 +317,145 @@ function applyAlwaysOnTop(win, on) {
     return win.isAlwaysOnTop() === true;
   } catch (_err) {
     return on === true;
+  }
+}
+
+// ============================================================================
+// 트레이 상주 + OS 알림 (발주 #33 ①②)
+// 앱이 보이지 않는 동안(트레이·최소화·비포커스)에도 사용자에게 닿는 유일한 경로.
+// Tray·Notification 은 로컬 OS UI 다 — 네트워크 요청 0 유지 (A44 무영향).
+// 트레이는 기동 시 항상 생성한다 (closeToTray 설정과 무관 — [열기]·[항상 위]·[완전 종료]).
+// ============================================================================
+
+/** 트레이/알림/두 번째 실행에서 창 복귀 — 숨김·최소화 어느 상태에서도 show+focus */
+function showFromTray() {
+  const win = runtime.win;
+  if (!win || win.isDestroyed()) return;
+  try {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  } catch (_err) { /* 파괴 경합 — 무해 */ }
+}
+
+/** 창을 트레이로 내린다 — hide 만 한다 (destroy 금지: 렌더러 타이머·알림 폴링 유지가 목적) */
+function hideToTray() {
+  const win = runtime.win;
+  if (!win || win.isDestroyed()) return;
+  try { win.hide(); } catch (_err) { /* 무해 */ }
+}
+
+/** 활성 앱 뷰의 webContents — 없으면 아무 앱 뷰라도 (닫기 1회 선택 카드 전달용) */
+function activeViewWebContents() {
+  if (!runtime.views) return null;
+  const order = [runtime.activeTab, 'postit', 'calendar'];
+  for (const key of order) {
+    const view = runtime.views[key];
+    if (view && view.webContents && !view.webContents.isDestroyed()) return view.webContents;
+  }
+  return null;
+}
+
+/**
+ * 트레이 아이콘 이미지 — 개발 트리는 electron\build\icon.png (buildResources — 패키지
+ * asar 에는 실리지 않는다). 부재 시 null 을 돌려주고 호출측이 exe 아이콘으로 폴백한다.
+ */
+function trayIconImage() {
+  try {
+    const devIcon = path.join(__dirname, 'build', 'icon.png');
+    if (fs.existsSync(devIcon)) {
+      const img = nativeImage.createFromPath(devIcon);
+      if (img && !img.isEmpty()) return img;
+    }
+  } catch (_err) { /* 아래 폴백 */ }
+  return null;
+}
+
+/** 트레이 생성 (기동 시 1회) — 아이콘 실패 시 트레이 없이 계속 (앱 무영향, 로그만) */
+async function createTray() {
+  if (runtime.tray) return;
+  let icon = trayIconImage();
+  if (!icon) {
+    // 패키지(NSIS·포터블·MSIX)는 exe 자체에 아이콘이 박혀 있다 — OS 에서 그대로 가져온다
+    try {
+      icon = await app.getFileIcon(process.execPath, { size: 'normal' });
+    } catch (_err) { icon = null; }
+  }
+  if (!icon || icon.isEmpty()) {
+    logEvent('tray', '트레이 아이콘을 준비하지 못해 트레이 없이 계속합니다');
+    return;
+  }
+  try {
+    const tray = new Tray(icon);
+    tray.setToolTip('쁘띠캘린더');
+    tray.on('double-click', showFromTray);
+    runtime.tray = tray;
+    refreshTrayMenu();
+  } catch (err) {
+    logEvent('tray', '트레이 생성 실패: ' + String((err && err.message) || err));
+  }
+}
+
+/** 트레이 컨텍스트 메뉴 재구성 — 항상 위 체크 상태(창 실측값)를 반영한다 */
+function refreshTrayMenu() {
+  if (!runtime.tray) return;
+  let aot = false;
+  try {
+    aot = !!(runtime.win && !runtime.win.isDestroyed() && runtime.win.isAlwaysOnTop());
+  } catch (_err) { aot = false; }
+  try {
+    runtime.tray.setContextMenu(Menu.buildFromTemplate([
+      { label: '열기', click: () => showFromTray() },
+      {
+        label: '항상 위에 두기',
+        type: 'checkbox',
+        checked: aot,
+        click: (item) => {
+          // 탭바 드로어·앱 설정과 같은 적용 경로: 실측 성공 시에만 설정 영속 (발주 #30 관용구)
+          const want = item.checked === true;
+          const actual = applyAlwaysOnTop(runtime.win, want);
+          if (actual === want && runtime.settings) {
+            runtime.settings.alwaysOnTop = want;
+            saveShellSettings(runtime.settings);
+          }
+          pushShellUi(); // 모든 표면 동기 (트레이 메뉴 자체도 재구성된다)
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '완전 종료',
+        click: () => {
+          runtime.isQuitting = true; // 닫기 인터셉트 우회 — 트레이의 종료는 언제나 진짜 종료
+          try { app.quit(); } catch (_err) { /* 이미 종료 중 — 무해 */ }
+        }
+      }
+    ]));
+  } catch (err) {
+    logEvent('tray', '트레이 메뉴 구성 실패: ' + String((err && err.message) || err));
+  }
+}
+
+/**
+ * 일정 알림의 OS 알림 승격 (발주 #33 ②) — 창이 사용자에게 보이지 않을 때만 호출된다.
+ * 클릭 = 창 복귀 + 캘린더 탭 활성. 미지원 환경(Notification.isSupported false)은 조용히 스킵.
+ * 알림 본문(일정 텍스트)은 OS 알림에만 실리고 로그에는 절대 남기지 않는다 (개인정보 원칙).
+ */
+function fireAlarmNotification(text) {
+  try {
+    if (typeof Notification !== 'function' || !Notification.isSupported()) return false;
+    const n = new Notification({
+      title: '쁘띠캘린더',
+      body: typeof text === 'string' && text.trim() !== '' ? text : '일정 알림이 도착했어요.'
+    });
+    n.on('click', () => {
+      showFromTray();
+      setActiveTab('calendar');
+    });
+    n.show();
+    return true;
+  } catch (err) {
+    logEvent('notify-fail', 'OS 알림 표시 실패: ' + String((err && err.message) || err));
+    return false;
   }
 }
 
@@ -561,6 +722,7 @@ function pushShellUi() {
   for (const wc of targets) {
     try { wc.send('petit:shell:ui-push', payload); } catch (_err) { /* 로드 전/파괴 중 — 무해 (각 표면이 초기 조회로 동기화) */ }
   }
+  refreshTrayMenu(); // 트레이 메뉴의 [항상 위] 체크도 같은 상태를 따라간다 (발주 #33 ①)
 }
 
 /** 활성 탭 뷰에 키보드 포커스 — 탭 전환 직후 바로 타이핑할 수 있게 */
@@ -592,6 +754,8 @@ function createShellWindow(state, settings) {
     minHeight: 360,
     title: '쁘띠캘린더',
     show: false,
+    // 즉시 표시(발주 #33 ③)의 첫 페인트 배경 — 흰 플래시 차단 (코르크 톤)
+    backgroundColor: CORK_BG,
     // 탭바 페이지는 보안 기본선 동일 + 전용 preload(셸 탭바 브리지)만 다르다
     webPreferences: { ...SECURE_WEB_PREFERENCES, preload: path.join(__dirname, 'tabbar-preload.js') }
   });
@@ -621,11 +785,53 @@ function createShellWindow(state, settings) {
   wireCrashLogging(win.webContents, '탭바', false); // 탭바는 자동 재로드하지 않는다 (뷰가 붙어 있다)
   wireWindowStatePersistence(win, state, 'merged');
 
+  // ── 닫기 인터셉트 (발주 #33 ①): X = 트레이로 내리기(설정 시) 또는 1회 선택 카드 ──
+  // app.quit() 경로(before-quit → runtime.isQuitting)는 절대 가로채지 않는다 —
+  // Playwright electronApp.close()·OS 종료·트레이 [완전 종료]가 여기 걸리면
+  // 채점 게이트 전체(A42·A43·A44·A45·A47·A49)가 행걸린다.
+  win.on('close', (event) => {
+    if (runtime.isQuitting) return;                       // 종료 경로 — 인터셉트 우회 (필수)
+    const s = runtime.settings || {};
+    if (s.closeToTray === true) {
+      event.preventDefault();
+      hideToTray();
+      return;
+    }
+    if (s.closeAskAck !== true && !runtime.closeAskPending) {
+      // 1회 선택 카드 — 활성 앱 뷰 preload 에 요청. 전달이 안 되면 현행대로 종료한다.
+      const wc = activeViewWebContents();
+      if (wc) {
+        let sent = false;
+        try {
+          wc.send('petit:shell:close-ask', {});
+          sent = true;
+        } catch (_err) { /* 전달 실패 — 현행 종료 경로로 */ }
+        if (sent) {
+          event.preventDefault();
+          runtime.closeAskPending = true;
+          return;
+        }
+      }
+    }
+    // closeAskAck 완료(종료 선택 유지) 또는 카드 표시 중 X 재클릭 → 현행 종료 경로
+    // (카드를 무시하고 다시 X 를 누른 사용자를 가두지 않는다)
+  });
+
+  // ── 즉시 표시 (발주 #33 ③) ──
+  // 예전에는 show:false → ready-to-show 에서 표시였는데, 패키지 콜드 기동에서 11.8초
+  // 무화면이 관찰됐다 (I1·I12 공통 원인). 이제 배치 확정 직후 곧바로 보여 준다 —
+  // backgroundColor(코르크 톤)가 첫 페인트라 흰 플래시가 없고, 탭바(작고 빠른 셸 페이지)를
+  // 앱 뷰보다 먼저 로드 시작해 "뜨는 중" 인상을 준다. ready-to-show 는 이제 표시가 아니라
+  // 제목 확정·포커스만 맡는다 (아래).
+  win.show();
+  win.loadFile(path.join(__dirname, 'tabbar.html')); // 창의 기본 페이지 = 셸 탭바 (앱 원본 아님 — A42 무변형 계약 무관)
+
   // ── 두 앱 뷰 생성·로드 (모두 유지 — 탭 전환 시 리로드 금지 계약) ──
   const makeAppView = (htmlFile) => {
     const view = new WebContentsView({
       webPreferences: { ...SECURE_WEB_PREFERENCES } // 기존 preload.js 그대로 (A43 카드·A47 온보딩·백업 UI)
     });
+    try { view.setBackgroundColor(CORK_BG); } catch (_err) { /* 구버전 View API — 무해 */ }
     hardenWebContents(view.webContents);
     wireCrashLogging(view.webContents, path.basename(htmlFile), true); // 앱 화면은 1회 자동 복구
     // A42: 저장소 원본을 그대로 로드 — 경로 외 어떤 변형도 없다.
@@ -696,17 +902,16 @@ function createShellWindow(state, settings) {
       runtime.win = null;
       runtime.views = null;
       runtime.layoutViews = null;
+      runtime.closeAskPending = false;
     }
   });
 
+  // 즉시 표시(위)로 전환한 뒤에도 ready-to-show 의 제목 확정·포커스는 유지한다 (발주 #33 ③)
   win.once('ready-to-show', () => {
-    win.show();
+    if (win.isDestroyed()) return;
     win.setTitle('쁘띠캘린더'); // 로드 과정에서의 제목 변동 방지 — 최종 확정
     focusActiveView();
   });
-
-  // 창의 기본 페이지 = 셸 탭바 (앱 원본이 아닌 셸 소유 페이지 — A42 무변형 계약 무관)
-  win.loadFile(path.join(__dirname, 'tabbar.html'));
 
   return win;
 }
@@ -728,6 +933,8 @@ function shellStatePayload() {
       : !!(runtime.settings && runtime.settings.alwaysOnTop),
     // 셸 버전 정본 — electron\package.json 하나 (탭바·앱 정보 표기가 같은 값을 쓴다)
     version: app.getVersion(),
+    // 닫을 때 트레이로 보내기 (발주 #33 ① — additive 필드, 부재=false=X 종료)
+    closeToTray: !!(runtime.settings && runtime.settings.closeToTray === true),
     // 백그라운드 캘린더 탭의 일정 알림 누적 (탭바 배지·미니 스트립용 — additive 필드)
     alarms: { count: runtime.pendingAlarms, text: runtime.lastAlarmText }
   };
@@ -779,19 +986,69 @@ function registerShellIpc() {
   });
 
   // 알림 릴레이 — 캘린더 preload 가 [data-toast][data-toast-kind="alarm"] 표출을 감지해
-  // 보낸다. 발신자가 캘린더 페이지이고 활성 탭이 캘린더가 아닐 때만 배지에 누적하고
-  // 탭바로 push 한다 (보고 있는 탭의 알림은 이미 화면에 있으므로 릴레이하지 않는다).
+  // 보낸다. 두 경로는 독립이다 (발주 #33 ②):
+  //   ① OS 알림 승격: 창이 미표시(트레이)·최소화·비포커스면 Notification 발화 —
+  //      활성 탭이 캘린더여도 사용자가 못 보는 상태면 알린다. 클릭 = 복귀+캘린더 탭.
+  //   ② 탭바 배지: 활성 탭이 캘린더가 아닐 때만 누적·push (보고 있는 탭의 알림은 화면에 있다).
   ipcMain.handle('petit:shell:alarm-relay', (event, text) => {
     assertTrustedSender(event);
     if (!runtime.win || runtime.win.isDestroyed()) {
       return { ok: true, relayed: false };
     }
     if (windowAppKind({ webContents: event.sender }) !== 'calendar') return { ok: true, relayed: false };
-    if (runtime.activeTab === 'calendar') return { ok: true, relayed: false }; // 이미 보고 있다 — 생략
+    const t = typeof text === 'string' ? text.slice(0, 200) : '';
+    let notified = false;
+    try {
+      const win = runtime.win;
+      if (!win.isVisible() || win.isMinimized() || !win.isFocused()) {
+        notified = fireAlarmNotification(t);
+      }
+    } catch (_err) { /* 창 상태 조회 실패 — 배지 경로만 계속 */ }
+    if (runtime.activeTab === 'calendar') return { ok: true, relayed: notified }; // 배지 불요 — 캘린더 탭이 이미 전면
     runtime.pendingAlarms += 1;
-    runtime.lastAlarmText = typeof text === 'string' ? text.slice(0, 200) : '';
+    runtime.lastAlarmText = t;
     pushShellUi();
     return { ok: true, relayed: true };
+  });
+
+  // 닫을 때 트레이로 보내기 (발주 #33 ①) — 탭바 드로어·앱 설정 [창] 섹션이 같은 채널을 쓴다.
+  // 직접 설정한 것도 "닫기 질문에 답했다"로 본다 — 1회 선택 카드를 다시 띄우지 않는다.
+  ipcMain.handle('petit:shell:set-close-to-tray', (event, on) => {
+    assertTrustedSender(event);
+    runtime.settings.closeToTray = on === true;
+    runtime.settings.closeAskAck = true;
+    saveShellSettings(runtime.settings);
+    pushShellUi();
+    return shellStatePayload();
+  });
+
+  // 닫기 1회 선택 카드의 응답 (발주 #33 ①) — { tray, remember } 또는 { dismiss:true }.
+  //   dismiss: 답 없이 접힘 — 대기만 풀고 아무것도 저장하지 않는다 (다음 X 때 다시 묻는다).
+  //   tray:true → closeToTray:true 저장 후 트레이로 / tray:false → 완전 종료.
+  //   remember(기본 true) = "다시 묻지 않음" — closeAskAck 영속.
+  ipcMain.handle('petit:shell:close-choice', (event, choice) => {
+    assertTrustedSender(event);
+    runtime.closeAskPending = false;
+    const c = choice && typeof choice === 'object' ? choice : {};
+    if (c.dismiss === true) return { ok: true };
+    const remember = c.remember !== false;
+    if (c.tray === true) {
+      runtime.settings.closeToTray = true;
+      if (remember) runtime.settings.closeAskAck = true;
+      saveShellSettings(runtime.settings);
+      pushShellUi();
+      hideToTray();
+      return shellStatePayload();
+    }
+    if (remember) {
+      runtime.settings.closeAskAck = true;
+      saveShellSettings(runtime.settings);
+    }
+    runtime.isQuitting = true; // 종료 선택 — 닫기 인터셉트 우회로 즉시 종료
+    setImmediate(() => {
+      try { app.quit(); } catch (_err) { /* 이미 종료 중 — 무해 */ }
+    });
+    return { ok: true, quitting: true };
   });
 
   // 항상 위 토글 (발주 #30) — 적용 뒤 창 실측값을 다시 읽어 성패를 판정하고, 성공 시에만
@@ -872,10 +1129,22 @@ function registerShellIpc() {
 //  petit:onboarding:set-done 은 registerShellIpc 로 이동 — grep 실증 후 정리.)
 
 function main() {
+  // Windows 알림(발주 #33 ②)의 AppUserModelId — electron-builder appId 와 동일 값.
+  // MSIX(스토어) 패키지는 OS 가 패키지 identity 로 자동 부여하므로 그 외(개발 트리·
+  // NSIS·포터블)에서만 명시한다. 미설정 시 Windows 가 알림을 표시하지 않는다.
+  if (process.platform === 'win32' && process.windowsStore !== true) {
+    try { app.setAppUserModelId('com.petitcalendar.app'); } catch (_err) { /* 미지원 환경 — 무해 */ }
+  }
+
+  // 종료 경로 표식 (발주 #33 ① — 필수): app.quit()(Playwright electronApp.close() 포함)·
+  // OS 종료·트레이 [완전 종료]가 닫기 인터셉트에 걸리지 않게 한다.
+  // 이 플래그가 없으면 채점기의 정상 종료가 트레이 인터셉트에 막혀 게이트 전체가 행걸린다.
+  app.on('before-quit', () => { runtime.isQuitting = true; });
+
   wireProcessLogging(); // uncaughtException·unhandledRejection·child-process-gone → userData\logs
   registerMigrateIpc(); // 'petit:migrate:detect' / ':run' / ':status'
-  registerBackupIpc();  // 'petit:backup:status' / ':choose-folder' / ':open-folder' / ':ack-notice' / ':run-now' / ':set-auto' / ':set-include-images'
-  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':set-startup' / ':set-always-on-top' / ':info' / ':copy-diagnostics' / ':open-logs' / ':capture-board' / ':alarm-relay' + 'petit:onboarding:set-done'
+  registerBackupIpc();  // 'petit:backup:status' / ':choose-folder' / ':open-folder' / ':ack-notice' / ':run-now' / ':set-auto' / ':set-include-images' / ':ack-auto-prompt' / ':pick-restore'
+  registerShellIpc();   // 'petit:shell:state' / ':switch-tab' / ':set-settings' / ':set-startup' / ':set-always-on-top' / ':set-close-to-tray' / ':close-choice' / ':info' / ':copy-diagnostics' / ':open-logs' / ':capture-board' / ':alarm-relay' + 'petit:onboarding:set-done'
 
   app.whenReady().then(() => {
     // A44: 세션 수준 스펠체커 완전 차단 — webPreferences.spellcheck:false 만으로는
@@ -901,12 +1170,17 @@ function main() {
     // 창 구성은 하나뿐이다 — 단일 창 탭 모드 (rev.8: 분리 경로 폐지)
     createShellWindow(runtime.state, runtime.settings);
 
+    // 트레이 상주 (발주 #33 ①) — 기동 시 항상. 실패해도 앱은 계속 (내부에서 로그만)
+    createTray().catch(() => { /* createTray 내부가 전 경로 로그 처리 — 여기는 unhandledRejection 방지 */ });
+
     // 예약 자동 백업 체커 기동 — Pro(postit-license 검증) + 설정 auto 일 때만 실행된다.
     // 창 생성 뒤에 시작해야 첫 체크가 저장소를 읽을 앱 페이지를 찾을 수 있다 (backup.js).
     startBackupScheduler();
   });
 
-  // 창을 닫으면 앱 종료 (창은 하나뿐 — 그 창 닫기 = 앱 종료 계약)
+  // 창을 닫으면 앱 종료 (창은 하나뿐 — 그 창 닫기 = 앱 종료 계약).
+  // closeToTray 상태에서는 close 가 인터셉트되어 창이 닫히지 않으므로 여기 오지 않는다 —
+  // 여기 도달 = 진짜 닫힘(종료 선택·인터셉트 우회) = 종료가 맞다 (발주 #33 ①).
   app.on('window-all-closed', () => {
     app.quit();
   });

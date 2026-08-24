@@ -12,6 +12,11 @@
 >
 > **이 파일과 `en/` 캡션 컷은 삭제하지 않는다** — **UI 영문화 발주 이후 그대로 사용**한다.
 > 그때 아래 본문의 사실(단일 창 탭 모드 · 무료/광고 없음/로그인 없음)과 검색어를 다시 검산할 것.
+>
+> **상표 표기 정리 2026-08-24 (발주 #33-4).** 'Post-it' 은 3M 의 등록상표라 본문에서 전면 제거하고
+> **'Sticky-Note Wall' / 'sticky note'** 로 교체했다 (국문판과 동일 원칙 — 영문 독자에게는 한국어 탭
+> 이름("포스트잇 월")이 어차피 문자열로 일치하지 않으므로 0회로 정리). UI 영문화 발주에서 탭의 영문
+> 표기를 정할 때도 'Post-it' 은 쓰지 않는다.
 
 ---
 
@@ -24,7 +29,7 @@ Free, no ads, no sign-in — your desk's cork board, moved to your screen: a coz
 **It's free. No ads, no sign-up, no login, no server.** It works exactly the same with the internet unplugged.
 
 PetitCalendar is a little desktop diary that lives in **one window with two tabs** — a Calendar and a
-Post-it Wall. Switch tabs and whatever you were typing is still there; there is only ever one window,
+Sticky-Note Wall. Switch tabs and whatever you were typing is still there; there is only ever one window,
 so your desktop never gets crowded.
 
 Pin colorful sticky notes to a cork board, drag them anywhere they feel right, and dress them up
@@ -45,8 +50,8 @@ Small but dependable — pin today onto your board with PetitCalendar.
 
 ## Key features
 
-- Post-it Wall: free placement · 5-color palette · checklists · photo notes · multiple boards · note search
+- Sticky-Note Wall: free placement · 5-color palette · checklists · photo notes · multiple boards · note search
 - Calendar: month/week views · holidays · lunar dates · repeating events · D-day badges · reminders **while the app is open**
 - Decorating: background presets · emoji & photo stickers · masking tape · picture frames
-- One window, two tabs: Calendar ↔ Post-it Wall, with your work kept as you switch
+- One window, two tabs: Calendar ↔ Sticky-Note Wall, with your work kept as you switch
 - Offline-complete: zero external requests — everything stays on your PC. Free, no ads, no login

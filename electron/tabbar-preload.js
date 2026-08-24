@@ -69,6 +69,15 @@ const petitShellApi = {
   },
 
   /**
+   * 닫을 때 트레이로 보내기 (발주 #33 ①) — 인자는 boolean 으로 정규화한다.
+   * shell-settings.json 의 additive 필드 closeToTray 에 영속된다
+   * (부재 = false = 현행 동작: X = 종료). 응답은 셸 상태 페이로드({ ok, …, closeToTray }).
+   */
+  setCloseToTray: function (on) {
+    return ipcRenderer.invoke('petit:shell:set-close-to-tray', on === true);
+  },
+
+  /**
    * main → 탭바 상태 push 구독 — 탭바 요청 없이 바뀐 셸 상태(단축키 탭 전환,
    * 백그라운드 캘린더의 일정 알림 배지 누적/해제, 앱 설정 모달 쪽 자동 실행 토글)를
    * 받아 표시를 갱신한다.

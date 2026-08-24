@@ -19,8 +19,17 @@
 //     구매 채널 0건 상태의 잠금 폐지). 주기는 매일 1회(앱 실행 중 체크), 테스트 훅
 //     PETIT_BACKUP_INTERVAL_MS 로 단축 가능. 아래 서명 재검증 경로는 status().pro
 //     보고용으로만 남아 있고 어떤 기능도 잠그지 않는다 (Pro 재출시 대비 보존).
-//   - 설정 파일: userData\backup-config.json { folder, includeImages, auto, lastAutoAt }
-//     — 손상 시 크래시 없이 기본값 강등 (아키텍처 원칙 5 준용).
+//   - 설정 파일: userData\backup-config.json { folder, includeImages, auto, lastAutoAt,
+//     defaultNoticeAck, autoPromptAck, lastAutoResult } — 손상 시 크래시 없이 기본값 강등
+//     (아키텍처 원칙 5 준용). lastAutoResult 는 additive 필드 (발주 #33 ④):
+//     { ok, at, error? } — 마지막 "자동" 백업 결과의 영속. 부재 = 아직 자동 백업 없음.
+//   - 자동 백업 실패 시 lastAutoAt 을 갱신하지 않는다 (발주 #33 ④ — 재채점 I7 결함 수정:
+//     실패했는데 lastAutoAt 이 갱신되면 같은 날 재시도가 없다). 대신 세션 메모리 지수
+//     백오프(최소 1분·간격 상한)로 실패 연타를 막고, 다음 체크에서 재시도한다.
+//   - [복원] 파일 선택 (발주 #33 ④): 'petit:backup:pick-restore' — dialog 로 .json 을 골라
+//     원문 텍스트를 돌려준다 (크기 상한 64MB, JSON 파싱·적용은 렌더러(앱) 몫).
+//     백업 파일은 앱 내보내기와 동형(위 형식 주석·buildCollectScript)이라 앱의 가져오기
+//     경로가 그대로 복원 경로다 — preload 가 CustomEvent 계약으로 앱에 전달한다.
 //
 // A44: 이 파일은 http/https/net/dns/dgram/tls 를 일절 require 하지 않는다.
 //      (crypto 는 서명 검증용 — 네트워크 모듈 아님. 소켓 0건 유지.)
@@ -91,7 +100,9 @@ function sanitizeConfig(v) {
   // 사용자가 답했는지 (감사 잔여 조건 ③ — 기본값 ON 은 A45 fresh 계약과 충돌하므로
   // "1회 명시 선택" 안을 채택. 켜기/나중에 어느 쪽이든 답하면 다시 묻지 않고,
   // 답 없이 종료하면 다음 실행에 다시 묻는다)
-  const out = { folder: null, includeImages: false, auto: false, lastAutoAt: 0, defaultNoticeAck: false, autoPromptAck: false };
+  // lastAutoResult: additive 필드 (발주 #33 ④) — 마지막 자동 백업 결과 { ok, at, error? }.
+  // 부재·비정형 = null = 아직 자동 백업이 돈 적 없음 (기본 동작 불변).
+  const out = { folder: null, includeImages: false, auto: false, lastAutoAt: 0, defaultNoticeAck: false, autoPromptAck: false, lastAutoResult: null };
   if (v && typeof v === 'object') {
     if (typeof v.folder === 'string' && v.folder.trim() !== '') out.folder = v.folder;
     out.includeImages = v.includeImages === true;
@@ -99,6 +110,11 @@ function sanitizeConfig(v) {
     if (Number.isFinite(v.lastAutoAt) && v.lastAutoAt > 0) out.lastAutoAt = v.lastAutoAt;
     out.defaultNoticeAck = v.defaultNoticeAck === true;
     out.autoPromptAck = v.autoPromptAck === true;
+    const r = v.lastAutoResult;
+    if (r && typeof r === 'object' && typeof r.ok === 'boolean' && Number.isFinite(r.at) && r.at > 0) {
+      out.lastAutoResult = { ok: r.ok, at: r.at };
+      if (typeof r.error === 'string' && r.error !== '') out.lastAutoResult.error = r.error.slice(0, 200);
+    }
   }
   return out;
 }
@@ -406,6 +422,10 @@ let schedTimer = null;
 // rev.9 무료 단독 출시판(감사 권고 #24·#25): 예약 자동 백업의 라이선스 게이트를 폐지했다.
 // auto 가 켜져 있으면 라이선스 여부와 무관하게 주기마다 돈다 — 무료 사용자에게 자동
 // 백업이 없는 것이 이 앱의 최대 데이터 유실 리스크였기 때문이다.
+// 실패 백오프 (발주 #33 ④ — 세션 메모리): 실패 시 lastAutoAt 을 갱신하지 않아 재시도가
+// 살아 있되, 최소 1분에서 시작해 지수적으로(간격 상한) 늘려 실패 연타를 막는다.
+const autoFail = { streak: 0, nextRetryAt: 0 };
+
 async function checkAutoBackup() {
   try {
     if (bkState.running) return;
@@ -414,9 +434,27 @@ async function checkAutoBackup() {
     const iv = intervalMs();
     const now = Date.now();
     if (now - (cfg.lastAutoAt || 0) < iv) return;
-    await runBackup('auto', null);
-    // 실패해도 다음 주기까지 대기 — 실패 연타로 폴더·디스크를 괴롭히지 않는다
-    cfg.lastAutoAt = Date.now();
+    if (now < autoFail.nextRetryAt) return; // 직전 실패 — 백오프 대기 중
+    const res = await runBackup('auto', null);
+    if (res && res.ok === true) {
+      autoFail.streak = 0;
+      autoFail.nextRetryAt = 0;
+      cfg.lastAutoAt = Date.now();
+      cfg.lastAutoResult = { ok: true, at: Date.now() };
+      saveConfig(cfg);
+      return;
+    }
+    // 실패: lastAutoAt 미갱신 (발주 #33 ④ — 다음 체크에서 재시도되게 한다) + 결과 영속.
+    // 백오프: min(간격, max(1분, min(간격,10분)) × 2^(연속실패-1)) — 간격이 짧은 테스트
+    // 환경(PETIT_BACKUP_INTERVAL_MS)에서도 간격을 넘지 않는다.
+    autoFail.streak += 1;
+    const base = Math.max(60 * 1000, Math.min(iv, 10 * 60 * 1000));
+    autoFail.nextRetryAt = Date.now() + Math.min(iv, base * Math.pow(2, autoFail.streak - 1));
+    cfg.lastAutoResult = {
+      ok: false,
+      at: Date.now(),
+      error: String((res && res.reason) || '알 수 없는 오류').slice(0, 200)
+    };
     saveConfig(cfg);
   } catch (_err) { /* 예약 체크 실패는 조용히 다음 주기로 */ }
 }
@@ -457,6 +495,9 @@ function statusPayload(pro) {
     pro: pro === true,
     intervalMs: intervalMs(),
     lastAutoAt: cfg.lastAutoAt || 0,
+    // 마지막 자동 백업 결과 (발주 #33 ④ — 영속값. bkState.last 는 메모리 전용이라 재기동 후
+    // 실패 사실이 사라지는 결함이 있었다): { ok, at, error? } 또는 null(아직 없음)
+    lastAutoResult: cfg.lastAutoResult || null,
     running: bkState.running,
     last: bkState.last
   };
@@ -559,6 +600,48 @@ function registerBackupIpc() {
     cfg.includeImages = enabled === true;
     saveConfig(cfg);
     return { ok: true, includeImages: cfg.includeImages };
+  });
+
+  // [복원] 파일 선택 (발주 #33 ④) — 네이티브 파일 대화상자로 백업 .json 하나를 골라
+  // 원문 텍스트를 돌려준다. JSON 파싱·검증·적용은 렌더러(앱 가져오기 경로) 몫이다.
+  // 렌더러가 임의 경로를 지정할 수 없다 — 경로는 언제나 사용자가 대화상자에서 고른다
+  // (A49 화이트리스트 채널 원칙). 크기 상한 64MB (백업 파일은 이미지 포함이어도 이하).
+  ipcMain.handle('petit:backup:pick-restore', async (event) => {
+    assertTrustedSender(event);
+    const RESTORE_MAX_BYTES = 64 * 1024 * 1024;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    let res;
+    try {
+      res = await dialog.showOpenDialog(win, {
+        title: '복원할 백업 파일 선택',
+        defaultPath: effectiveFolder(),
+        buttonLabel: '이 파일로 복원',
+        filters: [{ name: 'JSON 백업 파일', extensions: ['json'] }],
+        properties: ['openFile']
+      });
+    } catch (_err) {
+      return { ok: false, reason: '파일 선택 창을 열지 못했어요.' };
+    }
+    if (!res || res.canceled || !res.filePaths || !res.filePaths[0]) {
+      return { ok: true, canceled: true };
+    }
+    const file = res.filePaths[0];
+    let st = null;
+    try {
+      st = fs.statSync(file);
+    } catch (err) {
+      return { ok: false, reason: '파일을 읽지 못했어요: ' + String((err && err.code) || err) };
+    }
+    if (!st.isFile() || st.size > RESTORE_MAX_BYTES) {
+      return { ok: false, reason: '파일이 너무 크거나 일반 파일이 아니에요 (최대 64MB).' };
+    }
+    let text = null;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch (err) {
+      return { ok: false, reason: '파일을 읽지 못했어요: ' + String((err && err.code) || err) };
+    }
+    return { ok: true, canceled: false, name: path.basename(file), text };
   });
 }
 

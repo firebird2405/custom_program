@@ -84,7 +84,10 @@ const petitApi = {
     // 기본 폴더 1회 안내 확인 (발주 #24)
     ackNotice: function () { return ipcRenderer.invoke('petit:backup:ack-notice'); },
     // 첫 실행 자동 백업 선택 카드의 "나중에" — 답만 기록 (감사 잔여 조건 ③)
-    ackAutoPrompt: function () { return ipcRenderer.invoke('petit:backup:ack-auto-prompt'); }
+    ackAutoPrompt: function () { return ipcRenderer.invoke('petit:backup:ack-auto-prompt'); },
+    // [복원] 파일 선택 (발주 #33 ④) — main dialog 로 백업 .json 을 골라 원문을 돌려받는다:
+    // { ok, canceled? , name?, text?, reason? }. 적용은 앱 수신부 몫 (아래 복원 계약 주석).
+    pickRestore: function () { return ipcRenderer.invoke('petit:backup:pick-restore'); }
   },
   // 셸 정보·진단·창 조작 (발주 #28·#30·#31) — 전부 로컬 처리, 외부 전송 0.
   shell: {
@@ -97,7 +100,18 @@ const petitApi = {
     /** 항상 위 토글 — 적용 후 실측 상태를 되돌려준다 */
     setAlwaysOnTop: function (on) { return ipcRenderer.invoke('petit:shell:set-always-on-top', on === true); },
     /** 보드를 그림으로 — 'clipboard'(기본) 또는 'file' */
-    captureBoard: function (mode) { return ipcRenderer.invoke('petit:shell:capture-board', mode === 'file' ? 'file' : 'clipboard'); }
+    captureBoard: function (mode) { return ipcRenderer.invoke('petit:shell:capture-board', mode === 'file' ? 'file' : 'clipboard'); },
+    /** 닫을 때 트레이로 보내기 (발주 #33 ①) — shell-settings.json additive 필드에 영속 */
+    setCloseToTray: function (on) { return ipcRenderer.invoke('petit:shell:set-close-to-tray', on === true); },
+    /** 닫기 1회 선택 카드의 응답 (발주 #33 ①) — { tray, remember } 또는 { dismiss:true } */
+    closeChoice: function (choice) {
+      const c = choice && typeof choice === 'object' ? choice : {};
+      return ipcRenderer.invoke('petit:shell:close-choice', {
+        tray: c.tray === true,
+        remember: c.remember !== false,
+        dismiss: c.dismiss === true
+      });
+    }
   },
   startup: {
     // 윈도우 시작 시 자동 실행 — main 이 app.getLoginItemSettings/setLoginItemSettings 로
@@ -1167,11 +1181,190 @@ function initOnboarding() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 닫기 1회 선택 카드 (발주 #33 ①)
+// main 의 닫기 인터셉트가 'petit:shell:close-ask' 로 요청한다: X 를 눌렀고
+// closeToTray=false·closeAskAck=false 인 첫 회에만 온다 (활성 앱 뷰 1곳).
+// [트레이에 두기] = closeToTray:true 저장 후 창 hide / [완전히 종료] = quit.
+// "다시 묻지 않음"(기본 체크)을 끄면 답을 기록하지 않아 다음 X 때 다시 묻는다.
+// 비모달 카드 — window.confirm 금지 조항 준수 (자동 백업 선택 카드 관용구 재사용).
+// 답 없이 30초가 지나면 접고 main 의 대기만 푼다 (다음 X 때 다시 묻는다).
+// ────────────────────────────────────────────────────────────────────────────
+
+let closeAskCard = null;
+
+function showCloseAskCard() {
+  if (!document.body) {
+    // 아직 카드 띄울 DOM 이 없다 — main 대기만 풀어 다음 X 가 기본 경로로 가게 한다
+    petitApi.shell.closeChoice({ dismiss: true }).catch(function () { /* 무해 */ });
+    return;
+  }
+  if (closeAskCard && closeAskCard.isConnected) return; // 이미 떠 있다
+
+  const card = el('div', {
+    ...CARD_SKIN,
+    position: 'fixed',
+    left: '50%',
+    bottom: '24px',
+    transform: 'translateX(-50%)',
+    zIndex: '2147483450',              // 온보딩 카드(…500)보다 아래, 힌트(…400)보다 위
+    maxWidth: '340px',
+    padding: '12px 14px',
+    pointerEvents: 'auto'
+  });
+  card.setAttribute('data-close-ask', '');
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-label', '닫기 동작 선택');
+  closeAskCard = card;
+
+  card.appendChild(el('p', { margin: '0 0 8px', fontSize: '13.5px' },
+    '닫아도 일정 알림을 받으려면 트레이에 내려 둘 수 있어요.'));
+
+  const rememberLabel = el('label', {
+    display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px',
+    fontSize: '12.5px', cursor: 'pointer', color: '#6b5d49'
+  });
+  const rememberChk = document.createElement('input');
+  rememberChk.type = 'checkbox';
+  rememberChk.checked = true;          // 기본: 다시 묻지 않음 (1회 선택 계약)
+  rememberLabel.appendChild(rememberChk);
+  rememberLabel.appendChild(el('span', undefined, '다시 묻지 않음'));
+  card.appendChild(rememberLabel);
+
+  const row = el('div', { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
+  const btnQuit = btnEl({ ...GHOST_BTN, padding: '6px 12px', borderRadius: '9px', fontSize: '13px' }, '완전히 종료');
+  const btnTray = btnEl({
+    font: 'inherit', fontSize: '13px', padding: '6px 14px', borderRadius: '9px',
+    border: '1px solid #d8b24a', background: '#ffd977', color: '#4a3a10',
+    cursor: 'pointer', fontWeight: '600'
+  }, '트레이에 두기');
+  row.appendChild(btnQuit);
+  row.appendChild(btnTray);
+  card.appendChild(row);
+
+  let idleTimer = null;
+  const close = function () {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    try { if (card.isConnected) card.remove(); } catch (_err) { /* 무해 */ }
+    if (closeAskCard === card) closeAskCard = null;
+  };
+  idleTimer = setTimeout(function () {
+    close();
+    petitApi.shell.closeChoice({ dismiss: true }).catch(function () { /* 무해 */ });
+  }, 30000);
+
+  const answer = function (tray) {
+    close();
+    petitApi.shell.closeChoice({ tray: tray === true, remember: rememberChk.checked === true })
+      .catch(function () { /* 브리지 실패 — 다음 X 는 기본 경로 */ });
+  };
+  btnTray.addEventListener('click', function () { answer(true); });
+  btnQuit.addEventListener('click', function () { answer(false); });
+
+  document.body.appendChild(card);
+}
+
+ipcRenderer.on('petit:shell:close-ask', function () {
+  try {
+    showCloseAskCard();
+  } catch (_err) {
+    // 카드 실패 — main 대기를 풀어 다음 X 가 기본(종료) 경로로 가게 한다
+    petitApi.shell.closeChoice({ dismiss: true }).catch(function () { /* 무해 */ });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 자동 백업 실패 기동 알림 (발주 #33 ④ — 재채점 I7)
+// 마지막 "자동" 백업이 실패로 영속돼 있으면(backup-config.json lastAutoResult) 기동 시
+// 1회, 활성 탭 페이지에서만 카드로 알린다. 자동 백업이 꺼져 있으면 말하지 않는다.
+// 첫 실행 자동 백업 선택 카드(auto=false 일 때만)와 조건이 배타라 자리(좌하단)가 안 겹친다.
+// ────────────────────────────────────────────────────────────────────────────
+
+let backupFailNoticeShown = false;     // 세션당 1회
+
+/** 타임스탬프 → "M월 D일 HH:MM" (실패 시 빈 문자열 — 표기만 생략) */
+function fmtBackupWhen(t) {
+  try {
+    const d = new Date(t);
+    if (!Number.isFinite(d.getTime())) return '';
+    const p2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  } catch (_err) { return ''; }
+}
+
+function maybeShowBackupFailureNotice() {
+  if (backupFailNoticeShown) return;
+  setTimeout(function () {
+    if (backupFailNoticeShown || onboardingActive || !document.body) return;
+    Promise.all([petitApi.backup.status(), petitApi.startup.status()]).then(function (rs) {
+      const st = rs[0];
+      const sh = rs[1];
+      if (!st || !st.ok || st.auto !== true) return;               // 자동 백업 꺼짐 — 말할 것 없음
+      const r = st.lastAutoResult;
+      if (!r || r.ok !== false) return;                            // 실패 상태가 아니다
+      if (sh && sh.ok && sh.activeTab && sh.activeTab !== PAGE) return; // 활성 탭 페이지 1곳만
+      if (backupFailNoticeShown || onboardingActive) return;
+      backupFailNoticeShown = true;
+
+      const card = el('div', {
+        ...CARD_SKIN,
+        position: 'fixed',
+        left: '16px',
+        bottom: '16px',
+        zIndex: '99990',                 // 앱 모달(100000+) 아래
+        maxWidth: '320px',
+        padding: '12px 14px',
+        pointerEvents: 'auto'
+      });
+      card.setAttribute('data-backup-fail-notice', '');
+      card.setAttribute('role', 'alert');
+      const when = fmtBackupWhen(r.at);
+      card.appendChild(el('p', { margin: '0 0 10px', fontSize: '13.5px' },
+        '⚠️ 자동 백업이 실패하고 있어요' + (when ? ' (마지막 시도 ' + when + ')' : '') +
+        '. 백업 폴더를 확인해 주세요.'));
+
+      const row = el('div', { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
+      const btnClose = btnEl({ ...GHOST_BTN, padding: '6px 12px', borderRadius: '9px', fontSize: '13px' }, '닫기');
+      const btnOpen = btnEl({
+        font: 'inherit', fontSize: '13px', padding: '6px 14px', borderRadius: '9px',
+        border: '1px solid #d8b24a', background: '#ffd977', color: '#4a3a10',
+        cursor: 'pointer', fontWeight: '600'
+      }, '백업 설정 열기');
+      row.appendChild(btnClose);
+      row.appendChild(btnOpen);
+      card.appendChild(row);
+
+      const close = function () { try { if (card.isConnected) card.remove(); } catch (_err) { /* 무해 */ } };
+      const idle = setTimeout(close, 30000);
+      btnClose.addEventListener('click', function () { clearTimeout(idle); close(); });
+      btnOpen.addEventListener('click', function () {
+        clearTimeout(idle);
+        close();
+        // 앱 설정을 연다 (양 앱 공통 #settingsBtn) — [백업] 섹션 상태 줄에 실패 상세가 있다
+        try {
+          const b = document.getElementById('settingsBtn');
+          if (b) b.click();
+        } catch (_err) { /* 열기 실패 — 카드만 닫는다 */ }
+      });
+      document.body.appendChild(card);
+    }).catch(function () { /* 브리지 실패 — 다음 기동에 다시 */ });
+  }, 3200);                              // 앱 초기 렌더·다른 기동 카드가 자리 잡은 뒤에
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 백업 UI (양 창 설정 패널 — 발주: 클라우드 폴더 백업 + Pro 예약 자동 백업)
 // 훅: [data-backup-section] 섹션 / [data-backup-folder] 폴더 표시 /
 //     [data-backup-choose] 폴더 변경(네이티브 폴더 대화상자 — main dialog) /
 //     [data-backup-now] 지금 백업 / [data-backup-images] 이미지 포함 옵션 /
-//     [data-backup-auto] 예약 토글 / [data-backup-status] 상태 줄.
+//     [data-backup-auto] 예약 토글 / [data-backup-status] 상태 줄 /
+//     [data-backup-restore] 복원 파일 선택 (발주 #33 ④).
+//
+// [복원] 계약 (발주 #33 ④ — 앱(postit.html·calendar.html) 수신부와의 문서화된 계약, 변경 금지):
+//   요청: preload 가 document 에 CustomEvent 'petit:restore-request' dispatch,
+//         detail = { text: string(백업 파일 원문), name: string(파일명) }
+//   응답: 앱이 document 에 CustomEvent 'petit:restore-result' dispatch,
+//         detail = { ok: boolean, message: string } — preload 가 상태 줄에 표시.
+//   5초 무응답 = 수신부 없는 구버전 화면 → "이 화면에서는 복원을 지원하지 않아요" 강등.
+//   (백업 파일은 앱 내보내기 v2 와 동형 — backup.js buildCollectScript 주석이 형식 정본.)
 // rev.9(무료 단독 출시판): 예약 자동 백업의 Pro 게이트·잠금 마크는 폐지됐다 —
 // 이 섹션의 모든 항목이 라이선스 없이 동작한다 (감사 권고 #24·#25, A45 ①②).
 // 원본 HTML 은 무수정(A42) — 전부 preload 주입. 저장 키는 건드리지 않는다 (main 이
@@ -1216,9 +1409,14 @@ function injectBackupSection() {
   const btnOpen = mkBtn('📂 폴더 열기');
   btnOpen.title = '백업 파일이 쌓이는 폴더를 탐색기로 열어요';
   btnOpen.setAttribute('data-backup-open', '');
+  // [복원] (발주 #33 ④) — 백업 파일을 골라 이 화면의 가져오기 경로로 원클릭 복원
+  const btnRestore = mkBtn('♻️ 복원…');
+  btnRestore.title = '백업 파일(.json)을 골라 데이터를 복원해요';
+  btnRestore.setAttribute('data-backup-restore', '');
   btnRow.appendChild(btnChoose);
   btnRow.appendChild(btnNow);
   btnRow.appendChild(btnOpen);
+  btnRow.appendChild(btnRestore);
   sec.appendChild(btnRow);
 
   // 이미지 포함 옵션 (기본 꺼짐 — 용량 안내)
@@ -1275,6 +1473,17 @@ function injectBackupSection() {
           setStatus(String(st.notice));
           try { await petitApi.backup.ackNotice(); } catch (_e) { /* 다음 기회에 다시 안내 */ }
         }
+        // 마지막 자동 백업 결과 (발주 #33 ④ — 영속값 표시. 실패는 1회 안내보다 우선한다)
+        const r = st.lastAutoResult;
+        if (r && typeof r === 'object' && typeof r.ok === 'boolean') {
+          const when = fmtBackupWhen(r.at);
+          if (r.ok === false) {
+            setStatus('⚠️ 마지막 자동 백업 실패' + (when ? ' (' + when + ')' : '') +
+              (r.error ? ' — ' + String(r.error) : ''));
+          } else if (!statusLine.textContent) {
+            setStatus('마지막 자동 백업: ' + (when || '완료') + ' 성공');
+          }
+        }
       }
     } catch (_err) { /* 브리지 실패 — UI 만 유지 */ }
     refreshing = false;
@@ -1313,6 +1522,54 @@ function injectBackupSection() {
       else setStatus(String((res && res.reason) || '폴더를 열지 못했어요.'));
     } catch (_err) { setStatus('폴더를 열지 못했어요.'); }
     btnOpen.disabled = false;
+  });
+
+  // ── [복원] (발주 #33 ④) — 파일 선택은 main, 적용은 앱 수신부 (위 복원 계약 주석) ──
+  let restoreWait = null;   // { timer } — 응답 대기 (5초 무응답 = 미지원 화면 강등)
+
+  document.addEventListener('petit:restore-result', function (ev) {
+    if (!restoreWait) return;                    // 요청한 적 없는 응답 — 무시
+    clearTimeout(restoreWait.timer);
+    restoreWait = null;
+    let d = null;
+    try { d = ev && ev.detail && typeof ev.detail === 'object' ? ev.detail : null; } catch (_err) { d = null; }
+    if (d && typeof d.message === 'string' && d.message !== '') setStatus(String(d.message));
+    else setStatus(d && d.ok === true ? '복원했어요.' : '복원하지 못했어요.');
+    btnRestore.disabled = false;
+  });
+
+  btnRestore.addEventListener('click', async function () {
+    if (restoreWait) return;                     // 응답 대기 중 — 중복 요청 금지
+    btnRestore.disabled = true;
+    setStatus('복원할 백업 파일을 고르는 중…');
+    try {
+      const res = await petitApi.backup.pickRestore();
+      if (!res || res.ok !== true) {
+        setStatus(String((res && res.reason) || '파일을 열지 못했어요.'));
+        btnRestore.disabled = false;
+        return;
+      }
+      if (res.canceled) {
+        setStatus('');
+        btnRestore.disabled = false;
+        return;
+      }
+      setStatus('"' + String(res.name || '') + '" 복원을 요청했어요…');
+      restoreWait = {
+        timer: setTimeout(function () {
+          restoreWait = null;
+          setStatus('이 화면에서는 복원을 지원하지 않아요');
+          btnRestore.disabled = false;
+        }, 5000)
+      };
+      document.dispatchEvent(new CustomEvent('petit:restore-request', {
+        detail: { text: String(res.text || ''), name: String(res.name || '') }
+      }));
+    } catch (_err) {
+      if (restoreWait) { clearTimeout(restoreWait.timer); restoreWait = null; }
+      setStatus('복원을 시작하지 못했어요.');
+      btnRestore.disabled = false;
+    }
   });
 
   imgChk.addEventListener('change', async function () {
@@ -1474,8 +1731,18 @@ function injectAlwaysTopSection() {
   row.appendChild(el('span', undefined, '항상 위에 두기'));
   sec.appendChild(row);
 
+  // 닫을 때 트레이로 보내기 (발주 #33 ①) — 탭바 드로어의 같은 항목과 채널 하나를 공유
+  const trayRow = el('label', { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', fontSize: '13px', cursor: 'pointer' });
+  const trayChk = document.createElement('input');
+  trayChk.type = 'checkbox';
+  trayChk.setAttribute('data-tray-toggle', '');
+  trayRow.appendChild(trayChk);
+  trayRow.appendChild(el('span', undefined, '닫을 때 트레이로 보내기'));
+  sec.appendChild(trayRow);
+
   const hint = el('p', { fontSize: '12.5px', lineHeight: '1.45', opacity: '0.8', margin: '5px 0 0' },
-    '다른 창을 열어도 쁘띠캘린더가 위에 남아요. 꾸며 둔 보드를 계속 보고 싶을 때 켜요.');
+    '다른 창을 열어도 쁘띠캘린더가 위에 남아요. 꾸며 둔 보드를 계속 보고 싶을 때 켜요. ' +
+    '트레이로 보내 두면 창을 닫아도 일정 알림이 계속 오고, 트레이 아이콘을 두 번 누르면 돌아와요.');
   hint.className = smallCls;
   sec.appendChild(hint);
 
@@ -1491,12 +1758,13 @@ function injectAlwaysTopSection() {
 
   function setStatus(msg) { statusLine.textContent = msg || ''; }
   function applyState(st) {
-    if (!st || typeof st.alwaysOnTop !== 'boolean') return;
-    chk.checked = st.alwaysOnTop;
+    if (!st || typeof st !== 'object') return;
+    if (typeof st.alwaysOnTop === 'boolean') chk.checked = st.alwaysOnTop;
+    if (typeof st.closeToTray === 'boolean') trayChk.checked = st.closeToTray; // 발주 #33 ①
   }
   async function refreshUi() {
-    // startup.status() = 셸 상태 채널(petit:shell:state) — 자동 실행·항상 위·버전이 한
-    // 페이로드로 온다 (표면마다 채널을 늘리지 않는다 — A49③ 화이트리스트 최소화).
+    // startup.status() = 셸 상태 채널(petit:shell:state) — 자동 실행·항상 위·트레이·버전이
+    // 한 페이로드로 온다 (표면마다 채널을 늘리지 않는다 — A49③ 화이트리스트 최소화).
     try { applyState(await petitApi.startup.status()); } catch (_err) { /* 표시만 유지 */ }
   }
 
@@ -1519,6 +1787,26 @@ function injectAlwaysTopSection() {
       await refreshUi();
     }
     chk.disabled = false;
+  });
+
+  // 닫을 때 트레이로 보내기 (발주 #33 ①) — 항상 위 토글과 같은 관용구
+  trayChk.addEventListener('change', async function () {
+    const want = trayChk.checked;
+    trayChk.disabled = true;
+    try {
+      const res = await petitApi.shell.setCloseToTray(want);
+      applyState(res);
+      if (res && res.ok === true) {
+        setStatus(want ? '이제 X 를 눌러도 트레이에 남아 알림을 계속 받아요.' : '이제 X 를 누르면 완전히 종료돼요.');
+      } else {
+        setStatus('닫기 동작을 바꾸지 못했어요.');
+        await refreshUi();
+      }
+    } catch (_err) {
+      setStatus('닫기 동작을 바꾸지 못했어요.');
+      await refreshUi();
+    }
+    trayChk.disabled = false;
   });
 
   // 다른 표면(탭바 드로어)에서 바뀐 값 즉시 반영 — main 이 모든 표면에 push 한다
@@ -1712,10 +2000,11 @@ function initShellUi() {
   if (!PAGE || !document.body) return;
   initMigrateUi().catch(function () { /* 브리지 실패 시 셸 UI 만 생략 — 앱 무영향 */ });
   if (PAGE === 'postit') initOnboarding();
-  initBackupUi();   // 양 앱 설정 패널에 [백업] 섹션 주입
+  initBackupUi();   // 양 앱 설정 패널에 [백업] 섹션 주입 (+ [복원] — 발주 #33 ④)
   initStartupUi();  // 양 앱 설정 패널에 [시작 프로그램] 섹션 주입 (탭바 드로어와 동기)
-  initShellInfoUi();// [창](항상 위) + [앱 정보·문의](버전·진단·로그) 섹션 주입
-  initAlarmRelay(); // 캘린더 페이지 — 백그라운드 탭 알림 릴레이 (탭바 배지)
+  initShellInfoUi();// [창](항상 위·트레이) + [앱 정보·문의](버전·진단·로그) 섹션 주입
+  initAlarmRelay(); // 캘린더 페이지 — 백그라운드 탭 알림 릴레이 (탭바 배지 + OS 알림 승격)
+  maybeShowBackupFailureNotice(); // 자동 백업 실패 영속 상태의 기동 1회 알림 (발주 #33 ④)
 }
 
 if (document.readyState === 'loading') {

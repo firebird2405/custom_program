@@ -2351,6 +2351,7 @@ html[data-pro-theme="lavender"] #board {
   var undoStack = [];   // 떼어낸 노트 되돌리기 버퍼 — 메모리 전용 (저장소에 남기지 않음, A20) — 활성 보드 몫
   var deletedIdsCache = {};   // 보드별 deletedIds 보관 (전환 시 교체)
   var undoStacks = {};        // 보드별 undo 버퍼 보관
+  var undoEmptyHinted = false;   // Ctrl+Z 빈 스택 안내는 세션당 1회만 (소음 최소 — 발주 #33-2)
   var boards = ['b1'];  // 보드 id 목록 (b1 = 기존 postit-notes)
   var boardId = 'b1';   // 활성 보드
   var activeId = null;
@@ -5800,7 +5801,9 @@ html[data-pro-theme="lavender"] #board {
   }
 
   /* 가져오기 본체: 신형식({version, boards:{키:노트[]}}) = 전 보드 병합 / 구형식(배열·{notes:[]}) = 활성 보드 */
+  var lastImportCount = 0;   /* 직전 가져오기의 병합 메모 수 — 셸 복원 응답(발주 #33-2 ②)이 읽는다 */
   function handleImportPayload(obj) {
+    lastImportCount = 0;
     if (obj && typeof obj === 'object' && !Array.isArray(obj) &&
         obj.boards && typeof obj.boards === 'object' && !Array.isArray(obj.boards)) {
       var total = 0;
@@ -5818,11 +5821,13 @@ html[data-pro-theme="lavender"] #board {
       boards = discoverBoards();   /* 새로 생긴 보드 키를 탭에 반영 */
       renderTabs();
       importDecorPayload(obj);     /* v2 확장: 꾸미기 레이아웃·이미지 복원 (없으면 무시) */
+      lastImportCount = total;
       return '보드 ' + touched + '개에서 메모 ' + total + '개를 가져왔어요.';
     }
     var list2 = extractNoteList(obj);
     if (!list2) return null;
-    return '메모 ' + importNotes(list2) + '개를 가져왔어요.';
+    lastImportCount = importNotes(list2);
+    return '메모 ' + lastImportCount + '개를 가져왔어요.';
   }
 
   importFile.addEventListener('change', function () {
@@ -5846,6 +5851,51 @@ html[data-pro-theme="lavender"] #board {
       importFile.value = '';
     };
     reader.readAsText(file);
+  });
+
+  /* ── 셸 [복원] 원클릭 수신부 (발주 #33-2 ②) ──
+     Electron 셸이 백업 파일 원문을 document CustomEvent 'petit:restore-request'
+     (detail = {text: 파일 원문 JSON, name: 파일명}) 로 넘기고, 앱은 처리 결과를
+     'petit:restore-result' (detail = {ok, message}) 로 되쏜다 — 계약 고정.
+     페이로드는 electron/backup.js buildCollectScript 의 postit 몫으로, doExport v2 와 동형
+     ({app:"postit", version:2, boards:{저장키:노트[]}, decor?, decorImages?}) — 기존 가져오기
+     병합(handleImportPayload)을 그대로 재사용해 비파괴 병합한다 (중복 생성 없음).
+     file:// 단독 실행(Edge 모드)에서는 아무도 이 이벤트를 쏘지 않는다 — 리스너만 상주, 기본 동작 영향 0. */
+  document.addEventListener('petit:restore-request', function (ev) {
+    var respond = function (ok, message) {
+      try {
+        document.dispatchEvent(new CustomEvent('petit:restore-result', { detail: { ok: ok, message: message } }));
+      } catch (err) { /* 응답 전송 실패는 조용히 — 앱 동작에는 영향 없음 */ }
+    };
+    try {
+      var det = ev && ev.detail;
+      var text = det && typeof det.text === 'string' ? det.text : '';
+      if (!text.trim()) { respond(false, '복원할 파일 내용이 비어 있어요.'); return; }
+      var obj = null;
+      try { obj = JSON.parse(text); } catch (err) {
+        respond(false, '백업 파일을 읽지 못했어요 — 올바른 JSON 파일이 아니에요.');
+        return;
+      }
+      /* 캘린더 전용 백업(calendar-backup-*.json: {version:2, events:{}, repeats:[]}) 구분 —
+         boards 없이 events/repeats 짝이 있으면 캘린더 몫이다 */
+      if (obj && typeof obj === 'object' && !Array.isArray(obj) && !obj.boards &&
+          (obj.app === 'calendar' ||
+           (obj.events && typeof obj.events === 'object' && !Array.isArray(obj.events) && Array.isArray(obj.repeats)))) {
+        respond(false, '이 파일은 캘린더 백업이에요 — 캘린더 탭에서 복원해 주세요.');
+        return;
+      }
+      var msg = handleImportPayload(obj);
+      if (msg === null) {
+        respond(false, '이 파일은 포스트잇 백업 형식이 아니에요.');
+        return;
+      }
+      refreshDataPanel();
+      var done = '포스트잇 ' + lastImportCount + '개를 복원했어요.';
+      showNotice(done);   /* 기존 토스트로도 안내 */
+      respond(true, done);
+    } catch (err) {
+      respond(false, '복원 중 문제가 생겼어요: ' + String((err && err.message) || err));
+    }
   });
 
   /* ── 복제·맨 앞으로 (A21 메뉴 동작) ── */
@@ -6689,6 +6739,32 @@ html[data-pro-theme="lavender"] #board {
   });
 
   document.addEventListener('keydown', function (e) {
+    /* Ctrl+Z(mac ⌘Z) → 기존 되돌리기 버퍼 연결 (발주 #33-2 ① — 재채점 I3).
+       편집 중(textarea/input/contenteditable)에는 브라우저 기본 텍스트 undo 에 양보한다 —
+       preventDefault 금지. Shift/Alt 조합(리두 등)은 스코프 밖이라 건드리지 않는다. */
+    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+      var ae = document.activeElement;
+      if (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT' || ae.isContentEditable)) return;
+      if (noticeEl.classList.contains('show') && !noticeUndoEl.hasAttribute('hidden')) {
+        /* 실행 취소 토스트가 떠 있으면 그 단추와 정확히 같은 코드 경로 — 토스트 정리 포함 */
+        e.preventDefault();
+        var wasDefault = !undoHandler;              /* 기본 경로(undoLastDelete)로 갈 클릭인가 */
+        var hadItems = undoStack.length > 0;
+        noticeUndoEl.click();
+        /* 기본 경로가 마지막 항목을 되살리면 토스트가 걷힌다 — 키보드 경로는 짧은 확인을 남긴다
+           (핸들러 있는 토스트는 각자 자기 안내를 띄우므로 여기서 덧대지 않는다) */
+        if (wasDefault && hadItems && !undoStack.length) showNotice('포스트잇 1개를 되살렸어요.');
+      } else if (undoStack.length) {
+        e.preventDefault();
+        undoLastDelete();
+        /* 마지막 항목이었으면 undoLastDelete 가 토스트를 걷는다 — 키보드 경로는 짧은 확인을 남긴다 */
+        if (!undoStack.length) showNotice('포스트잇 1개를 되살렸어요.');
+      } else if (!undoEmptyHinted) {
+        undoEmptyHinted = true;   /* 빈 스택은 무동작 — 최초 1회만 안내 (토스트 소음 금지) */
+        showNotice('되돌릴 항목이 없어요.');
+      }
+      return;
+    }
     if (e.key === 'Escape') {
       if (confirmPopEl) { closeConfirmPop(); return; }   /* 확인 팝오버만 먼저 닫는다 */
       if (nukki) { closeNukkiEditor(); return; }         /* 누끼 편집 카드만 먼저 닫는다 (스티커는 그대로) */

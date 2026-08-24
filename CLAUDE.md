@@ -8,7 +8,7 @@
 - 로컬 트랙: 발주 #1~#9b 완료 — 설정·꾸미기·삭제 확인·보드 이름·창 기억·탭 우클릭 메뉴까지. 상세는 `protocol/STATUS.md`.
 - **출시 트랙 v2 가동 중** (브랜드: **쁘띠캘린더/PetitCalendar**): Electron 셸(`electron/`) — **단일 창 탭 모드**(분리 폐지), 마이그레이션·온보딩·클라우드 폴더 백업·MSIX 아이콘 세트 완비. 상업 전환 승인됨(확정문 v2 — `protocol/COMMERCIAL.md`·`MARKET.md`).
 - **첫 출시는 무료 단독** (전문가 감사 B4 승인 — 발주 #25): Pro 잠금 UI 전면 비노출(`postit.html` `html.pro-hidden` 단일 플래그), 보드 무제한, 예약 자동 백업 무료. **라이선스 검증 코드·공개키·테스트 픽스처는 보존**(A45 ③) — Pro 재출시 때 `pro-hidden` 클래스만 걷으면 복귀한다. 상품 신규성 매니페스트 검사는 **A45-P 로 보류**.
-- **전문가 감사 반영 완료** — 발주 #22·#23·#24·#26~#31 (`protocol/EXPERT-REVIEW.md` Blocker B1~B10). 항목별 계량 채점은 `protocol/SCORE-AUDIT.md` (가중 45.5 → 51.8, 판정 "2주 연기" 유지).
+- **전문가 감사 반영 완료** — 발주 #22·#23·#24·#26~#31 (`protocol/EXPERT-REVIEW.md` Blocker B1~B10). 항목별 계량 채점은 `protocol/SCORE-AUDIT.md`(1차) · **`SCORE-AUDIT-2.md`(재채점 — 가중 45.5 → 52.9 실측, 판정 "조건부 제출 가능")**.
 - 채점표 **rev.9 (A1~A50, 무료 단독 출시판)** 가동 중 — 전체 88테스트 **86 green** (허용 red 1 = A48② 파트너센터 identity 대기, 허용 SKIP 1 = A50 MSIX).
 - 채점기 SHA256 기대값 `7a5d22f1…` SCORECARD 하단에 동결 기재(rev.9, 이중 계산 일치), A12 green. 잠금(deny) 복원 상태.
 - git: 원격 origin `github.com/firebird2405/custom_program` — push는 사용자 액션.

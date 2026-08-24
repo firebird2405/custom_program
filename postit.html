@@ -87,7 +87,8 @@ body {
 .sep { width: 1px; height: 26px; background: rgba(94,62,24,0.25); }
 /* 도구 그룹 — 같은 일을 하는 컨트롤끼리 한 덩이로 묶는다.
    컨트롤을 없애거나 숨기지 않는다: 배치·시각 위계만 바꾼다 (훅·핸들러·기본 동작 불변). */
-.tb-group { display: inline-flex; align-items: center; gap: 8px; }
+/* position:relative 은 검색 0건 힌트(.search-hint, 발주 #38)의 기준 상자 — 오프셋이 없어 레이아웃 불변 */
+.tb-group { position: relative; display: inline-flex; align-items: center; gap: 8px; }
 .tb-group + .tb-group { padding-left: 10px; border-left: 1px dashed rgba(94,62,24,0.28); }
 /* 3차 컨트롤(월 1회 미만): 자리는 지키되 무게만 낮춘다 — hover/focus 에서 온전히 돌아온다.
    opacity 는 0.7 미만으로 내리지 않는다 (가시성 판정·저시력 사용자 모두 보호). */
@@ -356,6 +357,11 @@ body {
 }
 /* 검색 비매칭: 숨기지 않고 흐리게 — 위치·저장은 그대로 (A24) */
 .pnote.dimmed { opacity: 0.22; }
+/* 검색 매치 승격 (발주 #38): 매칭 노트를 표시상만 앞으로 — 저장소의 z 값은 불변 (A24 저장소 불변).
+   9400 = 앞 스티커 레이어(9000)보다 위, 축포 레이어(9500)보다는 아래. 검색을 비우면 클래스 제거로 복귀. */
+.pnote.search-hit { z-index: 9400 !important; }
+/* 사진 전용 노트(텍스트 없음)는 글 검색으로 찾을 수 없으므로 흐림 대신 중간 가시성 (발주 #38) */
+.pnote.search-soft { opacity: 0.7; }
 .nhandle {
   position: absolute;
   top: 0;
@@ -1803,6 +1809,51 @@ html[data-pro-theme="lavender"] #board {
     inset 0 0 0 12px rgba(255,250,255,0.45),
     inset 0 0 90px rgba(90,70,130,0.3);
 }
+
+/* ── 보드 줌아웃 (발주 #36) ──
+   .zoom-wrap = 노트·스티커 레이어를 담는 배율 래퍼. 배율 100%(기본)에서는 인라인 스타일이
+   전혀 붙지 않아 transform 없음 = 스택 문맥·포함 블록·렌더가 현행과 동일하다 (A4·A23·A28 보호).
+   배율 s 에서는 width/height 를 (100/s)% 로 넓히고 scale(s) 로 줄여 창을 정확히 채운다 —
+   논리 보드 좌표계가 1/s 배로 커져 비겹침 수용량이 늘어난다. 저장 좌표에는 배율이 섞이지 않는다. */
+.zoom-wrap { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform-origin: 0 0; }
+/* 배율 배지 — 100%가 아닐 때만 표시(기본 hidden = fresh 렌더 불변). 클릭 = 100% 복귀. */
+.zoom-badge {
+  position: fixed;
+  right: 18px;
+  bottom: 16px;
+  z-index: 100001;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 14px 6px;
+  font-family: inherit;
+  font-size: 15px;
+  color: #fff8ec;
+  background: rgba(58,36,14,0.82);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(30,15,5,0.4), inset 0 0 0 1px rgba(255,255,255,0.18);
+}
+.zoom-badge:hover { background: rgba(58,36,14,0.95); }
+.zoom-badge[hidden] { display: none; }
+
+/* ── 검색 0건 힌트 (발주 #38) — 비모달·클릭 통과·기본 hidden (fresh 렌더 불변) ── */
+.search-hint {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 5;
+  white-space: nowrap;
+  font-size: 14px;
+  color: #6b4d2e;
+  background: linear-gradient(180deg, rgba(255,251,240,0.98), rgba(246,236,214,0.98));
+  border-radius: 9px;
+  padding: 5px 11px;
+  box-shadow: 0 6px 16px rgba(30,15,5,0.35), inset 0 0 0 1px rgba(255,255,255,0.65);
+  pointer-events: none;
+}
+.search-hint[hidden] { display: none; }
+
+/* ── 휴지통 (발주 #34) — 손상 백업 줄(.sp-crow) 관용구 재사용 + 시점·보드 메타 ── */
+.sp-tmeta { flex: none; font-size: 12px; opacity: 0.72; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -1826,6 +1877,8 @@ html[data-pro-theme="lavender"] #board {
     <!-- 그룹 2 · 찾기와 보드 (2차) — "지금 보고 있는 자리"를 고르는 것들 -->
     <div class="tb-group" role="group" aria-label="찾기와 보드">
       <input type="search" id="searchBox" class="search-box" data-search placeholder="🔍 메모 찾기" aria-label="메모 검색">
+      <!-- 검색 0건 힌트 (발주 #38) — 기본 hidden·pointer-events 없음: fresh 렌더·조작 불변 -->
+      <span class="search-hint" id="searchHint" data-search-hint role="status" aria-live="polite" hidden>일치하는 메모가 없어요</span>
       <span class="boards" id="boardSwitcher" data-board-switcher>
         <span class="board-tabs" id="boardTabs"></span>
         <button type="button" id="addBoardBtn" class="board-add" data-add-board title="새 보드 추가">＋ 보드</button>
@@ -1876,6 +1929,10 @@ html[data-pro-theme="lavender"] #board {
     <p class="w-hello">여기가 당신의 보드예요 🌼</p>
     <p class="w-line">＋ 로 붙이고 · 끌어서 옮기고 · 눌러서 고쳐요</p>
   </div>
+
+  <!-- 배율 배지 (발주 #36) — 100%가 아닐 때만 보인다(기본 hidden). 클릭 = 100% 복귀. -->
+  <button type="button" class="zoom-badge" id="zoomBadge" data-zoom-badge hidden
+          title="보드 배율 — 누르면 100%로 돌아가요">100%</button>
 </div>
 
 <div class="notice" id="notice" data-toast role="status" aria-live="polite">
@@ -2090,6 +2147,16 @@ html[data-pro-theme="lavender"] #board {
       <div id="spCorruptList"></div>
       <div class="sp-row"><button type="button" id="spCorruptClear" class="tool-btn sp-danger" hidden>🗑 모두 정리</button></div>
     </details>
+  </div>
+
+  <!-- 휴지통 (발주 #34) — 지운 메모 30일 보관. 목록 줄은 JS 가 textContent/createElement 로만 만든다.
+       훅: [data-trash-section](섹션) · [data-trash-list](목록) · [data-trash-item](줄, data-tid)
+           · [data-trash-restore]/[data-trash-delete](줄 단추) · [data-trash-clear](비우기) -->
+  <div class="sp-sec" data-spcat="data" data-trash-section>
+    <h3>🗑 휴지통</h3>
+    <p class="sp-small">지운 메모를 30일 동안 보관해요 — 여기서 되살릴 수 있어요. 30일이 지나면 스스로 사라져요.</p>
+    <div id="spTrashList" data-trash-list></div>
+    <div class="sp-row"><button type="button" id="spTrashClear" class="tool-btn sp-danger" data-trash-clear hidden>🗑 휴지통 비우기</button></div>
   </div>
 
   <div class="sp-sec sp-info" data-spcat="about">
@@ -2309,6 +2376,20 @@ html[data-pro-theme="lavender"] #board {
 
   var LS_QUOTA_BYTES = 5 * 1024 * 1024;   // localStorage 용량 게이지 기준 (file:// 오리진 추정치)
 
+  /* 휴지통 (발주 #34) — 지운 메모 30일 보관. 값은 substring 유출이 없도록 base64(UTF-8) 로 인코딩해
+     저장한다: 삭제 계약(A18·A20)의 "삭제 직후 전 localStorage 키에서 내용 부재" 단언과 양립하기 위함. */
+  var TRASH_KEY = 'postit-trash';
+  var TRASH_KEEP_DAYS = 30;                    // 보관 일수 — 지나면 자동 삭제
+  var TRASH_MAX_ITEMS = 200;                   // 항목 수 상한 — 넘으면 오래된 것부터 제거
+  var TRASH_MAX_CHARS = 700 * 1024;            // 저장 문자수 상한(≈1.4MB/UTF-16) — 사진 메모 폭주 방지
+  var TRASH_SWEEP_GAP_MS = 24 * 60 * 60 * 1000;   // 기동 후 하루 1회 만료 청소
+
+  /* 보드 줌아웃 (발주 #36) — 50%~100%, 기본 100%(fresh 렌더 불변). 저장은 postit-settings.zoom (보드별 %). */
+  var ZOOM_MIN_PCT = 50;
+  var ZOOM_MAX_PCT = 100;
+  var ZOOM_STEP_PCT = 5;
+  var ZOOM_FIT_MARGIN = 24;                    // [전체 보기] 여백 — 경계 상자 바깥 숨돌릴 틈
+
   /* 노트 자동 성장 상한(CSS max-height)을 수동 리사이즈 상한과 한 값으로 묶는다 —
      상한 숫자는 NOTE_MAX_PX 한 곳에만 있고 CSS 는 --note-max 로 받아 쓴다. */
   try { document.documentElement.style.setProperty('--note-max', NOTE_MAX_PX + 'px'); } catch (err) { /* 무시 */ }
@@ -2330,6 +2411,8 @@ html[data-pro-theme="lavender"] #board {
   var noteImageInput = document.getElementById('noteImageInput');
   var decorBgInput = document.getElementById('decorBgInput');
   var decorPhotoInput = document.getElementById('decorPhotoInput');
+  var zoomBadgeEl = document.getElementById('zoomBadge');
+  var searchHintEl = document.getElementById('searchHint');
 
   /* 꾸미기 레이어: 배경(z0)·스티커(z1)는 노트(z10+) 뒤에 깔린다 — [data-note] 계약과 무간섭.
      앞 레이어(z9000)는 opt-in — 스티커가 'front' 일 때만 그쪽에 들어간다 (기본은 예전 그대로 뒤). */
@@ -2344,6 +2427,16 @@ html[data-pro-theme="lavender"] #board {
   board.insertBefore(decorBgEl, board.firstChild);
   board.insertBefore(stickerLayer, decorBgEl.nextSibling);
   board.insertBefore(stickerLayerFront, stickerLayer.nextSibling);
+
+  /* 줌 래퍼 (발주 #36): 스티커 레이어·노트가 이 안에 들어간다. 배경(decor-bg)·툴바·배지·축포
+     레이어는 밖에 남아 배율과 무관하게 창 전체를 덮는다. 배율 100%(기본)에서는 인라인 스타일이
+     없어 transform 없음 — 스택 문맥·포함 블록·이벤트 경로가 현행과 완전히 동일하다. */
+  var zoomWrap = document.createElement('div');
+  zoomWrap.className = 'zoom-wrap';
+  zoomWrap.setAttribute('data-board-zoom', '');
+  board.insertBefore(zoomWrap, stickerLayerFront.nextSibling);
+  zoomWrap.appendChild(stickerLayer);
+  zoomWrap.appendChild(stickerLayerFront);
 
   var data = [];        // 로컬 노트 모델 [{id,text,color,x,y,rot,z,updatedAt,w?,h?,skin?,img?}]
   var els = {};         // id -> {root, textEl, ta, imgEl}
@@ -2364,6 +2457,9 @@ html[data-pro-theme="lavender"] #board {
   var noticeTimer = null;
   var searchQuery = '';
   var ctxOpen = false;
+  var zoom = 1;               /* 활성 보드 배율 (1 = 100%, fresh 기본) — 표시 전용, 저장 좌표에 불침투 (발주 #36) */
+  var trashSeq = 0;           /* 휴지통 항목 tid 일련 (발주 #34) — 메모리 전용 */
+  var lastTrashOk = true;     /* 마지막 휴지통 보관 성공 여부 — 삭제 토스트 문구 분기 */
 
   /* ── 꾸미기 상태 (postit-decor-layout — additive 신규 키, 보드별 저장) ── */
   var DECOR_KEY = 'postit-decor-layout';
@@ -2394,7 +2490,8 @@ html[data-pro-theme="lavender"] #board {
     tapePattern: 'default', /* default(무지) | stripe | dot — 꾸미기 */
     frameColor: 'default',  /* default(현행 월넛) | green | navy | rose — 꾸미기 */
     confirmDelete: 'off',   /* off(현행 — 즉시 삭제+실행 취소) | on(삭제 전 앱 내 확인) — [안전] */
-    notesHidden: 'off'      /* off(기본 — 포스트잇 표시) | on(보드 우클릭으로 시각적 숨김, 데이터 불변) */
+    notesHidden: 'off',     /* off(기본 — 포스트잇 표시) | on(보드 우클릭으로 시각적 숨김, 데이터 불변) */
+    zoom: {}                /* 보드별 배율 %(boardId → 50~99) — additive, 부재 = 100% (발주 #36) */
   };
   var SETTINGS = loadSettings();
   applySettings();
@@ -2402,6 +2499,7 @@ html[data-pro-theme="lavender"] #board {
   function loadSettings() {
     var s = {};
     Object.keys(SETTINGS_DEF).forEach(function (k) { s[k] = SETTINGS_DEF[k]; });
+    s.zoom = {};   /* 객체형 기본값은 매번 새로 — SETTINGS_DEF.zoom 공유·오염 방지 (발주 #36) */
     var raw = null;
     try { raw = localStorage.getItem(SETTINGS_KEY); } catch (err) { raw = null; }
     if (raw === null) return s;
@@ -2425,6 +2523,16 @@ html[data-pro-theme="lavender"] #board {
     if (v.confirmDelete === 'on' || v.confirmDelete === 'off') s.confirmDelete = v.confirmDelete;
     /* additive: 부재 = 'off'(표시) — 구버전 저장분·fresh 프로필은 언제나 "포스트잇 보임" */
     if (v.notesHidden === 'on' || v.notesHidden === 'off') s.notesHidden = v.notesHidden;
+    /* 보드별 배율 (발주 #36): 항상 새 객체 — 기본 객체(SETTINGS_DEF.zoom)를 공유·오염하지 않는다.
+       100 은 저장하지 않는 값(부재 = 100%)이라 범위는 50~99 로 본다. */
+    s.zoom = {};
+    if (v.zoom && typeof v.zoom === 'object' && !Array.isArray(v.zoom)) {
+      Object.keys(v.zoom).forEach(function (bk) {
+        var zv = v.zoom[bk];
+        if (/^b\d+$/.test(bk) && typeof zv === 'number' && isFinite(zv) &&
+            zv >= ZOOM_MIN_PCT && zv < ZOOM_MAX_PCT) s.zoom[bk] = Math.round(zv);
+      });
+    }
     return s;
   }
 
@@ -2456,6 +2564,7 @@ html[data-pro-theme="lavender"] #board {
     /* 포스트잇 모두 숨기기 (기본 off = 클래스 없음 → 현행 렌더 그대로) */
     b.classList.toggle('notes-hidden', SETTINGS.notesHidden === 'on');
     paintHiddenChip();
+    applyBoardZoom();    /* 보드 배율 (발주 #36) — 기본 100% = transform 없음(현행 렌더 그대로) */
     syncAmbient();       /* [효과] 변경 시 분위기 효과도 함께 켜지고 꺼진다 */
     syncPanelUI();
     syncDecorUI();
@@ -2606,6 +2715,86 @@ html[data-pro-theme="lavender"] #board {
       checkQuotaNow();
     }, QUOTA_CHECK_DELAY_MS);
   }
+
+  /* ══ 보드 줌아웃 (발주 #36) — 표시 전용 배율 50%~100% ══
+     원칙: 저장 좌표·겹침 판정·회수(hx/hy)는 전부 "보드 좌표계" 그대로이고, 배율은 .zoom-wrap 의
+     transform 하나로만 나타난다. 포인터 델타·경계 크기만 배율로 환산한다(아래 boardSpaceW/H).
+     배율 100%(fresh 기본)에서는 zoom=1 이라 모든 환산이 항등 — A4·A23·A28 경로가 현행과 동일하다. */
+
+  function boardZoomPct() {
+    var z = SETTINGS && SETTINGS.zoom ? SETTINGS.zoom[boardId] : null;
+    return typeof z === 'number' && isFinite(z) && z >= ZOOM_MIN_PCT && z < ZOOM_MAX_PCT ? Math.round(z) : 100;
+  }
+
+  /* 논리 보드 크기 — 배율 100%면 board.clientWidth/Height 와 동일 (전 호출부 강등 안전) */
+  function boardSpaceW() { return Math.round((board.clientWidth || 0) / zoom); }
+  function boardSpaceH() { return Math.round((board.clientHeight || 0) / zoom); }
+  /* 도구 선반 아래 경계의 논리 좌표판 — 배율 100%면 shelfBottom() 그대로 */
+  function shelfBottomL() { return Math.round(shelfBottom() / zoom); }
+
+  function paintZoomBadge(pct) {
+    if (!zoomBadgeEl) return;
+    zoomBadgeEl.textContent = pct + '%';
+    if (pct === 100) zoomBadgeEl.setAttribute('hidden', '');
+    else zoomBadgeEl.removeAttribute('hidden');
+  }
+
+  function applyBoardZoom() {
+    var pct = boardZoomPct();
+    zoom = pct / 100;
+    if (!zoomWrap) return;
+    if (pct === 100) {
+      /* 기본: 인라인 스타일 전부 제거 — transform 없음 = 현행 렌더·스택 문맥 그대로 */
+      zoomWrap.style.transform = '';
+      zoomWrap.style.width = '';
+      zoomWrap.style.height = '';
+    } else {
+      zoomWrap.style.width = (10000 / pct) + '%';
+      zoomWrap.style.height = (10000 / pct) + '%';
+      zoomWrap.style.transform = 'scale(' + zoom + ')';
+    }
+    paintZoomBadge(pct);
+  }
+
+  function setBoardZoom(pct) {
+    pct = Math.round(Math.max(ZOOM_MIN_PCT, Math.min(ZOOM_MAX_PCT, pct)));
+    if (!SETTINGS.zoom || typeof SETTINGS.zoom !== 'object') SETTINGS.zoom = {};
+    if (pct === boardZoomPct()) { applyBoardZoom(); return; }
+    if (pct === 100) delete SETTINGS.zoom[boardId];
+    else SETTINGS.zoom[boardId] = pct;
+    saveSettings();
+    applyBoardZoom();
+    scheduleRescue();   /* 배율 변경 = 시야 변경 — 잡을 수 없게 된 노트만 한 박자 뒤 회수 (발주 #19 경로) */
+  }
+
+  /* [전체 보기]: 모든 노트의 경계 상자가 화면에 들어오는 배율로 (50% 하한, 확대는 스코프 밖) */
+  function zoomFitAll() {
+    if (!data.length) { setBoardZoom(100); return; }
+    var bw = board.clientWidth || 1280;
+    var bh = board.clientHeight || 800;
+    var maxR = 0;
+    var maxB = 0;
+    data.forEach(function (n) {
+      var sz = noteBoxSize(n);
+      if (n.x + sz.w > maxR) maxR = n.x + sz.w;
+      if (n.y + sz.h > maxB) maxB = n.y + sz.h;
+    });
+    var pct = Math.floor(Math.min(bw / Math.max(1, maxR + ZOOM_FIT_MARGIN),
+                                  bh / Math.max(1, maxB + ZOOM_FIT_MARGIN)) * 100);
+    setBoardZoom(Math.min(100, Math.max(ZOOM_MIN_PCT, pct)));
+  }
+
+  if (zoomBadgeEl) zoomBadgeEl.addEventListener('click', function () {
+    setBoardZoom(100);
+    playTick();   /* 직접 제스처(클릭) 내부 */
+  });
+
+  /* Ctrl+휠 = 배율 조절 (보드 위 어디서나) — 노트 본문 스크롤(onNoteWheel)은 ctrlKey 를 양보한다 */
+  board.addEventListener('wheel', function (e) {
+    if (!e.ctrlKey) return;
+    e.preventDefault();   /* 브라우저 페이지 줌 차단 — 보드 배율만 움직인다 */
+    setBoardZoom(boardZoomPct() + (e.deltaY < 0 ? ZOOM_STEP_PCT : -ZOOM_STEP_PCT));
+  }, { passive: false });
 
   /* ── 삭제 전 확인 (설정 [안전] — 기본 끔): 끔이면 즉시 실행(현행 경로 그대로),
      켬이면 누른 자리 옆에 앱 내 확인 팝오버를 띄운다. Esc·바깥 클릭 = 취소 (A20 실행 취소와 별개·병존) ── */
@@ -3553,8 +3742,8 @@ html[data-pro-theme="lavender"] #board {
 
   /* 회전으로 보드 밖에 튀어나간 만큼만 되당긴다 (드래그 클램프와 같은 식) */
   function clampStickerPos(s, el) {
-    var bw = board.clientWidth;
-    var bh = board.clientHeight;
+    var bw = boardSpaceW();
+    var bh = boardSpaceH();
     if (!bw || !bh) return;
     var bb = stickerAabb(el, s);
     var offX = (bb.ow - bb.w) / 2;
@@ -3719,8 +3908,9 @@ html[data-pro-theme="lavender"] #board {
     var s = findSticker(stDrag.id);
     var el = stickerEls[stDrag.id];
     if (!s || !el) return;
-    var dx = e.clientX - stDrag.startX;
-    var dy = e.clientY - stDrag.startY;
+    /* 포인터 델타 → 보드 좌표 델타 (발주 #36 — 배율 100%면 항등). 회전은 각도라 배율 무관. */
+    var dx = (e.clientX - stDrag.startX) / zoom;
+    var dy = (e.clientY - stDrag.startY) / zoom;
     if (dx !== 0 || dy !== 0) stDrag.moved = true;
     if (stDrag.mode === 'rotate') {
       /* 손잡이는 12시 방향에 달려 있다 — 중심→포인터 각도에 +90° 하면 그 손잡이가 가리키는 각이 된다 */
@@ -3745,8 +3935,8 @@ html[data-pro-theme="lavender"] #board {
     } else {
       /* 레이어 자체는 돌아가 있지 않으므로 화면 delta 는 left/top delta 와 1:1 이다 — 역회전 보정 불필요.
          클램프만 회전 AABB 기준으로 재는데, rot=0 이면 아래 네 줄은 현행 식과 글자 그대로 같다. */
-      var bw = board.clientWidth;
-      var bh = board.clientHeight;
+      var bw = boardSpaceW();
+      var bh = boardSpaceH();
       var bb = stickerAabb(el, s);
       var offX = (bb.ow - bb.w) / 2;
       var offY = (bb.oh - bb.h) / 2;
@@ -3794,8 +3984,8 @@ html[data-pro-theme="lavender"] #board {
      겹치는 칸은 건너뛴다 (다 차 있으면 마지막 후보에 그대로 — 실패 없음) */
   var stickerSpawnSeq = 0;
   function stickerSpawnXY(w, h) {
-    var bw = board.clientWidth || 1280;
-    var bh = board.clientHeight || 800;
+    var bw = boardSpaceW() || 1280;
+    var bh = boardSpaceH() || 800;
     var cx = Math.round(bw / 2 - w / 2);
     var cy = Math.round(bh / 2 - h / 2);
     var stepX = Math.max(72, Math.round(w * 0.9));
@@ -4284,8 +4474,8 @@ html[data-pro-theme="lavender"] #board {
 
   function findSpawn(w, h) {
     var occ = collectOccupied();
-    var bw = board.clientWidth || 1280;
-    var bh = board.clientHeight || 800;
+    var bw = boardSpaceW() || 1280;
+    var bh = boardSpaceH() || 800;
     var pad = 4;
     function free(x, y) {
       for (var i = 0; i < occ.length; i++) {
@@ -4295,7 +4485,7 @@ html[data-pro-theme="lavender"] #board {
       return true;
     }
     var x0 = 16;
-    var y0 = shelfBottom();   /* 도구 선반 아래부터 */
+    var y0 = shelfBottomL();   /* 도구 선반 아래부터 (논리 좌표 — 배율 100%면 동일) */
     var x, y;
     for (y = y0; y + h <= bh - 8; y += h + 6) {
       for (x = x0; x + w <= bw - 8; x += w + 6) {
@@ -4431,7 +4621,7 @@ html[data-pro-theme="lavender"] #board {
   function renderNote(n) {
     var parts = buildNoteDom(n);
     wireNoteEvents(n, parts);
-    board.appendChild(parts.root);
+    zoomWrap.appendChild(parts.root);   /* 줌 래퍼 안 — 배율 100%(기본)에서는 보드 직속과 렌더 동일 (발주 #36) */
     var ref = { root: parts.root, textEl: parts.textEl, ta: parts.ta, imgEl: null };
     els[n.id] = ref;
     renderNoteText(n, ref);
@@ -4555,6 +4745,7 @@ html[data-pro-theme="lavender"] #board {
      편집 중(textarea)에는 손대지 않고, 스크롤 끝에 닿으면 preventDefault 하지 않아
      바깥(보드)의 기본 동작으로 자연스럽게 넘어간다. */
   function onNoteWheel(e) {
+    if (e.ctrlKey) return;                                       /* Ctrl+휠 = 보드 배율 (발주 #36) — 보드 몫에 양보 */
     var root = e.currentTarget;
     if (root.classList.contains('editing')) return;              /* 편집 모드는 기존 동작 유지 */
     var t = e.target;
@@ -4640,6 +4831,8 @@ html[data-pro-theme="lavender"] #board {
       undoStack.push(noteToPlain(removed));
       if (undoStack.length > 20) undoStack.shift();
     }
+    /* 휴지통 보관 (발주 #34) — 진짜 삭제 경로만 (보드 이동은 o.trash 없음). 실패해도 삭제는 진행한다. */
+    if (removed && o.trash) lastTrashOk = trashAdd([noteToPlain(removed)], boardId).ok;
     deletedIds[id] = true;
     var next = [];
     data.forEach(function (n) { if (n.id !== id) next.push(n); });
@@ -4671,8 +4864,13 @@ html[data-pro-theme="lavender"] #board {
   }
 
   function removeNote(id) {
-    var removed = detachNote(id, { undo: true, unlink: true });
-    if (removed) showUndoNotice('포스트잇을 떼어냈어요.');
+    var removed = detachNote(id, { undo: true, unlink: true, trash: true });
+    /* 휴지통 보관 실패(용량)여도 실행 취소 토스트는 계약대로 띄운다 (A20) — 문구로만 알린다 */
+    if (removed) {
+      showUndoNotice(lastTrashOk
+        ? '포스트잇을 떼어냈어요.'
+        : '포스트잇을 떼어냈어요. 저장 공간이 부족해 휴지통에는 담지 못했어요.');
+    }
   }
 
   /* 실행 취소: 마지막으로 떼어낸 포스트잇을 화면·저장소에 복원 (A20) */
@@ -4680,6 +4878,7 @@ html[data-pro-theme="lavender"] #board {
     var sn = undoStack.pop();
     if (!sn) { hideNotice(); return; }
     delete deletedIds[sn.id];
+    trashRemoveByNoteId(sn.id);   /* 실행 취소로 살아나면 휴지통 몫은 걷는다 — 중복 보관 금지 (발주 #34) */
     if (!findNote(sn.id)) {
       var n = sanitizeList([sn])[0];
       if (n) {
@@ -4697,6 +4896,258 @@ html[data-pro-theme="lavender"] #board {
     if (undoStack.length) showUndoNotice('포스트잇을 되돌렸어요. 한 번 더 되돌릴 수 있어요.');
     else hideNotice();
   }
+
+  /* ══ 휴지통 (발주 #34) — 지운 메모 30일 보관 ══
+     저장: postit-trash 단일 키. 값은 항목 배열 JSON 을 UTF-8 → base64 로 인코딩한 문자열이다.
+     왜 인코딩하는가: 삭제 계약(A18·A20)은 "삭제 직후 전 localStorage 키에서 그 내용의 부재"를
+     단언한다(지연 삭제 차단). 휴지통은 살아 있는 데이터가 아니라 별도 보관고이므로, 원문이
+     노출되지 않는 보관(인코딩)으로 두 요구를 함께 만족시킨다. 손상 시 A9 규약(-corrupt- 백업) 적용.
+     항목: { tid, at(삭제 시각 ms), b(원래 보드 id), bn(당시 보드 이름), n(노트 원본 그대로) } */
+
+  function trashB64Encode(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = '';
+    var CHUNK = 8192;
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(bin);
+  }
+
+  function trashB64Decode(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  function readTrash() {
+    var raw = null;
+    try { raw = localStorage.getItem(TRASH_KEY); } catch (err) { return []; }
+    if (raw === null) return [];
+    try {
+      var arr = JSON.parse(trashB64Decode(raw));
+      if (!Array.isArray(arr)) throw new Error('휴지통 형식 오류');
+      var out = [];
+      arr.forEach(function (it) {
+        if (it && typeof it === 'object' && typeof it.tid === 'string' &&
+            typeof it.at === 'number' && isFinite(it.at) &&
+            it.n && typeof it.n === 'object' && typeof it.n.id === 'string') out.push(it);
+      });
+      return out;
+    } catch (err) {
+      backupCorrupt(TRASH_KEY, raw);   /* A9 규약 — 손상 원본 보존 후 빈 휴지통으로 재시작 */
+      try { localStorage.removeItem(TRASH_KEY); } catch (err2) { /* 무시 */ }
+      return [];
+    }
+  }
+
+  /* 만료(30일)·상한(건수/문자수)을 걷어낸 뒤 저장. 성공 여부를 돌려준다 — 실패해도 삭제는 막지 않는다. */
+  function writeTrash(list) {
+    var now = Date.now();
+    var keepMs = TRASH_KEEP_DAYS * 24 * 60 * 60 * 1000;
+    var kept = list.filter(function (it) { return now - it.at <= keepMs; });
+    while (kept.length > TRASH_MAX_ITEMS) kept.shift();   /* 오래된 것부터 제거 */
+    var enc = kept.length ? trashB64Encode(JSON.stringify(kept)) : '';
+    while (kept.length > 1 && enc.length > TRASH_MAX_CHARS) {
+      kept.shift();
+      enc = trashB64Encode(JSON.stringify(kept));
+    }
+    if (kept.length && enc.length > TRASH_MAX_CHARS) kept = [];   /* 단독 초과 항목 — 보관 포기 */
+    try {
+      if (!kept.length) localStorage.removeItem(TRASH_KEY);   /* 빈 휴지통 = 키 없음 (fresh 불변) */
+      else localStorage.setItem(TRASH_KEY, enc);
+      scheduleQuotaCheck();   /* 휴지통도 저장 용량의 일부 — 천장이 가까우면 미리 알린다 (발주 #23) */
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function trashAdd(plainList, bid) {
+    if (!plainList || !plainList.length) return { ok: true, tids: [] };
+    var list = readTrash();
+    var now = Date.now();
+    var bn = boardDisplayName(bid);
+    var tids = [];
+    plainList.forEach(function (sn) {
+      if (!sn || typeof sn !== 'object' || typeof sn.id !== 'string') return;
+      trashSeq += 1;
+      var tid = 't' + now.toString(36) + '-' + trashSeq;
+      tids.push(tid);
+      list.push({ tid: tid, at: now, b: bid, bn: bn, n: sn });
+    });
+    return { ok: writeTrash(list), tids: tids };
+  }
+
+  /* 실행 취소로 노트가 살아 돌아오면 휴지통 몫은 걷는다 (중복 보관 금지) — 가장 최근 항목 1건 */
+  function trashRemoveByNoteId(id) {
+    var list = readTrash();
+    for (var i = list.length - 1; i >= 0; i--) {
+      if (list[i].n.id === id) {
+        list.splice(i, 1);
+        writeTrash(list);
+        return;
+      }
+    }
+  }
+
+  function trashRemoveTids(tids) {
+    if (!tids || !tids.length) return;
+    var gone = {};
+    tids.forEach(function (t) { gone[t] = true; });
+    writeTrash(readTrash().filter(function (it) { return !gone[it.tid]; }));
+  }
+
+  /* 만료 청소 — 기동 1회 + 하루 1회 타이머. 빈 휴지통이면 키를 만들지 않는다. */
+  function sweepTrash() {
+    var list = readTrash();
+    if (!list.length) return;
+    writeTrash(list);
+  }
+
+  /* ── 휴지통 UI (설정 [데이터]) — 전부 textContent/createElement, 줄 관용구는 손상 백업과 동일 ── */
+
+  function trashAgeLabel(at) {
+    var d = Math.floor((Date.now() - at) / (24 * 60 * 60 * 1000));
+    return d <= 0 ? '오늘' : d + '일 전';
+  }
+
+  function trashPreview(sn) {
+    var line = '';
+    if (typeof sn.text === 'string') {
+      var i = sn.text.indexOf('\n');
+      line = (i === -1 ? sn.text : sn.text.slice(0, i)).trim();
+    }
+    if (line) return line;
+    if (typeof sn.img === 'string' && sn.img) return '📷 사진 메모';
+    return '(빈 메모)';
+  }
+
+  function renderTrashList() {
+    var listEl = document.getElementById('spTrashList');
+    var clearBtn = document.getElementById('spTrashClear');
+    if (!listEl) return;
+    while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+    var now = Date.now();
+    var keepMs = TRASH_KEEP_DAYS * 24 * 60 * 60 * 1000;
+    var list = readTrash().filter(function (it) { return now - it.at <= keepMs; });
+    if (clearBtn) {
+      if (list.length) clearBtn.removeAttribute('hidden');
+      else clearBtn.setAttribute('hidden', '');
+    }
+    if (!list.length) {
+      var none = document.createElement('p');
+      none.className = 'sp-small';
+      none.textContent = '휴지통이 비어 있어요.';
+      listEl.appendChild(none);
+      return;
+    }
+    list.slice().reverse().forEach(function (it) {   /* 최근 삭제가 위로 */
+      var row = document.createElement('div');
+      row.className = 'sp-crow';
+      row.setAttribute('data-trash-item', '');
+      row.setAttribute('data-tid', it.tid);
+      var name = document.createElement('span');
+      name.className = 'sp-ckey';
+      name.textContent = trashPreview(it.n);
+      name.title = name.textContent;
+      var meta = document.createElement('span');
+      meta.className = 'sp-tmeta';
+      var alive = boards.indexOf(it.b) !== -1;
+      meta.textContent = trashAgeLabel(it.at) + ' · ' +
+        (alive ? boardDisplayName(it.b) : ((it.bn ? it.bn + ' ' : '') + '(지워진 보드)'));
+      var rest = document.createElement('button');
+      rest.type = 'button';
+      rest.className = 'sp-cdel';
+      rest.setAttribute('data-trash-restore', '');
+      rest.textContent = '복원';
+      rest.title = alive ? '원래 보드로 되살려요' : '지금 보고 있는 보드로 되살려요';
+      rest.addEventListener('click', function () { restoreTrashEntry(it.tid); });
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'sp-cdel';
+      del.setAttribute('data-trash-delete', '');
+      del.textContent = '영구 삭제';
+      del.title = '휴지통에서도 완전히 지워요 (되돌릴 수 없어요)';
+      del.addEventListener('click', function () {
+        confirmThen(del, function () {   /* [안전] 끔(기본) = 즉시, 켬 = 확인 후 (관용구 동일) */
+          trashRemoveTids([it.tid]);
+          renderTrashList();
+        });
+      });
+      row.appendChild(name);
+      row.appendChild(meta);
+      row.appendChild(rest);
+      row.appendChild(del);
+      listEl.appendChild(row);
+    });
+  }
+
+  /* [복원]: 원래 보드로, 그 보드가 지워졌으면 지금 보고 있는 보드로 */
+  function restoreTrashEntry(tid) {
+    var list = readTrash();
+    var it = null;
+    list.forEach(function (e) { if (e.tid === tid) it = e; });
+    if (!it) { renderTrashList(); return; }
+    var target = boards.indexOf(it.b) !== -1 ? it.b : boardId;
+    var sn = {};
+    Object.keys(it.n).forEach(function (k) { sn[k] = it.n[k]; });
+    var restoredOk = false;
+    if (target === boardId) {
+      if (findNote(sn.id)) sn.id = uid();   /* 같은 id 가 살아 있으면 새 몸으로 복원 */
+      delete deletedIds[sn.id];
+      var n = sanitizeList([sn])[0];
+      if (n) {
+        n.updatedAt = Date.now();
+        if (n.z > zCounter) zCounter = n.z;
+        zCounter += 1;
+        n.z = zCounter;   /* 복원 노트는 맨 앞으로 — 원자리에 겹쳐 되살아나도 묻히지 않게 */
+        data.push(n);
+        renderNote(n);
+        if (n.date) syncNoteToCalendar(n.id, n.date, noteFirstLine(n.text));   /* 연동 일정 복원 (S1) */
+        updateWelcome();
+        applySearch();
+        saveNow();
+        scheduleRescue();   /* 좁아진 화면 밖 좌표면 한 박자 뒤 안으로 (발주 #19 경로) */
+        restoredOk = true;
+      }
+    } else {
+      var listB = readBoardList(target);
+      var topZ = 10;
+      var kept = [];
+      listB.forEach(function (bsn) {
+        if (typeof bsn.z === 'number' && isFinite(bsn.z) && bsn.z > topZ) topZ = bsn.z;
+        if (bsn.id !== sn.id) kept.push(bsn);
+      });
+      sn.z = topZ + 1;                      /* 대상 보드 맨 앞 (moveNoteToBoard 관용구) */
+      sn.updatedAt = Date.now();
+      kept.push(sn);
+      if (!writeBoardList(target, kept)) return;   /* 실패 안내는 writeBoardList 몫 — 휴지통은 그대로 둔다 */
+      clearBoardDeleted(target, sn.id);
+      if (typeof sn.date === 'string' && sn.date) {
+        syncNoteToCalendar(sn.id, sn.date, noteFirstLine(typeof sn.text === 'string' ? sn.text : ''));
+      }
+      restoredOk = true;
+    }
+    if (!restoredOk) return;
+    trashRemoveTids([tid]);
+    renderTrashList();
+    playTick();   /* 직접 제스처(클릭) 내부 */
+    showNotice('메모를 "' + boardDisplayName(target) + '" 보드로 되살렸어요.');
+  }
+
+  (function () {
+    var clearBtn = document.getElementById('spTrashClear');
+    if (!clearBtn) return;
+    clearBtn.addEventListener('click', function () {
+      confirmThen(clearBtn, function () {
+        writeTrash([]);
+        renderTrashList();
+        showNotice('휴지통을 비웠어요.');
+      });
+    });
+  })();
 
   /* ── 드래그(포인터 이벤트 — 마우스·터치·펜 공통, P10): 잡은 오프셋 유지, 스냅 없음, 이동 없는 클릭은 편집 ── */
 
@@ -4737,15 +5188,16 @@ html[data-pro-theme="lavender"] #board {
     var ref = els[dragState.id];
     var n = findNote(dragState.id);
     if (!ref || !n) return;
-    var dx = e.clientX - dragState.startX;
-    var dy = e.clientY - dragState.startY;
+    /* 포인터 델타 → 보드 좌표 델타: 배율로 나눈다 (발주 #36 — 100%면 항등이라 A4 경로 불변) */
+    var dx = (e.clientX - dragState.startX) / zoom;
+    var dy = (e.clientY - dragState.startY) / zoom;
     if (!dragState.moved) {
       if (dx === 0 && dy === 0) return;
       dragState.moved = true;
       ref.root.classList.add('dragging');
     }
-    var bw = board.clientWidth;
-    var bh = board.clientHeight;
+    var bw = boardSpaceW();
+    var bh = boardSpaceH();
     var w = ref.root.offsetWidth;
     var nx = dragState.origX + dx;
     var ny = dragState.origY + dy;
@@ -4834,8 +5286,9 @@ html[data-pro-theme="lavender"] #board {
     var n = findNote(resizeState.id);
     var ref = els[resizeState.id];
     if (!n || !ref) return;
-    n.w = clampSize(resizeState.origW + (e.clientX - resizeState.startX));
-    n.h = clampSize(resizeState.origH + (e.clientY - resizeState.startY));
+    /* 포인터 델타 → 보드 좌표 델타 (발주 #36 — 배율 100%면 항등, A23 경로 불변) */
+    n.w = clampSize(resizeState.origW + (e.clientX - resizeState.startX) / zoom);
+    n.h = clampSize(resizeState.origH + (e.clientY - resizeState.startY) / zoom);
     applyNoteSize(n, ref);   /* 크기만 바꾼다 — left/top 불변 (리사이즈가 이동으로 새지 않게) */
     e.preventDefault();
   }
@@ -4989,12 +5442,27 @@ html[data-pro-theme="lavender"] #board {
   /* ── 검색: 표시만 바꾼다 — 저장소·위치 불변, 비매칭은 숨김이 아니라 흐림 (A24) ── */
 
   function applySearch() {
+    var q = searchQuery;
+    var hits = 0;
     data.forEach(function (n) {
       var ref = els[n.id];
       if (!ref) return;
-      var hit = !searchQuery || n.text.toLowerCase().indexOf(searchQuery) !== -1;
-      ref.root.classList.toggle('dimmed', !hit);
+      var hit = !q || n.text.toLowerCase().indexOf(q) !== -1;
+      /* 사진 전용 노트(텍스트 없음·이미지 있음)는 글 검색으로 찾을 수 없다 —
+         흐림 대신 중간 가시성(.search-soft)으로 남긴다 (발주 #38). A24 판정(비매칭 <0.5)은
+         키워드 없는 "텍스트" 노트에 대한 것이라 충돌하지 않는다 (스펙: 노트 3개 전부 텍스트). */
+      var photoOnly = !!q && !hit && typeof n.img === 'string' && !!n.img && !(n.text && n.text.trim());
+      if (q && hit) hits += 1;
+      ref.root.classList.toggle('dimmed', !!q && !hit && !photoOnly);
+      ref.root.classList.toggle('search-soft', photoOnly);
+      /* 매치 승격: 표시상만 앞으로(z-index 부스트 클래스) — 저장소의 z 값은 불변 (A24 저장소 불변) */
+      ref.root.classList.toggle('search-hit', !!q && hit);
     });
+    /* 매칭 0건 힌트 — 비모달·클릭 통과, 검색을 비우면 사라진다 (발주 #38) */
+    if (searchHintEl) {
+      if (q && hits === 0 && data.length) searchHintEl.removeAttribute('hidden');
+      else searchHintEl.setAttribute('hidden', '');
+    }
   }
   searchBox.addEventListener('input', function () {
     searchQuery = searchBox.value.trim().toLowerCase();
@@ -5060,7 +5528,8 @@ html[data-pro-theme="lavender"] #board {
       var ref = els[n.id];
       if (!ref || !ref.root) return;
       var r = ref.root.getBoundingClientRect();
-      items.push({ n: n, ref: ref, W: Math.ceil(r.width), H: Math.ceil(r.height) });
+      /* 실측(화면) 크기 → 보드 좌표 크기: 배율로 나눈다 (발주 #36 — 100%면 항등, A28 경로 불변) */
+      items.push({ n: n, ref: ref, W: Math.ceil(r.width / zoom), H: Math.ceil(r.height / zoom) });
     });
     return items;
   }
@@ -5219,9 +5688,9 @@ html[data-pro-theme="lavender"] #board {
   /* 흐름 배치 코어 — 기본(현행 알고리즘)과 시간순 모드가 순서만 달리하여 공유한다.
      반환: { total, placed, stacked } — 토스트가 사실을 말하기 위한 실측값 */
   function arrangeFlow(order) {
-    var bw = board.clientWidth || 1280;
-    var bh = board.clientHeight || 800;
-    var startY = shelfBottom();   /* 도구 선반 아래 */
+    var bw = boardSpaceW() || 1280;
+    var bh = boardSpaceH() || 800;
+    var startY = shelfBottomL();   /* 도구 선반 아래 (논리 좌표 — 배율 100%면 동일) */
     var items = arrangeItems(order);
     if (!items.length) return { total: 0, placed: 0, stacked: 0 };
     var maxW = 0;
@@ -5296,10 +5765,10 @@ html[data-pro-theme="lavender"] #board {
 
   /* N×N 격자: 보드를 구역으로 나눠 셀 중앙에 순서대로 — 넘치거나 셀보다 크면 가까운 빈자리로 (겹침 0) */
   function arrangeGrid(N) {
-    var bw = board.clientWidth || 1280;
-    var bh = board.clientHeight || 800;
+    var bw = boardSpaceW() || 1280;
+    var bh = boardSpaceH() || 800;
     var margin = ARRANGE_MARGIN;
-    var startY = shelfBottom();
+    var startY = shelfBottomL();
     var cellW = Math.max(40, (bw - margin * 2) / N);
     var cellH = Math.max(40, (bh - startY - margin) / N);
     var order = data.slice().sort(function (a, b) { return (a.y - b.y) || (a.x - b.x); });
@@ -5331,11 +5800,11 @@ html[data-pro-theme="lavender"] #board {
 
   /* 동적 마소너리: 큰 노트 먼저, 각 노트를 가장 위·왼쪽의 빈자리에 채워 넣는 self-packing */
   function arrangeMasonry() {
-    var bw = board.clientWidth || 1280;
-    var bh = board.clientHeight || 800;
+    var bw = boardSpaceW() || 1280;
+    var bh = boardSpaceH() || 800;
     var margin = ARRANGE_MARGIN;
     var gap = 12;
-    var startY = shelfBottom();
+    var startY = shelfBottomL();
     var items = arrangeItems(data);
     items.sort(function (a, b) {
       return (b.W * b.H - a.W * a.H) || ((b.n.updatedAt || 0) - (a.n.updatedAt || 0));
@@ -5436,8 +5905,8 @@ html[data-pro-theme="lavender"] #board {
 
   /* 이 크기의 노트가 "잡을 수 있는" 좌상단 범위 — onDragMove 클램프와 같은 식 */
   function rescueLimits(w, h) {
-    var bw = board.clientWidth || 0;
-    var bh = board.clientHeight || 0;
+    var bw = boardSpaceW();
+    var bh = boardSpaceH();
     var lim = {
       minX: RESCUE_GRIP_PX - w,
       maxX: bw - RESCUE_GRIP_PX,
@@ -5458,7 +5927,7 @@ html[data-pro-theme="lavender"] #board {
     var loX = Math.min(RESCUE_MARGIN_PX, Math.max(0, hiX));
     if (hiX < loX) { loX = lim.minX; hiX = lim.maxX; }
     var hiY = lim.bh - sz.h - RESCUE_MARGIN_PX;
-    var loY = Math.min(shelfBottom(), Math.max(0, hiY));   /* 도구 선반 아래 — 선반에 가려 안 보이는 자리 회피 */
+    var loY = Math.min(shelfBottomL(), Math.max(0, hiY));   /* 도구 선반 아래 — 선반에 가려 안 보이는 자리 회피 */
     if (hiY < loY) { loY = lim.minY; hiY = lim.maxY; }
     return { loX: loX, hiX: hiX, loY: loY, hiY: hiY };
   }
@@ -5508,8 +5977,8 @@ html[data-pro-theme="lavender"] #board {
     if (!board || !data.length) return;
     if (dragState || resizeState) return;      /* 조작 중에는 손대지 않는다 */
     if (notesHidden()) return;                 /* 숨김 중에는 실측 크기가 0 — 다시 보일 때 본다 */
-    var bw = board.clientWidth || 0;
-    var bh = board.clientHeight || 0;
+    var bw = boardSpaceW();
+    var bh = boardSpaceH();
     if (bw < 120 || bh < 120) return;          /* 최소화·레이아웃 이전 — 판정 불가 */
     var moved = [];      /* 회수 스냅샷 (실행 취소용, 메모리 전용) */
     var restored = 0;
@@ -5907,8 +6376,8 @@ html[data-pro-theme="lavender"] #board {
     var ref = els[id];
     var w = ref ? ref.root.offsetWidth : NOTE_W;
     var h = ref ? ref.root.offsetHeight : NOTE_H;
-    var bw = board.clientWidth || 1280;
-    var bh = board.clientHeight || 800;
+    var bw = boardSpaceW() || 1280;
+    var bh = boardSpaceH() || 800;
     var nx = src.x + 18;
     var ny = src.y + 18;
     if (nx > bw - w - 8) nx = Math.max(8, src.x - 18);
@@ -6497,10 +6966,11 @@ html[data-pro-theme="lavender"] #board {
     /* ① 자주 — 지금 이 자리에서 바로 하는 일 */
     ctxMenuEl.appendChild(ctxItem('여기에 새 포스트잇', function () {
       var b = board.getBoundingClientRect();
-      var bw = board.clientWidth || 1280;
-      var bh = board.clientHeight || 800;
-      var x = Math.round(px - b.left) - 20;
-      var y = Math.round(py - b.top) - 14;
+      var bw = boardSpaceW() || 1280;
+      var bh = boardSpaceH() || 800;
+      /* 화면 좌표 → 보드 좌표: 배율로 나눈다 (발주 #36 — 100%면 항등) */
+      var x = Math.round((px - b.left) / zoom) - 20;
+      var y = Math.round((py - b.top) / zoom) - 14;
       if (x < 8) x = 8;
       if (x > bw - NOTE_W - 8) x = bw - NOTE_W - 8;
       if (y < 0) y = 0;
@@ -6511,6 +6981,28 @@ html[data-pro-theme="lavender"] #board {
       arrangeBoard();
       playDrop();   /* 직접 제스처(메뉴 클릭) 내부 */
     }));
+    /* 보드 배율 (발주 #36): [전체 보기] = 모든 메모가 화면에 들어오는 배율(50% 하한),
+       [100%로] = 원래 크기 복귀. Ctrl+휠·우하단 배지와 같은 상태를 움직인다. */
+    var fitItem = ctxItem('🔍 전체 보기', function () {
+      zoomFitAll();
+      playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+    });
+    fitItem.setAttribute('data-zoom-fit', '');
+    fitItem.title = '모든 메모가 화면에 들어오게 보드를 축소해요 (Ctrl+휠로도 조절)';
+    ctxMenuEl.appendChild(fitItem);
+    var resetItem = ctxItem('100%로', function () {
+      setBoardZoom(100);
+      playTick();   /* 직접 제스처(메뉴 클릭) 내부 */
+    });
+    resetItem.setAttribute('data-zoom-reset', '');
+    if (boardZoomPct() === 100) {
+      resetItem.disabled = true;
+      resetItem.classList.add('soon');
+      resetItem.title = '지금이 100%예요';
+    } else {
+      resetItem.title = '보드를 원래 크기(100%)로 되돌려요';
+    }
+    ctxMenuEl.appendChild(resetItem);
     ctxMenuEl.appendChild(ctxSep());
 
     /* ② 가끔 — 보드 자체를 손보는 일들 */
@@ -6940,6 +7432,10 @@ html[data-pro-theme="lavender"] #board {
     var st = readStore(sk);
     var snapNotes = st.ok ? st.list : [];
     if (!st.ok) backupCorrupt(sk, st.raw);   /* 손상돼 있었다면 규약대로 백업 후 진행 (A9) */
+    /* 보드 삭제분도 휴지통으로 (발주 #34) — undo 토스트(8초)가 지나도 메모는 30일 복원 가능 */
+    var trashRes = trashAdd(snapNotes.filter(function (sn) {
+      return sn && typeof sn === 'object' && typeof sn.id === 'string';
+    }), id);
     var allDecor = readDecorAll();
     var snapDecor = (allDecor.boards && typeof allDecor.boards === 'object' && !Array.isArray(allDecor.boards))
       ? (allDecor.boards[id] || null) : null;
@@ -6974,19 +7470,21 @@ html[data-pro-theme="lavender"] #board {
     }
     renderTabs();
     showUndoNotice((snapName ? '"' + snapName + '" 보드를 삭제했어요.' : '보드를 삭제했어요.') +
-      ' (메모 ' + snapNotes.length + '개 포함)', function () {
-      restoreBoardSnapshot(id, sk, snapNotes, snapDecor, snapName);
+      ' (메모 ' + snapNotes.length + '개 포함)' +
+      (trashRes.ok ? '' : ' 저장 공간이 부족해 휴지통에는 담지 못했어요.'), function () {
+      restoreBoardSnapshot(id, sk, snapNotes, snapDecor, snapName, trashRes.tids);
     });
   }
 
   /* 보드 삭제 실행 취소 — 스냅샷(노트·꾸미기·이름)을 통째로 재기록하고 그 보드로 전환 */
-  function restoreBoardSnapshot(id, sk, snapNotes, snapDecor, snapName) {
+  function restoreBoardSnapshot(id, sk, snapNotes, snapDecor, snapName, trashTids) {
     try {
       localStorage.setItem(sk, JSON.stringify(snapNotes));
     } catch (err) {
       notifySaveFailure('저장 공간이 부족해 보드를 복원하지 못했어요.');
       return;
     }
+    trashRemoveTids(trashTids);   /* 실행 취소로 통째 복원 — 휴지통 몫은 걷는다 (중복 보관 금지, 발주 #34) */
     if (snapDecor) writeDecorEntry(id, snapDecor);
     if (snapName) writeBoardName(id, snapName);
     if (boards.indexOf(id) === -1) {
@@ -7001,6 +7499,7 @@ html[data-pro-theme="lavender"] #board {
 
   /* 활성 보드의 저장분을 읽어 렌더 (손상 시 백업 후 빈 보드 — A9 규약을 보드 키에도 동일 적용) */
   function loadBoard() {
+    applyBoardZoom();   /* 이 보드 몫의 배율 복원 (발주 #36) — 회수 판정보다 먼저 논리 좌표계를 세운다 */
     var sk = storeKey(boardId);
     var st = readStore(sk);
     if (!st.ok) {
@@ -8178,6 +8677,7 @@ html[data-pro-theme="lavender"] #board {
     var clearBtn = document.getElementById('spCorruptClear');
     if (clearBtn) clearBtn.hidden = stats.corrupt.length === 0;
     renderCorruptList(listEl, stats.corrupt);
+    renderTrashList();   /* 휴지통 목록도 같은 자리에서 새로 그린다 (발주 #34) */
   }
 
   document.getElementById('spCorruptClear').addEventListener('click', function () {
@@ -8588,6 +9088,11 @@ html[data-pro-theme="lavender"] #board {
       syn: ['손상', '깨짐', '오류', '백업키', 'corrupt', '망가짐', '찌꺼기', '모두정리', 'cleanup'],
       opts: [],
       help: '저장 데이터가 깨졌을 때 원본을 따로 보관해 둔 것들이에요.' },
+    { id: 'pt.data.trash', label: '휴지통', cat: 'data', sel: '[data-trash-section]', panel: null, shell: false,
+      tags: ['데이터', '복구', '안전', '메모'],
+      syn: ['휴지통', '지운메모', '삭제한메모', '지워진메모', '복원', '되살리기', '살리기', '실수로지움', '날아간메모', '30일', '영구삭제', '휴지통비우기', 'trash', 'recycle', 'bin', 'restore', 'undelete'],
+      opts: ['복원', '영구 삭제', '휴지통 비우기'],
+      help: '지운 메모를 30일 동안 보관해요. 여기서 되살리거나 완전히 지울 수 있어요.' },
     { id: 'pt.shell.backup.folder', label: '백업 저장 폴더', cat: 'data', sel: '[data-backup-folder]', panel: null, shell: true,
       tags: ['백업', '클라우드', '시스템'],
       syn: ['백업위치', '어디에저장', '폴더경로', '저장경로', '원드라이브', 'onedrive', '구글드라이브', '드롭박스', '동기화폴더', 'path', 'folder'],
@@ -9333,6 +9838,10 @@ html[data-pro-theme="lavender"] #board {
 
   /* 기동 후 한 박자 뒤 고아 이미지 1회 청소 — 첫 렌더와 경쟁하지 않게 늦춘다 */
   setTimeout(sweepOrphanDecorImages, ORPHAN_SWEEP_DELAY_MS);
+
+  /* 휴지통 만료 청소 (발주 #34) — 기동 1회(첫 렌더 뒤) + 하루 1회. 빈 휴지통이면 아무것도 하지 않는다. */
+  setTimeout(sweepTrash, ORPHAN_SWEEP_DELAY_MS);
+  setInterval(sweepTrash, TRASH_SWEEP_GAP_MS);
 })();
 </script>
 <script>

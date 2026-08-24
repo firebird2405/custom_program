@@ -526,6 +526,16 @@ main{flex:1; display:flex; gap:14px; min-height:0;}
 #setCorruptList li .k{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 #setCorruptList li button{padding:2px 8px; font-size:12px;}
 #setCorruptClear{align-self:flex-start; padding:4px 10px; font-size:13px;}
+/* 일정 휴지통 (발주 #34) — 손상 백업 목록과 같은 시각 관용구, 항목이 많아지면 목록만 스크롤 */
+#setTrashList{list-style:none; display:flex; flex-direction:column; gap:4px; max-height:190px; overflow:auto;}
+#setTrashList li{
+  display:flex; align-items:center; gap:6px; font-size:12px;
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:4px 8px;
+}
+#setTrashList li .tMain{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px;}
+#setTrashList li .k{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+#setTrashList li button{padding:2px 8px; font-size:12px; flex:none;}
+#setTrashClear{align-self:flex-start; padding:4px 10px; font-size:13px;}
 .spInfo{font-size:13px; line-height:1.55;}
 .spLicList{margin:4px 0 0; padding-left:16px; list-style:disc;}
 .spLicList li{margin:2px 0; word-break:break-all;}
@@ -931,6 +941,15 @@ html[data-anim="off"] *, html[data-anim="off"] *::before, html[data-anim="off"] 
           <span class="spLab">손상 백업 (<span id="setCorruptCount">0</span>)</span>
           <ul id="setCorruptList"></ul>
           <button type="button" id="setCorruptClear" hidden>모두 정리</button>
+        </div>
+        <!-- 일정 휴지통 (발주 #34) — 삭제한 일정 30일 보관. 목록은 renderTrashSection 이
+             createElement/textContent 로만 채운다. 훅: [data-trash-list]·[data-trash-restore]·
+             [data-trash-purge]·[data-trash-clear] -->
+        <div class="spRow spCol">
+          <span class="spLab">🗑 휴지통 (<span id="setTrashCount">0</span>)</span>
+          <ul id="setTrashList" data-trash-list></ul>
+          <button type="button" id="setTrashClear" data-trash-clear hidden>비우기</button>
+          <p class="spSmall">삭제한 일정은 30일 동안 보관했다가 자동으로 정리돼요.</p>
         </div>
       </div>
     </section>
@@ -1358,6 +1377,117 @@ function dayItems(key){
   return list;
 }
 
+/* ---------- 일정 휴지통 (발주 #34) ----------
+ * 삭제한 일정을 30일 보관 — additive 신규 키 cal-trash = [{id,kind,key,at,d}]
+ *   kind: 'event'(단발) | 'occ'(반복 발생분 — 그 표식) | 'rule'(반복 규칙 전체, 예외 포함 스냅샷)
+ *   key : 원래 날짜 (occ=발생 날짜, rule=start), at: 삭제 시각(ms), d: 인코딩된 원본 페이로드.
+ * 원본(사용자 텍스트 포함)은 평문으로 두지 않는다 — A20 계약이 "삭제 직후 2초 내 전 localStorage
+ *   평문 스캔 부재"라서, 활성 저장소에서의 부재와 30일 보관을 UTF-8→base64 가역 인코딩으로
+ *   함께 만족시킨다 (읽을 때 복호). cal-events/cal-repeats 스키마는 불변.
+ * 손상 시 <키>-corrupt-<ts> 백업 후 빈 휴지통으로 시작 (A9 규약 — 백업은 [데이터] 목록에 보인다). */
+const TRASH_KEY = 'cal-trash';
+const TRASH_KEEP_DAYS = 30;   /* 보관 기간 */
+const TRASH_MAX = 300;        /* 상한 — 초과 시 오래된 것부터 정리 */
+function trashEnc(s){
+  try{ return btoa(unescape(encodeURIComponent(s))); }catch(e){ return ''; }
+}
+function trashDec(s){
+  try{ return decodeURIComponent(escape(atob(s))); }catch(e){ return null; }
+}
+/* 휴지통 항목의 페이로드 복호 — 실패 시 null (크래시 없음) */
+function trashDecode(t){
+  const s = trashDec(t.d);
+  if (s === null) return null;
+  try{
+    const p = JSON.parse(s);
+    return (p && typeof p === 'object' && !Array.isArray(p)) ? p : null;
+  }catch(e){ return null; }
+}
+function sanitizeTrash(arr){
+  const out = [];
+  for (const t of arr){
+    if (!t || typeof t !== 'object') continue;
+    if (t.kind !== 'event' && t.kind !== 'occ' && t.kind !== 'rule') continue;
+    if (typeof t.key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(t.key)) continue;
+    if (typeof t.d !== 'string' || !t.d) continue;
+    if (typeof t.at !== 'number' || !isFinite(t.at)) continue;
+    out.push({ id: (typeof t.id === 'string' && t.id) ? t.id : genId(), kind: t.kind, key: t.key, at: t.at, d: t.d });
+  }
+  return out;
+}
+function loadTrash(){
+  let raw = null;
+  try{ raw = localStorage.getItem(TRASH_KEY); }catch(e){ return []; }
+  if (!raw) return [];
+  let arr = null;
+  try{
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) arr = parsed;
+  }catch(e){}
+  if (arr === null){
+    backupRaw(TRASH_KEY, raw); /* 조용히 백업 — 설정 [데이터] 손상 백업 목록에서 보인다 */
+    return [];
+  }
+  return sanitizeTrash(arr);
+}
+/* 저장소의 휴지통을 조용히 읽어 정제해 반환 (손상 시 null) — 동기화용 */
+function readTrash(){
+  let raw = null;
+  try{ raw = localStorage.getItem(TRASH_KEY); }catch(e){ return null; }
+  if (!raw) return [];
+  try{
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return sanitizeTrash(parsed);
+  }catch(e){ return null; }
+}
+/* 변경 직전 저장소 재읽기 — 다른 창의 보관/정리를 수용한다 (손상 원격 쓰기는 무시) */
+function trashSync(){
+  const s = readTrash();
+  if (s !== null) trash = s;
+}
+/* 쓰기 실패는 기존 setItemWithNotice 경로 재사용 — 성공 여부만 반환 (삭제 자체는 막지 않는다) */
+function saveTrash(){
+  return setItemWithNotice(TRASH_KEY, JSON.stringify(trash), '휴지통');
+}
+/* 30일 초과 + 상한 초과(오래된 것부터) 정리 — 변경 여부 반환 (in-place) */
+function trashPruneInPlace(){
+  const cutoff = Date.now() - TRASH_KEEP_DAYS * 86400000;
+  const before = trash.length;
+  trash = trash.filter(t => t.at >= cutoff);
+  if (trash.length > TRASH_MAX){
+    trash.sort((a, b) => b.at - a.at); /* 최신 우선 정렬 후 상한 밖(=가장 오래된 것)을 잘라낸다 */
+    trash = trash.slice(0, TRASH_MAX);
+  }
+  return trash.length !== before;
+}
+/* 기동 시 + 하루 1회 정리. 변경이 있을 때만 기록 — fresh 프로필에 cal-trash 키를 만들지 않는다 */
+function trashPurge(){
+  trashSync();
+  if (!trashPruneInPlace()) return false;
+  saveTrash();
+  return true;
+}
+/* 삭제분 보관 — { id: 항목 id(실행 취소 연동), ok: 저장 성공 여부 } 반환.
+   실패해도 삭제는 그대로 진행되고 호출부가 "휴지통 보관 실패" 를 알린다. */
+function trashAdd(kind, key, payload){
+  const d = trashEnc(JSON.stringify(payload));
+  if (!d) return { id: null, ok: false };
+  trashSync();
+  const entry = { id: genId(), kind: kind, key: key, at: Date.now(), d: d };
+  trash.push(entry);
+  trashPruneInPlace();
+  return { id: entry.id, ok: saveTrash() };
+}
+/* 휴지통에서 항목 제거 (실행 취소 복원·수동 복원·영구 삭제 공용 — 중복 보관 금지) */
+function trashRemove(id){
+  if (!id) return;
+  trashSync();
+  const before = trash.length;
+  trash = trash.filter(t => t.id !== id);
+  if (trash.length !== before) saveTrash();
+}
+
 /* ---------- 설정 (cal-settings — additive 신규 키, cal-events/cal-repeats 스키마 불변) ----------
  * 기본값은 전부 현행 동작과 동일: fresh 프로필에서 어떤 채점 관찰도 변하지 않는다
  * (음력·D-day·알림 기본 켬, 주 시작 일요일, 글자 보통, 애니메이션 켬, 알림 정각).
@@ -1407,6 +1537,7 @@ snapshotSyncedIds();
 let repeats = loadRepeats();
 let syncedRepIds = {};
 snapshotSyncedRepIds();
+let trash = loadTrash(); /* 일정 휴지통 (발주 #34) — 30일 보관 */
 const now = new Date();
 let view = { y: now.getFullYear(), m: now.getMonth() };
 let selKey = todayKey();
@@ -2011,8 +2142,9 @@ function deleteEvent(key, id, li){
   if (list.length === 0) delete events[key];
   saveEvents(); /* 저장은 즉시 — 애니메이션은 표시만 잠깐 지연 */
   sndDelete();
-  lastDeleted = { restore: eventRestorer(key, removed, idx) };
-  showUndoToast('일정을 삭제했습니다: ' + removed.text);
+  const tr = trashAdd('event', key, { ev: removed, index: idx }); /* 휴지통 30일 보관 (발주 #34) */
+  lastDeleted = { restore: eventRestorer(key, removed, idx), trashId: tr.id };
+  showUndoToast('일정을 삭제했습니다: ' + removed.text + (tr.ok ? '' : ' (휴지통 보관 실패)'));
   renderGrid(false);
   if (li && li.isConnected && !reducedMotion()){
     li.classList.add('removing');
@@ -2021,11 +2153,13 @@ function deleteEvent(key, id, li){
     renderPanel();
   }
 }
-/* 실행 취소 (A20): 마지막 삭제 항목의 복원 클로저 실행 */
+/* 실행 취소 (A20): 마지막 삭제 항목의 복원 클로저 실행.
+   휴지통에 보관해 둔 같은 항목은 함께 제거한다 — 복원본과 휴지통의 중복 보관 금지 (발주 #34) */
 document.getElementById('toastUndo').addEventListener('click', ()=>{
   if (!lastDeleted) { hideToast(); return; }
   const d = lastDeleted;
   lastDeleted = null;
+  if (d.trashId) trashRemove(d.trashId);
   d.restore();
   hideToast();
 });
@@ -2064,8 +2198,13 @@ function deleteRepeatOccurrence(repId, key){
     if (rule.ex.indexOf(key) < 0) rule.ex.push(key);
     saveRepeats();
     sndDelete();
-    lastDeleted = { restore: occurrenceRestorer(repId, key) };
-    showUndoToast('이 날짜의 반복 일정만 삭제했습니다: ' + rule.text);
+    /* 휴지통 보관 (발주 #34) — 반복 발생분 표식 + 복원 폴백용 스냅샷(규칙이 사라진 뒤에도 복원 가능) */
+    const occPayload = { occurrence: true, repId: repId, time: rule.time || '', text: rule.text };
+    if (rule.cat) occPayload.cat = rule.cat;
+    if (rule.dday) occPayload.dday = true;
+    const tr = trashAdd('occ', key, occPayload);
+    lastDeleted = { restore: occurrenceRestorer(repId, key), trashId: tr.id };
+    showUndoToast('이 날짜의 반복 일정만 삭제했습니다: ' + rule.text + (tr.ok ? '' : ' (휴지통 보관 실패)'));
   }
   renderGrid(false);
   renderPanel();
@@ -2079,8 +2218,10 @@ function deleteRepeatRule(repId){
     repeats = repeats.filter(r => r.id !== repId);
     saveRepeats();
     sndDelete();
-    lastDeleted = { restore: ruleRestorer(snapshot) };
-    showUndoToast('반복 일정을 모두 삭제했습니다: ' + rule.text);
+    /* 휴지통 보관 (발주 #34) — 규칙+예외 스냅샷째 보관해 복원 시 원상 복구 */
+    const tr = trashAdd('rule', rule.start, { rule: snapshot });
+    lastDeleted = { restore: ruleRestorer(snapshot), trashId: tr.id };
+    showUndoToast('반복 일정을 모두 삭제했습니다: ' + rule.text + (tr.ok ? '' : ' (휴지통 보관 실패)'));
   }
   renderGrid(false);
   renderPanel();
@@ -2734,6 +2875,8 @@ function refreshDataSection(){
     if (keys.length > 0) navData.setAttribute('data-badge', '');
     else navData.removeAttribute('data-badge');
   }
+
+  renderTrashSection(); /* 일정 휴지통 (발주 #34) — [데이터] 갱신 때 함께 다시 그린다 */
 }
 setCorruptClear.addEventListener('click', ()=>{
   /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시 정리) */
@@ -2742,6 +2885,132 @@ setCorruptClear.addEventListener('click', ()=>{
     for (const k of keys){ try{ localStorage.removeItem(k); }catch(e){} }
     showToast('손상 백업 ' + keys.length + '개를 모두 정리했어요.');
     refreshDataSection();
+  });
+});
+
+/* ---------- 일정 휴지통 UI (발주 #34 — 설정 [데이터] "🗑 휴지통") ----------
+ * 목록: 일정 텍스트 · 원래 날짜 · "N일 전 삭제" (+ 반복 표식). 전부 createElement/textContent.
+ * [복원] = 원래 날짜로 (기존 복원 클로저 재사용 — 중복 보관 금지), [영구 삭제]·[비우기] = confirmThenRun. */
+const setTrashList = $('setTrashList'), setTrashCount = $('setTrashCount'), setTrashClear = $('setTrashClear');
+/* 표시용 요약 — 복호 실패 시 null */
+function trashEntryInfo(t){
+  const p = trashDecode(t);
+  if (!p) return null;
+  if (t.kind === 'event'){
+    if (!p.ev || typeof p.ev !== 'object' || typeof p.ev.text !== 'string') return null;
+    return { text: p.ev.text, time: (typeof p.ev.time === 'string') ? p.ev.time : '', mark: '' };
+  }
+  if (t.kind === 'occ'){
+    if (typeof p.text !== 'string') return null;
+    return { text: p.text, time: (typeof p.time === 'string') ? p.time : '', mark: '매주 반복 · 이 날짜만' };
+  }
+  if (t.kind === 'rule'){
+    if (!p.rule || typeof p.rule !== 'object' || typeof p.rule.text !== 'string') return null;
+    return { text: p.rule.text, time: (typeof p.rule.time === 'string') ? p.rule.time : '', mark: '매주 반복 전체' };
+  }
+  return null;
+}
+/* 휴지통 → 원래 날짜로 복원. 복원 성공/불능과 무관하게 항목은 휴지통에서 제거된다 (중복 보관 금지) */
+function restoreTrashEntry(t){
+  const p = trashDecode(t);
+  const info = trashEntryInfo(t);
+  if (!p || !info){
+    trashRemove(t.id);
+    renderTrashSection();
+    showToast('읽을 수 없는 휴지통 항목이라 정리만 했어요.');
+    return;
+  }
+  if (t.kind === 'event'){
+    eventRestorer(t.key, p.ev, (typeof p.index === 'number' && p.index >= 0) ? p.index : 0)();
+  } else if (t.kind === 'occ'){
+    mergeRepeats(); /* 다른 창 변경 먼저 수용 (occurrenceRestorer 관용구) */
+    if (typeof p.repId === 'string' && findRule(p.repId)){
+      occurrenceRestorer(p.repId, t.key)(); /* 규칙 생존 — 예외 날짜를 되무른다 */
+    } else {
+      /* 규칙이 이미 삭제됨 — 그 날짜의 단발 일정으로 복원 (내용·시각 보존) */
+      const ev = { id: genId(), time: info.time, text: info.text };
+      if (typeof p.cat === 'string') ev.cat = p.cat;
+      if (p.dday === true) ev.dday = true;
+      eventRestorer(t.key, ev, (events[t.key] || []).length)();
+    }
+  } else { /* 'rule' — 규칙+예외 스냅샷째 원상 복구 */
+    ruleRestorer(p.rule)();
+  }
+  trashRemove(t.id);
+  renderTrashSection();
+  showToast('일정을 복원했어요: ' + info.text + ' (' + t.key + ')');
+}
+function renderTrashSection(){
+  if (!setTrashList || !setTrashCount || !setTrashClear) return;
+  trashSync();
+  const items = trash.slice().sort((a, b) => b.at - a.at); /* 최근 삭제가 위 */
+  setTrashCount.textContent = String(items.length);
+  setTrashList.textContent = '';
+  if (items.length === 0){
+    const li = document.createElement('li');
+    const s = document.createElement('span');
+    s.className = 'k spSmall';
+    s.textContent = '휴지통이 비어 있어요.';
+    li.appendChild(s);
+    setTrashList.appendChild(li);
+  }
+  const nowMs = Date.now();
+  for (const t of items){
+    const info = trashEntryInfo(t);
+    const li = document.createElement('li');
+    const main = document.createElement('div');
+    main.className = 'tMain';
+    const name = document.createElement('span');
+    name.className = 'k';
+    const label = info ? ((info.time ? info.time + ' ' : '') + info.text) : '(읽을 수 없는 항목)';
+    name.textContent = label;
+    name.title = label;
+    main.appendChild(name);
+    const days = Math.max(0, Math.floor((nowMs - t.at) / 86400000));
+    const meta = document.createElement('span');
+    meta.className = 'spSmall';
+    meta.textContent = t.key + ' · ' + (days === 0 ? '오늘 삭제' : days + '일 전 삭제')
+      + (info && info.mark ? ' · ' + info.mark : '');
+    main.appendChild(meta);
+    li.appendChild(main);
+    const rBtn = document.createElement('button');
+    rBtn.type = 'button';
+    rBtn.setAttribute('data-trash-restore', '');
+    rBtn.textContent = '복원';
+    rBtn.title = '원래 날짜(' + t.key + ')로 복원';
+    /* 목록 재렌더로 버튼이 DOM 에서 떨어지면 문서 위임(모달 바깥 클릭 = 닫기)이 오판한다 —
+       saveBannerFix 와 같은 이유로 전파를 여기서 멈춘다 */
+    rBtn.addEventListener('click', (e)=>{ e.stopPropagation(); restoreTrashEntry(t); });
+    li.appendChild(rBtn);
+    const dBtn = document.createElement('button');
+    dBtn.type = 'button';
+    dBtn.setAttribute('data-trash-purge', '');
+    dBtn.textContent = '영구 삭제';
+    dBtn.title = '휴지통에서 완전히 삭제 (되돌릴 수 없음)';
+    dBtn.addEventListener('click', (e)=>{
+      e.stopPropagation(); /* 재렌더 후 바깥 클릭 오판 방지 (위 rBtn 과 동일) */
+      /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시) */
+      confirmThenRun(dBtn, ()=>{
+        trashRemove(t.id);
+        renderTrashSection();
+        showToast('휴지통에서 영구 삭제했어요: ' + (info ? info.text : '항목 1건'));
+      });
+    });
+    li.appendChild(dBtn);
+    setTrashList.appendChild(li);
+  }
+  setTrashClear.hidden = items.length === 0;
+}
+setTrashClear.addEventListener('click', (e)=>{
+  e.stopPropagation(); /* 비우기 직후 버튼이 hidden 되어도 설정 창은 유지 */
+  /* 삭제 전 확인 (설정 [안전] — 기본 끔 = 즉시) */
+  confirmThenRun(setTrashClear, ()=>{
+    trashSync();
+    const n = trash.length;
+    trash = [];
+    saveTrash();
+    renderTrashSection();
+    showToast('휴지통을 비웠어요 (' + n + '건).');
   });
 });
 
@@ -3171,6 +3440,14 @@ window.addEventListener('storage', (e)=>{
       dirty = true;
     }
   }
+  if (k === null || k === TRASH_KEY){
+    /* 다른 창의 휴지통 보관/정리 반영 (발주 #34) — 손상된 원격 쓰기는 무시 */
+    const ts = readTrash();
+    if (ts !== null){
+      trash = ts;
+      if (isSettingsOpen()) renderTrashSection();
+    }
+  }
   if (k === null || k === SETTINGS_KEY){
     /* 다른 창의 설정 변경 반영 */
     settings = loadSettings();
@@ -3378,6 +3655,10 @@ var SP_DICT = [
     tags:['데이터','복구','백업','안전'],
     syn:['손상','깨짐','깨진','깨진데이터','오류','백업키','corrupt','망가짐','찌꺼기','모두정리','cleanup'],
     opts:[], help:'저장 데이터가 깨졌을 때 따로 보관해 둔 원본 목록이에요.' },
+  { id:'cal.data.trash', label:'휴지통', cat:'data', sel:'#setTrashList', panel:null, shell:false,
+    tags:['데이터','복구','안전'],
+    syn:['휴지통','쓰레기통','삭제복원','지운일정','삭제한일정','되살리기','실수로지움','30일','영구삭제','비우기','trash','recycle','bin','undelete'],
+    opts:['복원','영구 삭제','비우기'], help:'삭제한 일정을 30일 동안 보관해요. 언제든 원래 날짜로 복원할 수 있어요.' },
   { id:'cal.shell.backup.folder', label:'백업 저장 폴더', cat:'data', sel:'[data-backup-folder]', panel:null, shell:true,
     tags:['백업','클라우드','시스템'],
     syn:['백업위치','어디에저장','폴더경로','저장경로','원드라이브','onedrive','구글드라이브','드롭박스','동기화폴더','path','folder'],
@@ -4001,6 +4282,13 @@ spBuild();
 renderGrid(false);
 renderPanel();
 checkAlarms();
+/* 일정 휴지통 30일 초과 정리 (발주 #34) — 기동 시 1회 + 하루 1회.
+ * 변경이 있을 때만 기록하므로 fresh 프로필에서는 아무 키도 만들지 않는다 (기본 동작 불변). */
+function trashHousekeep(){
+  if (trashPurge() && isSettingsOpen()) renderTrashSection();
+}
+trashHousekeep();
+setInterval(trashHousekeep, 86400000);
 </script>
 <script>
 /* 창 위치·크기 기억 — 재실행 시 마지막 상태로 복원 (발주 #8) */

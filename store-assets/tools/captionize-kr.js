@@ -25,11 +25,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* 파일 → 국문 캡션 — README §2-2 제출 순서 그대로 (합성·구버전·Pro 컷 없음) */
 const CAPTIONS = [
   ['screenshot-09-board-seeded.png',
-    '바탕화면 코르크보드 — 포스트잇을 5가지 색으로 어디든 붙여요'],
+    '바탕화면 코르크보드 — 스티커 메모를 5가지 색으로 어디든 붙여요'],
   ['screenshot-06-drag-in-progress.png',
     '잡아서 끌면 살짝 들리고 기울어져요 — 놓은 자리에 그대로'],
   ['screenshot-08-calendar-linked.png',
-    '공휴일·음력·색 태그 — 포스트잇에서 \u{1F4CC} 붙인 일정까지 한눈에'],
+    '공휴일·음력·색 태그 — 메모지에서 \u{1F4CC} 붙인 일정까지 한눈에'],
   ['screenshot-10-settings-search.png',
     '설정은 검색으로 — 이름이든 #태그든 치면 바로 나와요'],
   ['screenshot-07-note-date-menu.png',

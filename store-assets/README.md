@@ -67,7 +67,9 @@ Microsoft Store(파트너센터) 리스팅과 확산 킷(LAUNCH-KIT)에 쓰는 �
 
 ## 2. 제출용 / 보조용 구분 + 리스팅 권장 순서
 
-파트너센터 스크린샷 슬롯은 최대 10장이다. **제출용은 "지금 빌드를 켜면 그대로 나오는 화면"만** 올린다 —
+파트너센터 스크린샷 슬롯은 최대 10장이다. **제출용은 "지금 빌드를 켜면 그대로 나오는 화면"만** 올리되,
+**실제 업로드는 `kr/` 의 국문 캡션판**(`tools/captionize-kr.js` 산출)으로 한다 — 목록 썸네일에서
+캡션 띠 없이는 1초 안에 기능이 안 읽힌다 (SCORE-AUDIT I14). —
 합성 컷과 구버전 UI 컷은 "설명과 다르다" 리뷰·환불 분쟁의 씨앗이라 목록에서 뺀다
 (`protocol/EXPERT-REVIEW.md` B5 · 부록 C 4-4~4-6). 뺀 파일은 **지우지 않는다** — 문서·블로그·프레스킷용이다.
 
@@ -117,7 +119,8 @@ node tools\make-gif.js 100       # frames\ → demo-drag.gif  (인자 = 프레�
 node tools\verify-gif.js         # 만든 GIF 가 실제로 디코드·재생되는지 확인
 node tools\compose.js            # 11 국문·영문 합성 컷 + fragments\
 node tools\capture-shell.js      # 12 온보딩 스포트라이트 (Electron 셸 기동)
-node tools\captionize.js         # en\ 영문 캡션 판 9장
+node tools\captionize.js         # en\ 영문 캡션 판 9장 (보류 — 발주 #27)
+node tools\captionize-kr.js      # kr\ 국문 캡션 판 6장 — **파트너센터 제출용은 이 판**
 ```
 
 `frames\` 는 **중간 산출물**이라 커밋 대상에서 뺐다 (약 32 MB). GIF 를 다시 만들거나 타이밍을
@@ -133,7 +136,8 @@ node tools\captionize.js         # en\ 영문 캡션 판 9장
 | `cursor.js` | 촬영 주석용 커서 그림(SVG) — `cursor: grabbing` 과 같은 주먹 모양 |
 | `cursor-preview.js` | 위 커서를 실제 크기·8배로 미리 보기 (`tools/cursor-preview.png` 생성) |
 | `compose.js` | 확대 조각(dsf 3배) 촬영 + 국문/영문 연동 합성 컷 렌더 |
-| `captionize.js` | 원본 위에 영문 캡션 띠를 붙여 `en/` 생성 |
+| `captionize.js` | 원본 위에 영문 캡션 띠를 붙여 `en/` 생성 (영문 리스팅 보류 — 보관용) |
+| `captionize-kr.js` | 제출용 6장 위에 **국문 캡션 띠**를 붙여 `kr/` 생성 — 파트너센터에 올리는 판 (1920×1200 = 원본 1080 + 띠 120) |
 | `capture-shell.js` | Electron 셸을 fresh `PETIT_USERDATA` 로 띄워 온보딩 스포트라이트 촬영 |
 | `png.js` | 최소 PNG 디코더 + 정수배 박스 축소 (Node 내장 zlib만 사용) |
 | `gif.js` | **GIF89a 인코더** — median-cut 팔레트 + 프레임 차분 + LZW (외부 의존성 0) |

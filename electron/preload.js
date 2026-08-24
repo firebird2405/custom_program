@@ -82,7 +82,9 @@ const petitApi = {
     // 폴더 열기 — 경로 인자가 없다: main 이 "현재 백업 폴더" 하나만 연다 (임의 경로 열기 불가)
     openFolder: function () { return ipcRenderer.invoke('petit:backup:open-folder'); },
     // 기본 폴더 1회 안내 확인 (발주 #24)
-    ackNotice: function () { return ipcRenderer.invoke('petit:backup:ack-notice'); }
+    ackNotice: function () { return ipcRenderer.invoke('petit:backup:ack-notice'); },
+    // 첫 실행 자동 백업 선택 카드의 "나중에" — 답만 기록 (감사 잔여 조건 ③)
+    ackAutoPrompt: function () { return ipcRenderer.invoke('petit:backup:ack-auto-prompt'); }
   },
   // 셸 정보·진단·창 조작 (발주 #28·#30·#31) — 전부 로컬 처리, 외부 전송 0.
   shell: {
@@ -452,15 +454,19 @@ const ONBOARDED_KEY = 'postit-onboarded';      // additive 키 — 값 존재 = 
 // 문구 규칙: 한 단계 한 문장, 지금 누를 것의 이름을 그대로 부른다.
 // find = 지금 조작할 실제 앱 UI 셀렉터. markDelay = 전환(앱 렌더·패널 슬라이드 0.28s)이
 // 끝난 뒤에야 지목한다 — 전환 중 좌표로 클릭·드래그 시작점이 빗나가지 않게.
+// hint = 지목 대상을 못 찾는 상태가 이어질 때(대상이 닫히거나 지워졌을 때) 카드에 대신
+// 띄우는 회복 문구. 안내가 "아무것도 가리키지 않은 채" 멈춰 보이지 않게 하는 장치다.
 const ONBOARD_STEPS = [
   { find: '[data-add-note]', action: 'click', markDelay: 400,
     text: '반가워요! 🌷 "＋ 새 포스트잇"을 눌러 첫 장을 붙여 보세요.' },
   { find: '[data-note].editing [data-note-edit]', action: 'fill',
-    text: '마음에 담아 둔 말을 적어 보세요. ✏️' },
+    text: '마음에 담아 둔 말을 적어 보세요. ✏️',
+    hint: '포스트잇을 한 번 눌러 편집 상태로 만든 뒤 적어 보세요. ✏️ (＋ 로 새로 붙여도 돼요)' },
   { find: '#decorBtn', action: 'click',
     text: '이번엔 🎨 를 눌러 꾸미기 서랍을 열어요.' },
   { find: '#dpStSeason button', action: 'drag:#board', markDelay: 550,
-    text: '스티커를 잡고 보드로 끌어와 붙여요. 🌸' }
+    text: '스티커를 잡고 보드로 끌어와 붙여요. 🌸',
+    hint: '🎨 꾸미기 서랍을 다시 열면 스티커를 붙일 수 있어요. 🌸' }
 ];
 
 // 온보딩이 끝난 뒤의 대체 장치 문구 (읽기 전용 슬라이드를 대신한다)
@@ -581,6 +587,8 @@ function startOnboarding() {
   let locateTimer = null;
   let markTimer = null;
   let fillTimer = null;
+  let guardTimer = null;                        // 지목한 대상이 사라졌는지 감시 (정지 자가 복구)
+  let hintTimer = null;                         // 대상을 못 찾는 상태가 길어지면 회복 문구로 교체
   let fillLastVal = null;
   let dragArm = null;                           // { el, x, y } — 드래그 시작 스냅숏
   let finished = false;
@@ -595,6 +603,31 @@ function startOnboarding() {
     if (locateTimer) { clearInterval(locateTimer); locateTimer = null; }
     if (markTimer) { clearTimeout(markTimer); markTimer = null; }
     if (fillTimer) { clearInterval(fillTimer); fillTimer = null; }
+    if (guardTimer) { clearInterval(guardTimer); guardTimer = null; }
+    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+  }
+
+  // 지목 대상이 아직 "조작 가능한가" — DOM 이탈·display:none·0크기를 한 번에 본다.
+  // 2단계(노트 편집창)는 blur 로 .editing 이 벗겨지면 textarea 가 display:none 이 되는데,
+  // 그때 currentTarget 은 그 숨은 노드를 계속 가리켜 fill 감시가 영원히 전진하지 않았다.
+  function targetUsable(el) {
+    if (!el || !el.isConnected) return false;
+    try {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    } catch (_err) { return false; }
+  }
+
+  // 대상이 사라지면 그 단계를 다시 "탐색 중" 으로 되돌린다 — 사용자가 편집창을 다시 열거나
+  // 패널을 다시 열면 스스로 이어진다. (건너뛰기 말고도 빠져나올 길을 만드는 것이 목적)
+  function startTargetGuard(stepIndex) {
+    if (guardTimer) { clearInterval(guardTimer); guardTimer = null; }
+    guardTimer = setInterval(function () {
+      if (finished || idx !== stepIndex) return;
+      if (!currentTarget) return;               // 아직 지목 전 — locate 가 담당
+      if (targetUsable(currentTarget)) return;
+      showStep(stepIndex);                      // 같은 단계를 재무장 (문구·카운터 그대로)
+    }, 400);
   }
 
   function clearTargetMark() {
@@ -817,12 +850,22 @@ function startOnboarding() {
         // 지목과 동시에 스포트라이트 추적 시작 (drag 단계는 도착지까지 함께 표시)
         spotStart(currentAction === 'drag' ? st.action.slice(5).trim() : null);
         if (currentAction === 'fill') startFillWatch();
+        if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+        textLine.textContent = st.text;         // 회복 문구가 떠 있었다면 원래 문구로 되돌린다
+        startTargetGuard(i);                    // 이 대상이 사라지면 스스로 재무장
       };
       if (st.markDelay) markTimer = setTimeout(mark, st.markDelay);
       else mark();
       return true;
     };
     if (!locate()) {
+      // 대상이 곧 나타나는 것이 정상(앱 렌더 직후)이므로 조용히 기다리되, 오래 못 찾으면
+      // "무엇을 해야 대상이 돌아오는지" 를 말해 준다 — 지목 없이 멈춘 것처럼 보이지 않게.
+      if (st.hint) {
+        hintTimer = setTimeout(function () {
+          if (!finished && idx === i && !currentTarget) textLine.textContent = st.hint;
+        }, 2500);
+      }
       locateTimer = setInterval(function () {
         if (locate() && locateTimer) { clearInterval(locateTimer); locateTimer = null; }
       }, 180);
@@ -869,6 +912,7 @@ function startOnboarding() {
       shellHint(mode === 'skip' ? OB_SKIP_TEXT : OB_DONE_TEXT, mode === 'skip' ? 4200 : 2800, 'bottom');
     } catch (_err) { /* 힌트 실패는 앱 무영향 */ }
     armCtxHint();                               // 이제부터 "첫 우클릭" 힌트를 지켜본다
+    maybeShowAutoBackupPrompt();                // 안내가 걷힌 뒤 자동 백업을 1회 묻는다 (③)
   }
 
   // ── 전진 판정: 사용자 발행(isTrusted) 입력만 계수 (합성 이벤트·자동 전진 계수 금지) ──
@@ -1021,11 +1065,88 @@ function boardHasNotes() {
 
 const OB_AUTO_TEXT = '메모가 이미 있어서 처음 안내는 접어 뒀어요. ⚙️ 설정 → "처음 안내 다시 보기"에서 언제든 볼 수 있어요.';
 
+// ── 첫 실행 자동 백업 선택 카드 (감사 잔여 조건 ③ — "기본 ON 또는 1회 명시 선택") ──
+// 기본값 ON 은 A45 fresh 계약(끔 → 토글 → auto:true 실증)과 충돌하므로 명시 선택 안.
+// 온보딩이 끝난 프로필에서 1회만 묻고, 켜기/나중에 어느 쪽이든 답하면 다시 묻지 않는다
+// (답 없이 종료하면 다음 실행에 다시). 설정에서 직접 토글해도 main 이 답으로 기록한다.
+// 좌하단·z 99990 — 앱 모달(z 100000+)이 항상 위에 오고, 이관 칩(우하단)과 겹치지 않는다.
+let autoPromptShown = false;                   // 세션당 1회 (finish 경로·기동 경로 중복 방지)
+
+function maybeShowAutoBackupPrompt() {
+  if (PAGE !== 'postit' || autoPromptShown) return;
+  setTimeout(function () {
+    if (autoPromptShown || onboardingActive) return;
+    petitApi.backup.status().then(function (st) {
+      if (!st || !st.ok || st.auto === true || st.autoPromptAck === true) return;
+      if (autoPromptShown || onboardingActive || !document.body) return;
+      autoPromptShown = true;
+
+      const card = el('div', {
+        ...CARD_SKIN,
+        position: 'fixed',
+        left: '16px',
+        bottom: '16px',
+        zIndex: '99990',                       // 앱 모달(100000+) 아래 — 설정 창이 열리면 덮인다
+        maxWidth: '300px',
+        padding: '12px 14px',
+        pointerEvents: 'auto'
+      });
+      card.setAttribute('data-backup-auto-prompt', '');
+      card.setAttribute('role', 'dialog');
+      card.setAttribute('aria-label', '자동 백업 켜기 선택');
+
+      const msg = el('p', { margin: '0 0 10px', fontSize: '13.5px' },
+        '💾 매일 자동 백업을 켜 둘까요? 메모를 문서 폴더에 안전하게 보관해요.');
+      card.appendChild(msg);
+
+      const row = el('div', { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
+      const btnLater = btnEl({
+        ...GHOST_BTN, padding: '6px 12px', borderRadius: '9px', cursor: 'pointer', fontSize: '13px'
+      }, '나중에');
+      const btnOn = btnEl({
+        font: 'inherit', fontSize: '13px', padding: '6px 14px', borderRadius: '9px',
+        border: '1px solid #d8b24a', background: '#ffd977', color: '#4a3a10',
+        cursor: 'pointer', fontWeight: '600'
+      }, '켜 둘게요');
+      row.appendChild(btnLater);
+      row.appendChild(btnOn);
+      card.appendChild(row);
+
+      const close = function () { try { card.remove(); } catch (_err) { /* 무해 */ } };
+      // 답 없이 두면 조용히 접는다 — ack 를 남기지 않으므로 다음 실행에 다시 묻는다
+      // (화면을 붙잡는 시간을 짧게 — 앱 조작과의 간섭 창 최소화)
+      const idleTimer = setTimeout(close, 25000);
+      btnLater.addEventListener('click', function () {
+        clearTimeout(idleTimer);
+        petitApi.backup.ackAutoPrompt().catch(function () { /* 실패 시 다음 실행에 다시 묻는다 */ });
+        close();
+      });
+      btnOn.addEventListener('click', function () {
+        clearTimeout(idleTimer);
+        btnOn.disabled = true;
+        petitApi.backup.setAuto(true).then(function (res) {
+          msg.textContent = res && res.ok
+            ? '✅ 켜 뒀어요! 백업 폴더는 ⚙️ 설정 → [데이터]에서 볼 수 있어요.'
+            : '설정에 실패했어요. ⚙️ 설정 → [데이터]에서 다시 시도해 주세요.';
+          row.remove();
+          setTimeout(close, 4200);
+        }).catch(function () {
+          msg.textContent = '설정에 실패했어요. ⚙️ 설정 → [데이터]에서 다시 시도해 주세요.';
+          row.remove();
+          setTimeout(close, 4200);
+        });
+      });
+      document.body.appendChild(card);
+    }).catch(function () { /* 브리지 실패 — 다음 실행에 다시 */ });
+  }, 4800);                                    // 온보딩 종료 토스트(≤4.2s)가 걷힌 뒤에 묻는다
+}
+
 function initOnboarding() {
   if (PAGE !== 'postit') return;
   injectOnboardingReplay();                    // 재실행 진입점은 항상 준비 (완료·건너뛰기 후 포함)
   if (lsGet(ONBOARDED_KEY) !== null) {         // fresh userData 에서만 자동 표시
     armCtxHint();                              // 이미 끝낸 프로필 — 우클릭 힌트만 지켜본다
+    maybeShowAutoBackupPrompt();               // 온보딩을 이미 마친 프로필에도 1회는 묻는다
     return;
   }
   // 앱 초기화(load)가 끝난 뒤 시작 — fresh 첫 기동의 무거운 초기화와 첫 클릭이
@@ -1036,6 +1157,7 @@ function initOnboarding() {
       lsSet(ONBOARDED_KEY, 'auto');
       try { shellHint(OB_AUTO_TEXT, 4200, 'bottomLeft'); } catch (_err) { /* 힌트 실패는 앱 무영향 */ }
       armCtxHint();
+      maybeShowAutoBackupPrompt();             // 좌하단 힌트(4.2s)가 걷힌 뒤라 자리 충돌 없음
       return;
     }
     startOnboarding();
@@ -1423,9 +1545,9 @@ function injectAlwaysTopSection() {
 // data-spcat="about" 로 앱의 [정보] 카테고리에 들어간다 (앱 관용 속성 재사용).
 // ────────────────────────────────────────────────────────────────────────────
 
-// 문의처 자리표시자 — **채우는 곳은 main.js 의 CONTACT_PLACEHOLDER 하나**다.
+// 문의처 — 정본은 main.js 의 CONTACT_PLACEHOLDER 다 (PRIVACY.md §6 과 동일 주소).
 // 여기 값은 info() 응답이 오기 전(수십 ms)의 표시용이고, 응답이 오면 main 값으로 대체된다.
-const CONTACT_PLACEHOLDER = '{CONTACT}';
+const CONTACT_PLACEHOLDER = 'uto2405@gmail.com';
 
 function injectAboutSection() {
   const panel = document.getElementById('settingsPanel');

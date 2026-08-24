@@ -87,13 +87,18 @@ function configPath() {
 function sanitizeConfig(v) {
   // defaultNoticeAck: additive 필드 — "기본 폴더가 문서 폴더로 정해졌어요" 1회 안내를
   // 사용자가 확인했는지 (부재 = false = 아직 안내하지 않음, 발주 #24)
-  const out = { folder: null, includeImages: false, auto: false, lastAutoAt: 0, defaultNoticeAck: false };
+  // autoPromptAck: additive 필드 — 첫 실행 "자동 백업 켤까요?" 명시 선택 카드에
+  // 사용자가 답했는지 (감사 잔여 조건 ③ — 기본값 ON 은 A45 fresh 계약과 충돌하므로
+  // "1회 명시 선택" 안을 채택. 켜기/나중에 어느 쪽이든 답하면 다시 묻지 않고,
+  // 답 없이 종료하면 다음 실행에 다시 묻는다)
+  const out = { folder: null, includeImages: false, auto: false, lastAutoAt: 0, defaultNoticeAck: false, autoPromptAck: false };
   if (v && typeof v === 'object') {
     if (typeof v.folder === 'string' && v.folder.trim() !== '') out.folder = v.folder;
     out.includeImages = v.includeImages === true;
     out.auto = v.auto === true;
     if (Number.isFinite(v.lastAutoAt) && v.lastAutoAt > 0) out.lastAutoAt = v.lastAutoAt;
     out.defaultNoticeAck = v.defaultNoticeAck === true;
+    out.autoPromptAck = v.autoPromptAck === true;
   }
   return out;
 }
@@ -447,6 +452,7 @@ function statusPayload(pro) {
     defaultFolder: defaultFolder(),
     notice: defaultFolderNotice(),
     auto: cfg.auto === true,
+    autoPromptAck: cfg.autoPromptAck === true,
     includeImages: cfg.includeImages === true,
     pro: pro === true,
     intervalMs: intervalMs(),
@@ -500,8 +506,18 @@ function registerBackupIpc() {
     const on = enabled === true;
     const cfg = getConfig();
     cfg.auto = on;
+    cfg.autoPromptAck = true;   // 설정에서 직접 고른 것도 "답했다"로 본다 — 선택 카드 재표시 불필요
     saveConfig(cfg);
     return { ok: true, auto: cfg.auto };
+  });
+
+  // 첫 실행 자동 백업 선택 카드의 "나중에" — 답만 기록하고 auto 는 건드리지 않는다
+  ipcMain.handle('petit:backup:ack-auto-prompt', (event) => {
+    assertTrustedSender(event);
+    const cfg = getConfig();
+    cfg.autoPromptAck = true;
+    saveConfig(cfg);
+    return { ok: true };
   });
 
   // 백업 폴더 열기 (발주 #24) — 경로 인자를 받지 않는다: 여는 대상은 언제나 "현재 백업

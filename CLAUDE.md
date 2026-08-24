@@ -13,7 +13,7 @@
 - 채점기 SHA256 기대값 `7a5d22f1…` SCORECARD 하단에 동결 기재(rev.9, 이중 계산 일치), A12 green. 잠금(deny) 복원 상태.
 - git: 원격 origin `github.com/firebird2405/custom_program` — push는 사용자 액션.
 - 대기 게이트: **파트너센터 identity 3값 전달**(`protocol/STORE-GUIDE.md`) → appx 빌드 → 4주차 제출. G0(지인 검증)·확산 준비는 `protocol/MARKET.md`·`LAUNCH-KIT.md`.
-- **출시 전 잔여 조건 7건**은 `protocol/SCORE-AUDIT.md` §8 — 그중 코드 미착수 4건: `{CONTACT}` 실주소(`main.js:310`), 포스트잇 저장 실패 배너, 자동 백업 기본 ON, 온보딩 2단계 정지 버그(`preload.js:784-843`).
+- **출시 전 잔여 조건**은 `protocol/SCORE-AUDIT.md` §8 — 코드 몫 4건은 해소됨(문의처 실주소 `uto2405@gmail.com` 3곳 통일 · 포스트잇 저장 실패 배너(#23) · 자동 백업 1회 명시 선택 카드 · 온보딩 2단계 정지 자가복구). 남은 것은 사람 일 3건: **G0 지인 검증(#32)** · 스크린샷 국문 캡션 · 파트너센터 identity.
 
 ## 목적 (확정문 요약)
 

@@ -304,10 +304,10 @@ function applyAlwaysOnTop(win, on) {
 // (preload 의 수동 관리 상수·앱 HTML 의 rev 표기 같은 두 번째 정본을 만들지 않는다).
 // ============================================================================
 
-// 문의처: 실제 주소는 출시 직전에 사용자가 채운다. 지금 코드에 개인 메일을 박아 두면
-// 스토어 리스팅·README·앱이 서로 다른 주소를 갖게 되므로 자리표시자 하나로 고정한다.
-// (README.md·PRIVACY.md 에는 실주소가 이미 있고, 스토어 설명에는 아직 없다 — 발주 #28③)
-const CONTACT_PLACEHOLDER = '{CONTACT}';
+// 문의처 정본 — PRIVACY.md §6 과 동일한 주소 하나로 앱·방침·스토어 3곳을 통일한다
+// (감사 잔여 조건 ① — 자리표시자 {CONTACT} 가 설정창에 리터럴로 렌더되던 문제 해소).
+// 주소를 바꿀 일이 생기면 여기 한 곳 + PRIVACY.md + store-description.md 를 함께 바꾼다.
+const CONTACT_PLACEHOLDER = 'uto2405@gmail.com';
 
 /** 배포 형태 추정 — 티켓에서 "어느 판을 쓰세요?"를 다시 묻지 않기 위한 한 줄 */
 function distributionKind() {
